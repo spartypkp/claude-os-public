@@ -1,0 +1,54 @@
+# Contacts Configuration for Claude OS
+# =============================================================================
+#
+# Controls contact management behavior.
+# Claude OS reads from Apple Contacts and stores additional fields locally.
+#
+# =============================================================================
+
+# Read Settings
+read:
+  # Default number of contacts to return in list operations
+  default_limit: 50
+
+  # Include contacts that have no phone or email
+  include_empty: false
+
+# Write Settings
+write:
+  # Sync new contacts back to Apple Contacts via AppleScript
+  # If false, contacts created by Claude are local-only
+  sync_to_apple: true
+
+# Claude Extension Fields
+# These fields are stored locally (not in Apple Contacts)
+# They provide richer context for Claude's relationship management
+extensions:
+  - relationship        # How you know them (friend, colleague, client, etc.)
+  - context_notes       # Notes about interactions, preferences
+  - value_exchange      # What you give/receive in the relationship
+  - description         # One-line description
+  - pinned              # Pin important contacts to top
+  - tags                # Arbitrary tags for grouping
+
+# Relationship Types
+# Suggestions for the 'relationship' field
+relationship_types:
+  - friend
+  - family
+  - colleague
+  - client
+  - mentor
+  - mentee
+  - acquaintance
+  - service_provider
+  - other
+
+# Auto-Enrichment
+# Claude can automatically add context when you mention contacts
+auto_enrich:
+  # Add notes when someone is mentioned in conversation
+  on_mention: true
+
+  # Add tags based on conversation context
+  auto_tag: true

@@ -1,0 +1,129 @@
+# Unified Account Configuration
+# =============================================================================
+#
+# This file configures account capabilities and overrides discovery defaults.
+# Copy to accounts.yaml and customize for your setup.
+#
+# How it works:
+# 1. On startup, Claude OS discovers accounts from Apple Calendar/Contacts/Mail
+# 2. This file lets you override defaults (capabilities, display names, etc.)
+# 3. Accounts not listed here use the defaults at the bottom
+#
+# =============================================================================
+
+# Global settings
+discovery:
+  # Run discovery on startup to find accounts from Apple apps
+  run_on_startup: true
+
+  # Re-verify accounts periodically (hours)
+  verification_interval_hours: 24
+
+  # Include disabled accounts in discovery
+  include_disabled: false
+
+# =============================================================================
+# Account Overrides
+# =============================================================================
+#
+# List accounts by email address. Discovery populates defaults;
+# entries here override those defaults.
+#
+# Available fields:
+#   display_name: string       - Friendly name shown in UI
+#   is_primary: bool           - Your main account
+#   is_claude_account: bool    - Claude's autonomous account (can send on its own)
+#   can_send_email: bool       - Can send (not just draft) emails
+#   can_send_messages: bool    - Can send iMessages
+#   can_delete_calendar: bool  - Can delete calendar events
+#   provider_config: object    - Provider-specific settings (Gmail OAuth, etc.)
+#   calendar_config: object    - Calendar-specific settings (aliases, defaults)
+#
+# =============================================================================
+
+accounts:
+  # ---------------------------------------------------------------------------
+  # Claude's Autonomous Account
+  # ---------------------------------------------------------------------------
+  # This is the account Claude uses to send emails on its own.
+  # Create a dedicated email for this (don't use your personal email).
+  # Requires Gmail OAuth or App Password credentials in .env
+  #
+  claude-assistant@gmail.com:
+    display_name: "Claude Assistant"
+    is_claude_account: true
+    can_send_email: true           # Full send capability
+    can_send_messages: false       # Never send messages as Claude
+    provider_config:
+      # OAuth credentials from .env file
+      client_id: "${GMAIL_CLIENT_ID}"
+      client_secret: "${GMAIL_CLIENT_SECRET}"
+      refresh_token: "${GMAIL_REFRESH_TOKEN}"
+
+  # ---------------------------------------------------------------------------
+  # Your Primary Personal Account
+  # ---------------------------------------------------------------------------
+  # This is your main email. Claude can draft but not send.
+  #
+  you@gmail.com:
+    display_name: "Personal Gmail"
+    is_primary: true
+    can_send_email: false          # Draft only - you review before sending
+    can_delete_calendar: false     # Conservative - ask before deleting events
+    calendar_config:
+      # Which calendars this account has
+      preferred_calendars:
+        - "Personal"
+      # Default this account for certain event types
+      default_for:
+        - meeting
+        - fallback
+
+  # ---------------------------------------------------------------------------
+  # Work Account Example
+  # ---------------------------------------------------------------------------
+  # Exchange/Outlook accounts work if they're connected to Apple Calendar/Mail
+  #
+  you@company.com:
+    display_name: "Work"
+    can_send_email: false          # Draft only
+    calendar_config:
+      preferred_calendars:
+        - "Work Calendar"
+        - "Team Calendar"
+      default_for:
+        - personal
+        - work
+      # Aliases let you use friendly names in commands
+      # e.g., "add to work calendar" -> "Team Calendar"
+      aliases:
+        work: "Team Calendar"
+        personal: "Work Calendar"
+
+# =============================================================================
+# Default Capabilities
+# =============================================================================
+#
+# Applied to newly discovered accounts that aren't listed above.
+# Conservative by default - Claude can read but not send/delete.
+#
+# =============================================================================
+
+defaults:
+  # Email
+  can_read_email: true
+  can_send_email: false            # Draft only by default
+  can_draft_email: true
+
+  # Calendar
+  can_read_calendar: true
+  can_create_calendar: true
+  can_delete_calendar: false       # Require explicit override to delete
+
+  # Contacts
+  can_read_contacts: true
+  can_modify_contacts: false       # Read-only by default
+
+  # Messages
+  can_read_messages: true
+  can_send_messages: false         # Never send messages by default

@@ -1,0 +1,67 @@
+# Claude OS Main Configuration
+# =============================================================================
+#
+# Core system settings. Copy to config.yaml.
+# Most defaults work out of the box - only change if needed.
+#
+# =============================================================================
+
+# Calendar Settings
+calendar:
+  # How many days to show in week view
+  week_window_days: 7
+
+# Planning Settings
+planning:
+  # Hour when the day "turns over" (0-23)
+  # Day Arc and priorities reset after this hour
+  turnover_hour: 3
+
+# Scheduled Work Settings
+scheduled_work:
+  # How often to check for scheduled missions (seconds)
+  check_interval_sec: 60
+
+  # Background worker settings
+  executor:
+    # How often to check for work (seconds)
+    poll_interval_sec: 60
+
+    # Max workers to process per batch
+    batch_size: 3
+
+# SMS Notifications (requires Twilio setup in .env)
+sms:
+  # Enable/disable SMS notifications
+  enabled: false
+
+  notifications:
+    # Minutes before event to send reminder
+    lead_minutes:
+      timeblocks: 5
+
+    # Don't send notifications during these hours
+    quiet_hours:
+      start: "22:00"
+      end: "08:00"
+
+# Watcher Settings
+# The watcher monitors Desktop/ for changes and keeps indexes updated
+watcher:
+  # Active watcher modules
+  modules:
+    - planning           # Updates planning-related views
+    - life_md            # Generates SYSTEM-INDEX.md sections
+    - contacts           # Syncs contact changes
+    - notifications      # Handles notification triggers
+    - async_helpers      # Background processing helpers
+    - today_context      # Injects calendar/priorities into TODAY.md
+
+# Advanced Settings (rarely need to change)
+# database:
+#   path: ".engine/data/db/system.db"
+#   wal_mode: true
+#
+# api:
+#   port: 5001
+#   host: "127.0.0.1"

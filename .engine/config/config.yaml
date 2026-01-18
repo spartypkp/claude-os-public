@@ -1,0 +1,35 @@
+# TEST: Config file edit should NOT trigger hot reload
+calendar:
+  week_window_days: 7
+planning:
+  turnover_hour: 3
+# repo.root is auto-detected from Python __file__ paths - no config needed
+# repo:
+#   root: /path/to/life-specifications
+scheduled_work:
+  check_interval_sec: 60
+  executor:
+    poll_interval_sec: 60
+    batch_size: 3
+sms:
+  enabled: false
+  notifications:
+    lead_minutes:
+      timeblocks: 5
+    quiet_hours:
+      end: 08:00
+      start: '22:00'
+watcher:
+  modules:
+  - planning
+  - life_md  # Generates all SYSTEM-INDEX.md sections
+  - contacts
+  - notifications
+  - async_helpers
+  - today_context
+  # navigation config removed (Jan 2026) - navigation tree disabled
+  # navigation:
+  #   max_depth: 4
+  #   collapse_patterns:
+  #     - "work/archive/**"
+# task_board section removed - deprecated Dec 2025, using hook-based notifications

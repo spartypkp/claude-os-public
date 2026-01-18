@@ -1,0 +1,47 @@
+# Calendar Configuration for Claude OS
+# =============================================================================
+#
+# Controls calendar permissions and display settings.
+# Claude OS reads directly from Apple Calendar databases.
+#
+# Note: Account-specific settings (aliases, preferred calendars) are in
+# accounts.yaml. This file is for global calendar settings.
+#
+# =============================================================================
+
+# Permissions
+# Which calendars can Claude create/delete events on?
+permissions:
+  # Calendars where Claude can create events
+  # List the exact calendar names as they appear in Apple Calendar
+  can_create:
+    - "Personal"              # Your main calendar
+    - "Work"                  # Work calendar
+    # Add more calendars as needed
+
+  # Calendars where Claude can delete events
+  # Empty = require human confirmation for ALL deletes (safest)
+  # List calendars here only if you're comfortable with auto-deletion
+  can_delete: []
+
+# Read Settings
+read:
+  # Include all-day events in calendar views
+  include_all_day_events: true
+
+  # Timezone for date/time display
+  # Use IANA timezone format (e.g., America/New_York, Europe/London)
+  timezone: "America/Los_Angeles"
+
+# Display Settings (used by Dashboard)
+display:
+  # Week starts on (0=Sunday, 1=Monday)
+  week_starts_on: 0
+
+  # Working hours to highlight
+  working_hours:
+    start: "09:00"
+    end: "17:00"
+
+  # Default view (day, week, month)
+  default_view: "week"

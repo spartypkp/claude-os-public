@@ -1,0 +1,32 @@
+# Messages configuration (direct-read Apple Messages pattern)
+
+# Rate limiting for sending
+send_limits:
+  max_per_hour: 50
+  delay_seconds: 0  # No delay for now
+
+# Default account (if multiple iMessage accounts)
+defaults:
+  # Uses primary iMessage account by default
+  account: null
+
+# Read settings
+read:
+  # Max messages per conversation to fetch
+  default_limit: 50
+  # Include attachments metadata
+  include_attachments: true
+  # Timezone for display
+  timezone: "America/Los_Angeles"
+
+# Tool metadata - used by watcher to populate SYSTEM-INDEX.md
+tools:
+  messages:
+    purpose: "Read and send iMessages"
+    who: "Chief primarily"
+    when: "Checking messages, sending texts on the user's behalf"
+    usage: |
+      - Uses primary iMessage account
+      - Rate limit: 50/hour
+      - Ask before sending to new recipients
+    note: "Currently uses Apple MCP (mcp__apple__messages), not Life MCP"

@@ -1,0 +1,232 @@
+{
+  "Read": {
+    "count": 13679,
+    "input_schema": {
+      "file_path": "string (required) - full path to file",
+      "limit": "number (optional) - lines to read",
+      "offset": "number (optional) - line offset"
+    },
+    "one_liner": "file name only",
+    "expand_shows": "file path, offset/limit if set"
+  },
+  "Bash": {
+    "count": 10327,
+    "input_schema": {
+      "command": "string (required)",
+      "description": "string (required)",
+      "timeout": "number (optional)",
+      "run_in_background": "boolean (optional)"
+    },
+    "one_liner": "cleaned command (remove cd, paths)",
+    "expand_shows": "full command, description"
+  },
+  "Edit": {
+    "count": 7045,
+    "input_schema": {
+      "file_path": "string (required)",
+      "old_string": "string (required)",
+      "new_string": "string (required)",
+      "replace_all": "boolean (optional)"
+    },
+    "one_liner": "file name",
+    "expand_shows": "diff view of old → new"
+  },
+  "Write": {
+    "count": 3698,
+    "input_schema": {
+      "file_path": "string (required)",
+      "content": "string (required)"
+    },
+    "one_liner": "file name",
+    "expand_shows": "file path, content preview"
+  },
+  "Glob": {
+    "count": 3324,
+    "input_schema": {
+      "pattern": "string (required)",
+      "path": "string (optional)"
+    },
+    "one_liner": "pattern",
+    "expand_shows": "pattern, path scope"
+  },
+  "Grep": {
+    "count": 2778,
+    "input_schema": {
+      "pattern": "string (required)",
+      "path": "string (optional)",
+      "output_mode": "string (optional) - content|files_with_matches|count",
+      "glob": "string (optional)",
+      "-n": "boolean",
+      "-C": "number",
+      "-A": "number", 
+      "-B": "number",
+      "-i": "boolean",
+      "head_limit": "number",
+      "multiline": "boolean"
+    },
+    "one_liner": "quoted pattern",
+    "expand_shows": "pattern, path, options"
+  },
+  "WebSearch": {
+    "count": 2371,
+    "input_schema": {
+      "query": "string (required)"
+    },
+    "one_liner": "quoted query (truncated)",
+    "expand_shows": "full query"
+  },
+  "TodoWrite": {
+    "count": 2185,
+    "input_schema": {
+      "todos": "array of {content, status, activeForm}"
+    },
+    "one_liner": "N tasks",
+    "expand_shows": "task list with statuses"
+  },
+  "WebFetch": {
+    "count": 1131,
+    "input_schema": {
+      "url": "string (required)",
+      "prompt": "string (required)"
+    },
+    "one_liner": "domain from URL",
+    "expand_shows": "full URL, prompt"
+  },
+  "mcp__life__session_status": {
+    "count": 633,
+    "input_schema": {
+      "status": "string (required)"
+    },
+    "one_liner": "status text",
+    "expand_shows": "full status"
+  },
+  "mcp__life__worker_create": {
+    "count": 527,
+    "input_schema": {
+      "instructions": "string (required)",
+      "task_type": "string (optional)",
+      "priority": "string (optional)"
+    },
+    "one_liner": "truncated instructions",
+    "expand_shows": "full instructions, task_type, priority"
+  },
+  "mcp__life__worker_ack": {
+    "count": 489,
+    "input_schema": {
+      "worker_id": "string (required)"
+    },
+    "one_liner": "ack worker_id[:8]",
+    "expand_shows": "full worker_id"
+  },
+  "mcp__life__worker_list": {
+    "count": 401,
+    "input_schema": {
+      "include_all": "boolean (optional)",
+      "status": "string (optional)"
+    },
+    "one_liner": "list workers",
+    "expand_shows": "filters if any"
+  },
+  "mcp__apple__messages": {
+    "count": 285,
+    "input_schema": {
+      "operation": "string (required) - read|send",
+      "phone_number": "string (required)",
+      "limit": "number (optional)",
+      "message": "string (optional for send)"
+    },
+    "one_liner": "operation + phone/contact hint",
+    "expand_shows": "full details"
+  },
+  "mcp__life__status": {
+    "count": 248,
+    "input_schema": {
+      "text": "string (required)"
+    },
+    "one_liner": "status text",
+    "expand_shows": "full text"
+  },
+  "mcp__apple__calendar": {
+    "count": 199,
+    "input_schema": {
+      "operation": "string (required) - list|create|update|delete",
+      "from_date": "string (optional)",
+      "to_date": "string (optional)",
+      "title": "string (optional)",
+      "start_date": "string (optional)",
+      "end_date": "string (optional)",
+      "event_id": "string (optional)",
+      "calendar_name": "string (optional)"
+    },
+    "one_liner": "operation + date range or title",
+    "expand_shows": "all fields"
+  },
+  "mcp__life__team": {
+    "count": 196,
+    "input_schema": {
+      "operation": "string (required) - list|peek|spawn|close",
+      "id": "string (optional)",
+      "lines": "number (optional)",
+      "role": "string (optional)",
+      "mode": "string (optional)",
+      "task": "string (optional)",
+      "description": "string (optional)"
+    },
+    "one_liner": "operation + id/role",
+    "expand_shows": "full details"
+  },
+  "mcp__life__ping": {
+    "count": 162,
+    "input_schema": {
+      "message": "string (required)"
+    },
+    "one_liner": "ping: truncated message",
+    "expand_shows": "full message"
+  },
+  "mcp__voicemode__converse": {
+    "count": 138,
+    "input_schema": {
+      "message": "string (required)",
+      "wait_for_response": "boolean (optional)",
+      "speed": "number (optional)",
+      "listen_duration_min": "number (optional)",
+      "voice": "string (optional)"
+    },
+    "one_liner": "🎤 truncated message",
+    "expand_shows": "full message, voice settings"
+  },
+  "mcp__life__session_spawn": {
+    "count": 129,
+    "input_schema": {
+      "role": "string (required)",
+      "mode": "string (optional)",
+      "task": "string (required)",
+      "description": "string (optional)",
+      "project_path": "string (optional)"
+    },
+    "one_liner": "spawn role: description",
+    "expand_shows": "full task, settings"
+  },
+  "Skill": {
+    "count": 86,
+    "input_schema": {
+      "skill": "string (required)",
+      "args": "string (optional)"
+    },
+    "one_liner": "skill name + args preview",
+    "expand_shows": "full args"
+  },
+  "Task": {
+    "count": 62,
+    "input_schema": {
+      "description": "string (required)",
+      "prompt": "string (required)",
+      "subagent_type": "string (required)",
+      "run_in_background": "boolean (optional)",
+      "model": "string (optional)"
+    },
+    "one_liner": "subagent_type: description",
+    "expand_shows": "full prompt"
+  }
+}
+

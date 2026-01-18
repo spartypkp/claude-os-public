@@ -1,0 +1,90 @@
+# Email Configuration for Claude OS
+# =============================================================================
+#
+# Controls email sending behavior, rate limits, and account settings.
+# Copy to email.yaml and customize.
+#
+# Note: Account-level settings (which accounts exist, their capabilities)
+# are in accounts.yaml. This file is for global email settings.
+#
+# =============================================================================
+
+# Safeguard Settings
+# These protect against accidental mass emails or spam
+safeguards:
+  # Time between queueing and sending (seconds)
+  # Gives you time to cancel if needed
+  send_delay_seconds: 15
+
+  # Maximum emails per hour (prevents accidental loops)
+  rate_limit_per_hour: 50
+
+  # Require confirmation for first email to new recipients
+  # If true, Claude will ask before emailing someone new
+  require_new_recipient_confirmation: false
+
+  # Domains that never require confirmation
+  # Emails to these domains are auto-approved
+  auto_approved_domains:
+    - "example.com"           # Replace with your domain
+    - "gmail.com"
+
+# Account Configuration
+# Define which accounts Claude can use and how
+accounts:
+  # Claude's autonomous account (can send directly)
+  claude:
+    email: "claude-assistant@gmail.com"    # Your Claude assistant email
+    provider: "gmail"
+    can_send: true                          # Full autonomy
+    description: "Claude's account for automated notifications"
+
+  # Your personal accounts (draft only)
+  personal:
+    email: "you@gmail.com"                  # Your email
+    provider: "apple_mail"                  # Reads via Apple Mail
+    can_send: false                         # Claude creates drafts, you send
+    description: "Personal email"
+
+  work:
+    email: "you@company.com"
+    provider: "apple_mail"
+    can_send: false
+    description: "Work email"
+
+# Default account for Claude's outgoing emails
+default_from_account: "claude"
+
+# Email signature appended to Claude's emails
+claude_signature: |
+  ---
+  Sent by Claude
+  Your AI assistant
+  Questions? Reply to this email.
+
+# Logging Settings
+logging:
+  # Log all sent emails to database (for audit trail)
+  enabled: true
+
+  # Store full email content (vs just subject/recipient)
+  store_full_content: false
+
+  # How long to keep email logs (days)
+  retention_days: 90
+
+# Background Queue Processing
+queue:
+  # How often to check send queue (seconds)
+  process_interval_seconds: 5
+
+  # Max emails to send per batch
+  batch_size: 10
+
+  # Retry failed sends
+  retry_failed: true
+  max_retries: 3
+  retry_delay_seconds: 300    # 5 minutes between retries
+
+# Templates (for future use)
+templates: {}

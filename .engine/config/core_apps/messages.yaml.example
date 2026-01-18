@@ -1,0 +1,48 @@
+# Messages Configuration for Claude OS
+# =============================================================================
+#
+# Controls iMessage integration.
+# Claude OS reads from Apple Messages database (read-only is safest).
+#
+# Note: Sending messages requires careful consideration. By default,
+# Claude can read but not send messages.
+#
+# =============================================================================
+
+# Rate Limiting for Sending
+# Protects against accidental message spam
+send_limits:
+  # Maximum messages per hour
+  max_per_hour: 50
+
+  # Delay between queuing and sending (seconds)
+  # Set to 0 for immediate sending, or add delay for review time
+  delay_seconds: 0
+
+# Default Account
+defaults:
+  # Uses primary iMessage account by default
+  # Set to specific account email if you have multiple
+  account: null
+
+# Read Settings
+read:
+  # Max messages to fetch per conversation
+  default_limit: 50
+
+  # Include attachment metadata (filenames, types)
+  include_attachments: true
+
+  # Timezone for message timestamps
+  timezone: "America/Los_Angeles"
+
+# Safety Settings
+safety:
+  # Require explicit confirmation before sending to new recipients
+  confirm_new_recipients: true
+
+  # Never send to these numbers (e.g., emergency services)
+  blocked_numbers: []
+
+  # Only send to contacts in your address book
+  contacts_only: true

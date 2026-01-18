@@ -1,0 +1,48 @@
+venv/
+venv-test/
+.env
+
+# Only ignore PDFs in Documents and Logs (not Desktop)
+Desktop/**/*.pdf
+Logs/**/*.pdf
+
+**/*.docx
+**/*.csv
+
+**/*.pyc
+**/__pycache__/
+.DS_Store
+temp-src/
+
+# Build artifacts
+node_modules/
+Dashboard/.next/
+
+# Session/mission execution temp files (never committed)
+.engine/tmp/
+
+# Trash folder (soft-deleted files)
+Workspace/.trash/
+
+# Worker execution artifacts (reports stored in DB)
+.engine/data/outputs/
+.engine/data/archives/
+
+# Async worker logs (ephemeral)
+.engine/logs/async/
+
+# Playwright skill temp execution scripts
+.claude/skills/playwright-skill/.temp-execution-*.js
+
+# Runtime state (recreated on start)
+Desktop/logs/
+Desktop/sessions/
+.engine/data/db/*.db
+.engine/data/db/*.db-wal
+.engine/data/db/*.db-shm
+.engine/state/*.log
+
+# Working files (user's scratchpad)
+Desktop/working/*
+!Desktop/working/.gitkeep
+Desktop/PUSH-INSTRUCTIONS.md

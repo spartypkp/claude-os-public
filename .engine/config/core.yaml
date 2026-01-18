@@ -1,0 +1,85 @@
+# Core Tools - Session & Orchestration
+#
+# These are infrastructure tools available to all roles.
+# They handle session lifecycle, team management, and system operations.
+
+tools:
+  status:
+    purpose: "Update dashboard status line"
+    who: "All roles"
+    when: "After getting a task, on major pivots, when wrapping up"
+    example: 'status("Researching Anthropic FDE role")'
+
+  # ping: REMOVED in Jan 2026 tools audit
+  # Notification logic moved to done() - background specialists auto-notify Chief on completion
+
+  reset:
+    purpose: "Hand off to fresh session when context is low"
+    who: "All roles"
+    when: "Context feels heavy, after major phase completes, at 60% in autonomous mode"
+    critical: "Write handoff notes BEFORE calling. Chief -> Workspace/handoffs/, others -> Workspace/working/"
+
+  done:
+    purpose: "Complete session and close"
+    who: "Specialists only (not Chief)"
+    when: "Task is fully finished, not handing off"
+    note: "Chief never calls done() - uses reset() to hand off to fresh Chief"
+
+  worker:
+    purpose: "Spawn background Claude instances"
+    who: "All roles"
+    when: "Research, parallel exploration, anything that would fill your context"
+    pattern: "Spawn and end turn - you'll be notified on completion"
+
+  team:
+    purpose: "Manage specialist sessions"
+    who: "Chief only"
+    when: "Spawning specialists for focused work, checking on running sessions"
+    operations: "spawn, list, peek, close"
+
+  context_check:
+    purpose: "Check context window usage"
+    who: "All roles"
+    when: "Deciding whether to reset"
+    note: "Currently a stub - estimate based on conversation length"
+
+  log:
+    purpose: "Append to today.md sections"
+    who: "All roles"
+    when: "Quick logging without manual file editing"
+    sections: "day_arc, tracking, good, bad, observations, system, focus, idea, project, dump, friction"
+
+  remind:
+    purpose: "Set a reminder that shows in Dashboard"
+    who: "All roles"
+    when: "ADHD time awareness - future notifications"
+    example: 'remind("15m", "Mock interview prep")'
+
+  timer:
+    purpose: "Focus timer for time awareness"
+    who: "All roles"
+    when: "Starting focus blocks, checking elapsed time"
+    operations: "start, check, stop, list"
+
+  priority:
+    purpose: "Manage today's priorities"
+    who: "Chief primarily, others can read"
+    when: "Morning setup, completing tasks, adjusting focus"
+    operations: "create, complete, delete"
+
+  service:
+    purpose: "Manage backend and dashboard services"
+    who: "System role primarily"
+    when: "Restarting services, checking logs"
+    operations: "status, restart, logs"
+
+  night_mode_start:
+    purpose: "Trigger overnight autonomous mode"
+    who: "Chief"
+    when: "User going to bed, or auto-triggers at 1 AM"
+
+  mission:
+    purpose: "Manage scheduled missions"
+    who: "Chief, System"
+    when: "Checking mission status, creating custom missions"
+    operations: "list, get, create, update, enable, disable, run_now, history"

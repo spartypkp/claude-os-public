@@ -1,0 +1,47 @@
+# Calendar Configuration (Direct-Read Apple Calendar)
+#
+# This config mirrors email's pattern:
+# - Data-plane reads come from Apple Calendar SQLite (read-only)
+# - Account-specific config (aliases, preferred_calendars, defaults) lives in accounts.yaml
+# - This file contains only global calendar settings
+
+# Preferred calendars - filter out junk/noise calendars
+# These are shown in UI and returned by MCP tools
+preferred_calendars:
+  - "Personal"
+  - "Calendar"
+  - "Work"
+  - "Home"
+
+# Calendar aliases - friendly names for calendars
+aliases:
+  exchange: "Calendar"
+  personal: "Calendar"
+  gmail: "Personal"
+  work: "Work"
+
+# Permissions - which calendars Claude can modify
+# These should match what the user is comfortable with Claude changing autonomously
+permissions:
+  can_create:
+    - "Personal"
+    - "Calendar"
+    - "Work"
+  can_delete: []  # Empty = require human confirmation for all deletes
+
+# Read settings
+read:
+  include_all_day_events: true
+  timezone: "America/Los_Angeles"
+
+# Tool metadata - used by watcher to populate SYSTEM-INDEX.md
+tools:
+  calendar:
+    purpose: "Read, create, and update calendar events"
+    who: "All roles"
+    when: "Scheduling events, checking availability, managing the user's time"
+    usage: |
+      - Meetings with others -> Gmail (Personal) for invites
+      - Personal blocks -> Exchange (Calendar) for solo scheduling
+      - Work events -> Work
+      - Can create on Gmail/Exchange/Work; deletes require confirmation

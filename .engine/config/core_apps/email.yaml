@@ -1,0 +1,96 @@
+# Email Configuration for Life System
+
+# Safeguard Settings
+safeguards:
+  # Send delay (seconds) - Time between queueing and sending
+  # Gives time to cancel if needed
+  send_delay_seconds: 15
+
+  # Rate limit (emails per hour)
+  # Prevents spam/abuse from accidental loops
+  rate_limit_per_hour: 50
+
+  # Require confirmation for new recipients
+  # If true, first email to new address needs explicit confirmation
+  require_new_recipient_confirmation: false
+
+  # Auto-approved domains (whitelist)
+  # Emails to these domains never require confirmation
+  auto_approved_domains:
+    - "example.com"
+    - "gmail.com"  # user's personal domain
+
+# Account Configuration
+accounts:
+  # Claude's autonomous account
+  claude:
+    email: "claude.assistant@gmail.com"
+    provider: "gmail"
+    can_send: true  # Full autonomy - can send directly
+    description: "Claude's autonomous email for automated notifications and reports"
+
+  # the user's accounts (draft only)
+  will_personal:
+    email: "user@gmail.com"
+    provider: "apple_mail"
+    can_send: false  # Draft only - Claude creates drafts for user to review
+    description: "User's personal Gmail"
+
+  will_work:
+    email: "user@work.com"
+    provider: "apple_mail"
+    can_send: false  # Draft only
+    description: "User's work email"
+
+# Default account for sending
+default_from_account: "claude"
+
+# Email signature for Claude's account
+claude_signature: |
+  ---
+  Sent by Claude
+  Claude AI assistant
+  Questions? Reply to this email.
+
+# Logging Settings
+logging:
+  # Log all sent emails to database
+  enabled: true
+
+  # Store full email content (not just preview)
+  store_full_content: false
+
+  # Retention period (days)
+  # Logs older than this are archived
+  retention_days: 90
+
+# Background Queue Processing
+queue:
+  # How often to process send queue (seconds)
+  # Background worker checks for ready-to-send emails
+  process_interval_seconds: 5
+
+  # Max emails to process per batch
+  batch_size: 10
+
+  # Retry failed sends
+  retry_failed: true
+  max_retries: 3
+  retry_delay_seconds: 300  # 5 minutes
+
+# Templates
+# (For future: email templates for common automated emails)
+templates: {}
+
+# Tool metadata - used by watcher to populate SYSTEM-INDEX.md
+tools:
+  email:
+    purpose: "Read inbox, search, draft and send emails"
+    who: "All roles"
+    when: "Checking email, drafting responses, sending automated notifications"
+    usage: |
+      - Claude can send from: claude.assistant@gmail.com (full autonomy)
+      - the user's accounts: draft-only (user@gmail.com, user@work.com)
+      - 15-second send delay allows cancellation
+      - Rate limit: 50 emails/hour
+    operations: "send, draft, cancel, status, history, queue, unread, search, read, mark_read, accounts"
