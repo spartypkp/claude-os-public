@@ -1,7 +1,7 @@
 'use client';
 
 import { useFileEvents } from '@/hooks/useFileEvents';
-import { fetchFileTree, finderUpload, listTrash, moveToTrash } from '@/lib/api';
+import { fetchFileTree, finderMove, finderUpload, listTrash, moveToTrash } from '@/lib/api';
 import { FileTreeNode } from '@/lib/types';
 import { useDesktopStore } from '@/store/desktopStore';
 import {
@@ -34,10 +34,9 @@ import { ContactsWindowContent } from './apps/contacts/ContactsWindowContent';
 import { EmailWindowContent } from './apps/email/EmailWindowContent';
 import { MessagesWindowContent } from './apps/messages/MessagesWindowContent';
 import { FinderWindowContent } from './apps/finder/FinderWindowContent';
-import { MissionsWindowContent } from './apps/missions/MissionsWindowContent';
 import { RolesWindow } from './apps/roles/RolesWindow';
 import { SettingsWindowContent } from './apps/settings/SettingsWindowContent';
-import { WidgetsWindowContent } from './apps/widgets-manager/WidgetsWindowContent';
+
 import { ContextMenu } from './ContextMenu';
 import { DesktopIcon } from './DesktopIcon';
 import { DesktopIconPreview } from './DesktopIconPreview';
@@ -172,6 +171,21 @@ export function ClaudeOS() {
 		return () => window.removeEventListener('refresh-desktop', handleRefresh);
 	}, [loadTree]);
 
+	// Close file windows when files are moved (path becomes stale)
+	useEffect(() => {
+		const handleCloseFileWindow = (e: Event) => {
+			const detail = (e as CustomEvent).detail;
+			if (detail?.path) {
+				const { windows, closeWindow } = useWindowStore.getState();
+				const win = windows.find(w => w.filePath === detail.path);
+				if (win) closeWindow(win.id);
+			}
+		};
+
+		window.addEventListener('close-file-window', handleCloseFileWindow);
+		return () => window.removeEventListener('close-file-window', handleCloseFileWindow);
+	}, []);
+
 	// Handle drag start
 	const handleDragStart = useCallback((event: DragStartEvent) => {
 		setActiveDragId(event.active.id as string);
@@ -207,37 +221,23 @@ export function ClaudeOS() {
 				return;
 			}
 
-			// Check if dropped on another icon (swap mode)
+			// Check if dropped on another icon
 			if (over && over.id !== draggedPath) {
 				const targetPath = over.id as string;
+				const targetFile = files.find(f => f.path === targetPath);
 
-				// Compute current order to find indices
-				let currentOrder: string[];
-				if (iconOrder.length > 0) {
-					// Use existing custom order
-					currentOrder = [...iconOrder];
-				} else {
-					// Generate order from files (folders first, then alphabetical)
-					const sorted = [...files].sort((a, b) => {
-						if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-						return a.name.localeCompare(b.name);
-					});
-					currentOrder = sorted.map(f => f.path);
+				if (targetFile?.type === 'directory') {
+					// Drop on folder → move file into it
+					try {
+						await finderMove(draggedPath, targetPath);
+						window.dispatchEvent(new CustomEvent('refresh-desktop'));
+						toast.success(`Moved to ${targetFile.name}`);
+					} catch (err) {
+						console.error('Failed to move:', err);
+						toast.error(err instanceof Error ? err.message : 'Failed to move');
+					}
 				}
-
-				// Find both icons in the order
-				const draggedIndex = currentOrder.indexOf(draggedPath);
-				const targetIndex = currentOrder.indexOf(targetPath);
-
-				if (draggedIndex !== -1 && targetIndex !== -1) {
-					// Swap positions
-					[currentOrder[draggedIndex], currentOrder[targetIndex]] =
-						[currentOrder[targetIndex], currentOrder[draggedIndex]];
-
-					// Update the icon order
-					setIconOrder(currentOrder);
-					toast.success('Icons swapped');
-				}
+				// Drop on non-folder → no-op (no more swapping)
 			}
 
 			setActiveDragId(null);
@@ -521,10 +521,10 @@ export function ClaudeOS() {
 		return files.find((f) => f.path === activeDragId);
 	}, [activeDragId, files]);
 
-	// Native drag-drop handlers (for files from macOS Finder)
+	// Native drag-drop handlers (for files from macOS Finder or Finder windows)
 	const handleNativeDragOver = useCallback((e: React.DragEvent) => {
-		// Check if this is a file drag (not internal icon drag)
-		if (e.dataTransfer.types.includes('Files')) {
+		// Accept macOS file uploads OR cross-view Claude file drags
+		if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/claude-file')) {
 			e.preventDefault();
 			e.stopPropagation();
 			setIsNativeDragOver(true);
@@ -546,6 +546,22 @@ export function ClaudeOS() {
 		e.stopPropagation();
 		setIsNativeDragOver(false);
 
+		// Check for cross-view Claude file drag (from Finder window)
+		const claudeFile = e.dataTransfer.getData('application/claude-file');
+		if (claudeFile) {
+			// Move file to Desktop root
+			try {
+				await finderMove(claudeFile, '');
+				window.dispatchEvent(new CustomEvent('refresh-desktop'));
+				toast.success('Moved to Desktop');
+			} catch (err) {
+				console.error('Error moving file:', err);
+				toast.error(err instanceof Error ? err.message : 'Failed to move');
+			}
+			return;
+		}
+
+		// Handle macOS file uploads
 		const droppedFiles = Array.from(e.dataTransfer.files);
 		if (droppedFiles.length === 0) return;
 
@@ -593,9 +609,12 @@ export function ClaudeOS() {
 
 	return (
 		<div
+			data-testid="desktop"
 			className={`relative flex-1 overflow-hidden ${darkMode ? 'dark' : ''}`}
 			style={{
-				background: 'var(--desktop-bg)',
+				backgroundImage: 'url(/wallpaper.png)',
+				backgroundSize: 'cover',
+				backgroundPosition: 'center',
 			}}
 			onClick={handleDesktopClick}
 			onContextMenu={handleDesktopContextMenu}
@@ -677,10 +696,8 @@ export function ClaudeOS() {
 					{win.appType === 'finder' && <FinderWindowContent windowId={win.id} initialPath={win.initialPath} />}
 					{win.appType === 'settings' && <SettingsWindowContent />}
 					{win.appType === 'contacts' && <ContactsWindowContent />}
-					{win.appType === 'widgets' && <WidgetsWindowContent />}
-					{win.appType === 'email' && <EmailWindowContent />}
+		{win.appType === 'email' && <EmailWindowContent />}
 			{win.appType === 'messages' && <MessagesWindowContent />}
-					{win.appType === 'missions' && <MissionsWindowContent />}
 					{win.appType === 'roles' && <RolesWindow />}
 					{/* File viewer windows - routes to appropriate editor */}
 					{!win.appType && <DocumentRouter filePath={win.filePath} />}

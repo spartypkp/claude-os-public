@@ -23,6 +23,7 @@ Dashboard/.next/
 
 # Trash folder (soft-deleted files)
 Workspace/.trash/
+Desktop/.trash/
 
 # Worker execution artifacts (reports stored in DB)
 .engine/data/outputs/
@@ -32,17 +33,28 @@ Workspace/.trash/
 .engine/logs/async/
 
 # Playwright skill temp execution scripts
-.claude/skills/playwright-skill/.temp-execution-*.js
+.claude/skills/utility-playwright/.temp-execution-*.js
 
 # Runtime state (recreated on start)
 Desktop/logs/
-Desktop/sessions/
 .engine/data/db/*.db
 .engine/data/db/*.db-wal
 .engine/data/db/*.db-shm
 .engine/state/*.log
 
-# Working files (user's scratchpad)
-Desktop/working/*
-!Desktop/working/.gitkeep
+# MCP config (contains local paths)
+.mcp.json
+!.mcp.json.example
+
 Desktop/PUSH-INSTRUCTIONS.md
+
+# Specialist workspaces (transient)
+Desktop/conversations/
+
+# Desktop templates: IDENTITY.md, MEMORY.md, TODAY.md, SYSTEM-INDEX.md
+# are committed as starter templates. Once you fill them with personal data,
+# add them to your local .gitignore to avoid committing personal information:
+#
+#   echo "Desktop/IDENTITY.md" >> .gitignore
+#   echo "Desktop/MEMORY.md" >> .gitignore
+#   echo "Desktop/TODAY.md" >> .gitignore

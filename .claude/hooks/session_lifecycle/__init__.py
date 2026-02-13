@@ -13,8 +13,7 @@ from zoneinfo import ZoneInfo
 repo_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(repo_root / ".engine" / "src"))
 
-from services.storage import SystemStorage
-from services.workers import TaskService
+from core.storage import SystemStorage
 
 # Database path
 DB_PATH = repo_root / ".engine/data/db/system.db"
@@ -26,6 +25,25 @@ PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 def get_db():
     """Get database connection."""
     return SystemStorage(DB_PATH)
+
+
+def emit_session_state_event(session_id: str, state: str):
+    """Fire-and-forget HTTP POST to backend to emit session.state SSE event.
+
+    This notifies the Dashboard of session state changes in real-time.
+    Failures are silently ignored to avoid blocking hooks.
+    """
+    try:
+        import requests
+        url = "http://localhost:5001/api/sessions/notify-event"
+        payload = {
+            "event_type": "session.state",
+            "session_id": session_id,
+            "data": {"state": state}
+        }
+        requests.post(url, json=payload, timeout=0.5)
+    except Exception:
+        pass  # Fire and forget - don't block on failures
 
 
 def get_session_id(input_data: dict) -> str:
@@ -92,5 +110,5 @@ __all__ = [
     'repo_root', 'DB_PATH', 'PACIFIC_TZ',
     'get_db', 'get_session_id', 'now_iso',
     'format_age', 'truncate_summary',
-    'TaskService', 'SystemStorage',
+    'emit_session_state_event', 'SystemStorage',
 ]

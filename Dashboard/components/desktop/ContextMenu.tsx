@@ -1,11 +1,11 @@
 'use client';
 
-import { API_BASE, finderCreateFile, finderCreateFolder, finderUpload, moveToTrash } from '@/lib/api';
+import { API_BASE, finderCreateFile, finderCreateFolder, finderUpload, moveToTrash, openInMacOS } from '@/lib/api';
 import { getExplanation, getExplanationKey } from '@/lib/explanations';
+import { showInFinder } from '@/lib/fileNavigation';
 import { CLAUDE_SYSTEM_FILES } from '@/lib/systemFiles';
 import { useWindowStore } from '@/store/windowStore';
-import { useRolesQuery } from '@/hooks/queries';
-import { findRole, getRoleIcon } from '@/lib/roleConfig';
+import { getRoleConfig } from '@/lib/sessionUtils';
 import {
 	ArrowDownAZ,
 	BookOpen,
@@ -33,6 +33,7 @@ import {
 	Lightbulb,
 	Lock,
 	MessageSquarePlus,
+	Monitor,
 	Pencil,
 	Play,
 	RefreshCw,
@@ -48,6 +49,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExplanationTooltip } from './ExplanationTooltip';
 import { GetInfoPanel } from './GetInfoPanel';
+import { MoveToModal } from './MoveToModal';
 import { SessionInfoPanel } from './SessionInfoPanel';
 import { toast } from 'sonner';
 
@@ -185,9 +187,9 @@ export function ContextMenu() {
 	const [showWhyProtected, setShowWhyProtected] = useState(false);
 	const [showSessionInfo, setShowSessionInfo] = useState(false);
 	const [sessionInfoId, setSessionInfoId] = useState<string | null>(null);
-
-	// Fetch roles dynamically
-	const { data: roles } = useRolesQuery();
+	const [showMoveTo, setShowMoveTo] = useState(false);
+	const [moveToPath, setMoveToPath] = useState<string | null>(null);
+	const [moveToName, setMoveToName] = useState('');
 
 	// Custom prompt modal state
 	const [promptModal, setPromptModal] = useState<{
@@ -343,6 +345,20 @@ export function ContextMenu() {
 		};
 	}, [contextMenu, closeContextMenu]);
 
+	// Listen for "open-move-to" events (from PathBar, etc.)
+	useEffect(() => {
+		const handleOpenMoveTo = (e: Event) => {
+			const detail = (e as CustomEvent).detail;
+			if (detail?.path) {
+				setMoveToPath(detail.path);
+				setMoveToName(detail.name || detail.path.split('/').pop() || 'item');
+				setShowMoveTo(true);
+			}
+		};
+		window.addEventListener('open-move-to', handleOpenMoveTo);
+		return () => window.removeEventListener('open-move-to', handleOpenMoveTo);
+	}, []);
+
 	// === ACTIONS ===
 
 	const handleOpen = useCallback(() => {
@@ -419,6 +435,22 @@ export function ContextMenu() {
 		closeContextMenu();
 	}, [contextMenu, closeContextMenu]);
 
+	const handleShowInFinder = useCallback(() => {
+		if (contextMenu?.targetPath) {
+			showInFinder(contextMenu.targetPath, { openAppWindow });
+		}
+		closeContextMenu();
+	}, [contextMenu, openAppWindow, closeContextMenu]);
+
+	const handleMoveTo = useCallback(() => {
+		if (contextMenu?.targetPath) {
+			setMoveToPath(contextMenu.targetPath);
+			setMoveToName(contextMenu.targetPath.split('/').pop() || 'item');
+			setShowMoveTo(true);
+		}
+		closeContextMenu();
+	}, [contextMenu, closeContextMenu]);
+
 	const handleOpenWith = useCallback((app: string) => {
 		if (!contextMenu?.targetPath) return;
 
@@ -436,7 +468,8 @@ export function ContextMenu() {
 	const handleExport = useCallback(() => {
 		if (contextMenu?.targetPath) {
 			const fileName = contextMenu.targetPath.split('/').pop() || 'file';
-			const downloadUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(contextMenu.targetPath)}`;
+			const rawPath = contextMenu.targetPath.replace(/^Desktop\//, '');
+			const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(rawPath)}`;
 			const link = document.createElement('a');
 			link.href = downloadUrl;
 			link.download = fileName;
@@ -444,6 +477,18 @@ export function ContextMenu() {
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
+		}
+		closeContextMenu();
+	}, [contextMenu, closeContextMenu]);
+
+	const handleOpenInMacOS = useCallback(async () => {
+		if (contextMenu?.targetPath) {
+			try {
+				await openInMacOS(contextMenu.targetPath);
+			} catch (err) {
+				console.error('Error opening in macOS:', err);
+				toast.error(err instanceof Error ? err.message : 'Failed to open in macOS');
+			}
 		}
 		closeContextMenu();
 	}, [contextMenu, closeContextMenu]);
@@ -597,7 +642,7 @@ export function ContextMenu() {
 		);
 		if (confirmed) {
 			try {
-				const response = await fetch(`${API_BASE}/api/finder/trash/empty`, {
+				const response = await fetch(`${API_BASE}/api/files/trash/empty`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({}),
@@ -657,7 +702,7 @@ export function ContextMenu() {
 	const handleFocusSession = useCallback(async () => {
 		if (contextMenu?.dockSessionId) {
 			try {
-				await fetch(`${API_BASE}/api/system/sessions/${contextMenu.dockSessionId}/focus`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/${contextMenu.dockSessionId}/focus`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to focus session:', err);
 			}
@@ -670,7 +715,7 @@ export function ContextMenu() {
 			const confirmed = window.confirm('Are you sure you want to end this Claude session?');
 			if (confirmed) {
 				try {
-					await fetch(`${API_BASE}/api/system/sessions/${contextMenu.dockSessionId}/end`, { method: 'POST' });
+					await fetch(`${API_BASE}/api/sessions/${contextMenu.dockSessionId}/end`, { method: 'POST' });
 				} catch (err) {
 					console.error('Failed to end session:', err);
 				}
@@ -718,7 +763,7 @@ export function ContextMenu() {
 	const handleFocusChiefTmux = useCallback(async () => {
 		if (contextMenu?.panelSessionId) {
 			try {
-				await fetch(`${API_BASE}/api/system/sessions/${contextMenu.panelSessionId}/focus`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/${contextMenu.panelSessionId}/focus`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to focus session:', err);
 			}
@@ -729,7 +774,7 @@ export function ContextMenu() {
 	const handleForceResetChief = useCallback(async () => {
 		if (contextMenu?.panelSessionId) {
 			try {
-				await fetch(`${API_BASE}/api/system/sessions/${contextMenu.panelSessionId}/force-handoff`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/${contextMenu.panelSessionId}/force-handoff`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to force reset:', err);
 			}
@@ -741,7 +786,7 @@ export function ContextMenu() {
 		const confirmed = window.confirm('Reset Chief? This will restart the Chief session completely.');
 		if (confirmed) {
 			try {
-				await fetch(`${API_BASE}/api/chief/reset`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/chief/reset`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to reset Chief:', err);
 			}
@@ -767,7 +812,7 @@ export function ContextMenu() {
 	const handleFocusSpecialistTmux = useCallback(async () => {
 		if (contextMenu?.panelSessionId) {
 			try {
-				await fetch(`${API_BASE}/api/system/sessions/${contextMenu.panelSessionId}/focus`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/${contextMenu.panelSessionId}/focus`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to focus session:', err);
 			}
@@ -778,7 +823,7 @@ export function ContextMenu() {
 	const handleForceResetSpecialist = useCallback(async () => {
 		if (contextMenu?.panelSessionId) {
 			try {
-				await fetch(`${API_BASE}/api/system/sessions/${contextMenu.panelSessionId}/force-handoff`, { method: 'POST' });
+				await fetch(`${API_BASE}/api/sessions/${contextMenu.panelSessionId}/force-handoff`, { method: 'POST' });
 			} catch (err) {
 				console.error('Failed to force reset:', err);
 			}
@@ -792,7 +837,7 @@ export function ContextMenu() {
 			const confirmed = window.confirm(`End ${roleName} session? This cannot be undone.`);
 			if (confirmed) {
 				try {
-					await fetch(`${API_BASE}/api/system/sessions/${contextMenu.panelSessionId}/end`, { method: 'POST' });
+					await fetch(`${API_BASE}/api/sessions/${contextMenu.panelSessionId}/end`, { method: 'POST' });
 				} catch (err) {
 					console.error('Failed to end session:', err);
 				}
@@ -1000,6 +1045,15 @@ export function ContextMenu() {
 			<>
 				{getInfoPanel}
 				{sessionInfoPanel}
+				<MoveToModal
+					isOpen={showMoveTo}
+					sourcePath={moveToPath || ''}
+					sourceName={moveToName}
+					onClose={() => {
+						setShowMoveTo(false);
+						setMoveToPath(null);
+					}}
+				/>
 				{/* Hidden file input must always be rendered for import to work */}
 				<input
 					ref={fileInputRef}
@@ -1085,6 +1139,16 @@ export function ContextMenu() {
 					{ label: 'Default', value: 'default', icon: <FolderOpen className="w-4 h-4" /> },
 				]}
 			</Submenu>
+			<MenuItem
+				icon={<Monitor className="w-4 h-4" />}
+				label="Open in macOS"
+				onClick={handleOpenInMacOS}
+			/>
+			<MenuItem
+				icon={<ExternalLink className="w-4 h-4" />}
+				label="Show in Finder"
+				onClick={handleShowInFinder}
+			/>
 			<Separator />
 			{/* CLAUDE INTELLIGENCE */}
 			<MenuItem
@@ -1109,6 +1173,11 @@ export function ContextMenu() {
 			/>
 			<Separator />
 			{/* MODIFICATION & DESTRUCTIVE */}
+			<MenuItem
+				icon={<FolderInput className="w-4 h-4" />}
+				label="Move to..."
+				onClick={handleMoveTo}
+			/>
 			<MenuItem
 				icon={<Pencil className="w-4 h-4" />}
 				label="Rename"
@@ -1150,6 +1219,16 @@ export function ContextMenu() {
 				label="Open in New Window"
 				onClick={handleOpenInNewWindow}
 			/>
+			<MenuItem
+				icon={<Monitor className="w-4 h-4" />}
+				label="Open in macOS"
+				onClick={handleOpenInMacOS}
+			/>
+			<MenuItem
+				icon={<ExternalLink className="w-4 h-4" />}
+				label="Show in Finder"
+				onClick={handleShowInFinder}
+			/>
 			<Separator />
 			{/* CLAUDE INTELLIGENCE */}
 			<MenuItem
@@ -1179,6 +1258,11 @@ export function ContextMenu() {
 			/>
 			<Separator />
 			{/* MODIFICATION & DESTRUCTIVE */}
+			<MenuItem
+				icon={<FolderInput className="w-4 h-4" />}
+				label="Move to..."
+				onClick={handleMoveTo}
+			/>
 			<MenuItem
 				icon={<Pencil className="w-4 h-4" />}
 				label="Rename"
@@ -1536,7 +1620,6 @@ export function ContextMenu() {
 			case 'calendar': return <Calendar className="w-4 h-4" />;
 			case 'contacts': return <Info className="w-4 h-4" />;
 			case 'settings': return <Info className="w-4 h-4" />;
-			case 'widgets': return <LayoutGrid className="w-4 h-4" />;
 			case 'email': return <Info className="w-4 h-4" />;
 			default: return <Info className="w-4 h-4" />;
 		}
@@ -1711,39 +1794,18 @@ export function ContextMenu() {
 		</>
 	);
 
-	// Get specialist role icon (dynamic from role config)
+	// Get specialist role icon
 	const getSpecialistIcon = () => {
 		const roleSlug = contextMenu?.panelSessionRole;
 		if (!roleSlug) return <Code2 className="w-4 h-4" />;
-
-		const role = findRole(roles, roleSlug);
-		if (!role) return <Code2 className="w-4 h-4" />;
-
-		const { icon: iconName, is_logo } = role.display;
-		if (is_logo) return null; // Chief shouldn't be in specialist menu
-
-		const Icon = getRoleIcon(iconName);
+		const config = getRoleConfig(roleSlug);
+		if (config.isLogo) return null; // Chief shouldn't be in specialist menu
+		const Icon = config.icon;
 		return <Icon className="w-4 h-4" />;
-	};
-
-	// Get specialist role color (dynamic from role config)
-	const getSpecialistColor = () => {
-		const roleSlug = contextMenu?.panelSessionRole;
-		if (!roleSlug) return 'cyan';
-
-		const role = findRole(roles, roleSlug);
-		if (!role) return 'cyan';
-
-		return role.display.color;
 	};
 
 	// Panel Specialist menu
 	const renderPanelSpecialistMenu = () => {
-		const color = getSpecialistColor();
-		const bgClass = `bg-${color}-50 dark:bg-${color}-500/10`;
-		const borderClass = `border-${color}-200 dark:border-${color}-500/20`;
-		const textClass = `text-${color}-700 dark:text-${color}-300`;
-		const subtextClass = `text-${color}-600/70 dark:text-${color}-300/70`;
 
 		return (
 			<>
@@ -2066,6 +2128,17 @@ export function ContextMenu() {
 
 			{/* Session Info Panel */}
 			{sessionInfoPanel}
+
+			{/* Move To Modal */}
+			<MoveToModal
+				isOpen={showMoveTo}
+				sourcePath={moveToPath || ''}
+				sourceName={moveToName}
+				onClose={() => {
+					setShowMoveTo(false);
+					setMoveToPath(null);
+				}}
+			/>
 		</>
 	);
 }

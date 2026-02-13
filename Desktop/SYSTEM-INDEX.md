@@ -8,147 +8,53 @@ type: system
 
 ---
 
-<!-- BEGIN ROLES -->
+## Custom Roles
 
-## Specialist Roles
-
-Claude works as a team. Each role has distinct identity and purpose.
+*Domain-specific roles beyond the base seven (Chief, Builder, Writer, Researcher, Idea, Project, Curator).*
 
 | Role | Purpose | When to Use |
 |------|---------|-------------|
 
-| **Builder** | You're the craftsman who turns blueprints into working software | Custom Apps, infrastructure, debugging |
-
-| **Chief** | You're the user's second brain and shield | Default role, runs all day |
-
-| **Deep-Work** | You do sustained, complex work that requires protected attention | Sustained complex tasks (research, writing, analysis) |
-
-| **Idea** | You're the generative thinker | Brainstorming, design, planning |
-
-| **Project** | You're a consulting specialist | External codebases, client work |
-
-<!-- END ROLES -->
+*To add a custom role: create `.claude/roles/{role-name}/role.md` with frontmatter.*
 
 ---
-
-<!-- BEGIN LIFE DOMAINS -->
 
 ## Life Domains
 
-The user's life areas. Each domain folder contains a LIFE-SPEC.md with goals and strategy.
-
-<!-- END LIFE DOMAINS -->
+<!-- Add your life domains here. Each domain folder contains a LIFE-SPEC.md with goals and strategy. -->
 
 ---
-
-<!-- BEGIN CUSTOM APPS -->
 
 ## Custom Applications
 
 Purpose-built apps for specific workflows.
 
-
-*No Custom Applications found.*
-
-<!-- END CUSTOM APPS -->
+<!-- Custom apps appear here after being built with the /build-app skill. -->
 
 ---
-
-<!-- BEGIN MISSIONS -->
 
 ## Missions
 
-Scheduled Claude sessions that run automatically.
-
-
-### Autonomous Dev Work
-On demand
-Night mode development work on specs and infrastructure
-
-
-### Dream Mode
-4:00 AM daily
-Claude's private space for reflection and exploration
-
-
-### Memory Consolidation
-6:00 AM daily *(required)*
-Consolidate yesterday into persistent memory before the user wakes
-
-
-### Morning Prep
-Unknown
-Create morning brief and prepare fresh Chief for the day
-
-
-### Overnight Tasks
-1:00 AM daily
-Process accumulated tasks from the day while the user sleeps
-
-<!-- END MISSIONS -->
+<!-- Scheduled Claude sessions configured via SCHEDULE.md. -->
 
 ---
-
-<!-- BEGIN SYSTEM SPECS -->
 
 ## System Specs
 
 Infrastructure documentation. Read when building or debugging.
 
-
-
-### Claudepanel
-📁 Dashboard/components/ClaudePanel/SYSTEM-SPEC.md
-Main Claude conversation panel with session management, transcript display, and chat input
-
-
-### Components
-📁 Dashboard/components/SYSTEM-SPEC.md
-Semantically organized React components
-
-
-### Config
-📁 .engine/config/SYSTEM-SPEC.md
-All table definitions live here. When modifying the database:
-
-
 ### Dashboard
-📁 Dashboard/SYSTEM-SPEC.md
-The visual workspace for the life system. Monitor 2 to Claude Code's Monitor 1.
-
+`Dashboard/SYSTEM-SPEC.md`
+The visual workspace for the life system.
 
 ### Desktop
-📁 Dashboard/components/desktop/SYSTEM-SPEC.md
-ClaudeOS desktop environment — macOS-inspired window manager
-
-
-### Engine
-📁 .engine/SYSTEM-SPEC.md
-This is the **automation layer** that makes the life management system work invisibly. While the user and Claude interact through markdown files (Desk...
-
+`Dashboard/components/desktop/SYSTEM-SPEC.md`
+ClaudeOS desktop environment — macOS-inspired window manager.
 
 ### Hooks
-📁 .claude/hooks/SYSTEM-SPEC.md
-Python scripts that run at Claude session lifecycle points. Enable automatic context loading, session tracking, tool validation, and background task n...
-
-
-### Life MCP
-📁 .engine/src/life_mcp/SYSTEM-SPEC.md
-Claude's primary interface to the life system. All actions go through MCP.
-
+`.claude/hooks/SYSTEM-SPEC.md`
+Python scripts that run at Claude session lifecycle points.
 
 ### Tools
-📁 Dashboard/components/transcript/tools/SYSTEM-SPEC.md
-Render tool calls in the Claude Panel transcript viewer
-
-
-### Utils
-📁 .engine/src/utils/SYSTEM-SPEC.md
-Shared utilities used across the engine
-
-
-### Watcher
-📁 .engine/src/watcher/SYSTEM-SPEC.md
-Monitors filesystem for changes and keeps derived views synchronized.
-
-<!-- END SYSTEM SPECS -->
+`Dashboard/components/transcript/tools/SYSTEM-SPEC.md`
+Render tool calls in the Claude Panel transcript viewer.

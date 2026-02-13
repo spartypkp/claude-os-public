@@ -1,7 +1,15 @@
 'use client';
 
+/**
+ * ChatPanelContext - Conversation-first panel state
+ *
+ * Tracks which conversation is selected and panel visibility.
+ * Transcript cache moved to useConversation hook (keyed by conversation_id).
+ *
+ * Mental model: Conversation is what users see. Session is internal.
+ */
+
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { TranscriptEvent } from '@/hooks/useTranscriptStream';
 
 // Debounce helper
 function useDebouncedCallback<T extends (...args: unknown[]) => void>(
@@ -10,12 +18,11 @@ function useDebouncedCallback<T extends (...args: unknown[]) => void>(
 ): T {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(callback);
-  
-  // Update the callback ref when it changes
+
   useEffect(() => {
     callbackRef.current = callback;
   }, [callback]);
-  
+
   return useMemo(() => {
     const debouncedFn = (...args: Parameters<T>) => {
       if (timeoutRef.current) {
@@ -27,15 +34,6 @@ function useDebouncedCallback<T extends (...args: unknown[]) => void>(
     };
     return debouncedFn as T;
   }, [delay]);
-}
-
-/**
- * Cache for a single session's transcript events.
- */
-interface SessionCache {
-  events: TranscriptEvent[];
-  lastEventUuid: string | null;
-  loadedAt: number;  // Timestamp for cache invalidation
 }
 
 interface ChatDraft {
@@ -54,51 +52,60 @@ interface ChatDraftAttachment {
 }
 
 interface ChatPanelState {
-  isOpen: boolean;  // Panel visibility (controlled by ⌘L)
-  sessionId: string | null;
-  sessionRole: string | null;
+  isOpen: boolean;
+  conversationId: string | null;
+  conversationRole: string | null;
 }
 
-const DRAFTS_STORAGE_KEY = 'claude-panel-drafts-v1';
+const DRAFTS_STORAGE_KEY = 'claude-panel-drafts-v2';
+
+interface SessionCache {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  events: any[];
+  lastEventUuid: string | null;
+  loadedAt: number;
+}
 
 interface ChatPanelContextValue extends ChatPanelState {
+  // Conversation management
+  openConversation: (conversationId: string, role?: string) => void;
   openSession: (sessionId: string, role?: string) => void;
-  setSession: (sessionId: string | null, role?: string | null) => void;
+  setConversation: (conversationId: string | null, role?: string | null) => void;
   closePanel: () => void;
-  togglePanel: (sessionId: string, role?: string) => void;
-  toggleVisibility: () => void;  // Toggle panel visibility (⌘L)
-  // Session cache methods
+  togglePanel: (conversationId: string, role?: string) => void;
+  toggleVisibility: () => void;
+
+  // Draft cache (per conversation)
+  getDraft: (conversationId: string) => ChatDraft | undefined;
+  setDraft: (conversationId: string, draft: ChatDraft) => void;
+  clearDraft: (conversationId: string) => void;
+
+  // Session transcript cache
   getSessionCache: (sessionId: string) => SessionCache | undefined;
   setSessionCache: (sessionId: string, cache: SessionCache) => void;
-  appendToCache: (sessionId: string, event: TranscriptEvent) => void;
-  clearSessionCache: (sessionId: string) => void;
-  // Draft cache methods (per session)
-  getDraft: (sessionId: string) => ChatDraft | undefined;
-  setDraft: (sessionId: string, draft: ChatDraft) => void;
-  clearDraft: (sessionId: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  appendToCache: (sessionId: string, event: any) => void;
 }
 
 const ChatPanelContext = createContext<ChatPanelContextValue | null>(null);
 
 export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ChatPanelState>({
-    isOpen: true,  // Default to visible (⌘L toggles)
-    sessionId: null,
-    sessionRole: null,
+    isOpen: true,
+    conversationId: null,
+    conversationRole: null,
   });
 
-  // Session caches - using ref to avoid re-renders on cache updates
-  const sessionCachesRef = useRef<Map<string, SessionCache>>(new Map());
   const draftCacheRef = useRef<Map<string, ChatDraft>>(new Map());
-  // Force update counter for when we need to trigger re-renders
-  const [, forceUpdate] = useState(0);
+  const sessionCacheRef = useRef<Map<string, SessionCache>>(new Map());
 
+  // Load drafts from localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFTS_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, ChatDraft>;
-      Object.entries(parsed).forEach(([sessionId, draft]) => {
+      Object.entries(parsed).forEach(([convId, draft]) => {
         const sanitized: ChatDraft = {
           inputValue: draft.inputValue || '',
           attachments: (draft.attachments || []).map((attachment) => ({
@@ -111,52 +118,51 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
             error: null,
           })),
         };
-        draftCacheRef.current.set(sessionId, sanitized);
+        draftCacheRef.current.set(convId, sanitized);
       });
     } catch (err) {
       console.warn('Failed to load draft cache:', err);
     }
   }, []);
 
-  const openSession = useCallback((sessionId: string, role?: string) => {
+  // Conversation methods
+  const openConversation = useCallback((conversationId: string, role?: string) => {
     setState({
       isOpen: true,
-      sessionId,
-      sessionRole: role || null,
+      conversationId,
+      conversationRole: role || null,
     });
   }, []);
 
-  const setSession = useCallback((sessionId: string | null, role?: string | null) => {
+  const setConversation = useCallback((conversationId: string | null, role?: string | null) => {
     setState(prev => ({
       ...prev,
-      sessionId,
-      sessionRole: role || null,
+      conversationId,
+      conversationRole: role || null,
     }));
   }, []);
 
   const closePanel = useCallback(() => {
     setState({
       isOpen: false,
-      sessionId: null,
-      sessionRole: null,
+      conversationId: null,
+      conversationRole: null,
     });
   }, []);
 
-  const togglePanel = useCallback((sessionId: string, role?: string) => {
+  const togglePanel = useCallback((conversationId: string, role?: string) => {
     setState(prev => {
-      // If clicking the same session that's already open, close it
-      if (prev.isOpen && prev.sessionId === sessionId) {
+      if (prev.isOpen && prev.conversationId === conversationId) {
         return {
           isOpen: false,
-          sessionId: null,
-          sessionRole: null,
+          conversationId: null,
+          conversationRole: null,
         };
       }
-      // Otherwise open this session
       return {
         isOpen: true,
-        sessionId,
-        sessionRole: role || null,
+        conversationId,
+        conversationRole: role || null,
       };
     });
   }, []);
@@ -168,44 +174,11 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  // Session cache methods
-  const getSessionCache = useCallback((sessionId: string): SessionCache | undefined => {
-    return sessionCachesRef.current.get(sessionId);
+  // Draft methods
+  const getDraft = useCallback((conversationId: string): ChatDraft | undefined => {
+    return draftCacheRef.current.get(conversationId);
   }, []);
 
-  const setSessionCache = useCallback((sessionId: string, cache: SessionCache) => {
-    sessionCachesRef.current.set(sessionId, cache);
-    forceUpdate(n => n + 1);
-  }, []);
-
-  const appendToCache = useCallback((sessionId: string, event: TranscriptEvent) => {
-    const existing = sessionCachesRef.current.get(sessionId);
-    if (existing) {
-      // Avoid duplicates by checking UUID
-      if (event.uuid && existing.events.some(e => e.uuid === event.uuid)) {
-        return;
-      }
-      // Create NEW cache object with NEW events array to trigger React re-renders
-      // Mutating in place doesn't change reference, so useMemo/useEffect dependencies don't fire
-      sessionCachesRef.current.set(sessionId, {
-        events: [...existing.events, event],
-        lastEventUuid: event.uuid || existing.lastEventUuid,
-        loadedAt: existing.loadedAt,
-      });
-      forceUpdate(n => n + 1);
-    }
-  }, []);
-
-  const clearSessionCache = useCallback((sessionId: string) => {
-    sessionCachesRef.current.delete(sessionId);
-    forceUpdate(n => n + 1);
-  }, []);
-
-  const getDraft = useCallback((sessionId: string): ChatDraft | undefined => {
-    return draftCacheRef.current.get(sessionId);
-  }, []);
-
-  // Persist drafts to localStorage (expensive, so we'll debounce this)
   const persistDraftsToStorage = useCallback(() => {
     try {
       const serializable: Record<string, ChatDraft> = {};
@@ -229,36 +202,57 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Debounced version - only persist to localStorage every 500ms
   const debouncedPersist = useDebouncedCallback(persistDraftsToStorage, 500);
 
-  const setDraft = useCallback((sessionId: string, draft: ChatDraft) => {
-    // Update in-memory cache immediately (no lag)
-    draftCacheRef.current.set(sessionId, draft);
-    // Debounce the expensive localStorage write
+  const setDraft = useCallback((conversationId: string, draft: ChatDraft) => {
+    draftCacheRef.current.set(conversationId, draft);
     debouncedPersist();
   }, [debouncedPersist]);
 
-  const clearDraft = useCallback((sessionId: string) => {
-    draftCacheRef.current.delete(sessionId);
-    // Use the same debounced persist
+  const clearDraft = useCallback((conversationId: string) => {
+    draftCacheRef.current.delete(conversationId);
     debouncedPersist();
   }, [debouncedPersist]);
+
+  // Session cache methods
+  const getSessionCache = useCallback((sessionId: string): SessionCache | undefined => {
+    return sessionCacheRef.current.get(sessionId);
+  }, []);
+
+  const setSessionCache = useCallback((sessionId: string, cache: SessionCache) => {
+    sessionCacheRef.current.set(sessionId, cache);
+  }, []);
+
+  const appendToCache = useCallback((sessionId: string, event: unknown) => {
+    const existing = sessionCacheRef.current.get(sessionId);
+    if (existing) {
+      existing.events.push(event);
+    }
+  }, []);
+
+  // openSession is an alias for openConversation
+  const openSession = useCallback((sessionId: string, role?: string) => {
+    setState({
+      isOpen: true,
+      conversationId: sessionId,
+      conversationRole: role || null,
+    });
+  }, []);
 
   const value: ChatPanelContextValue = {
     ...state,
+    openConversation,
     openSession,
-    setSession,
+    setConversation,
     closePanel,
     togglePanel,
     toggleVisibility,
-    getSessionCache,
-    setSessionCache,
-    appendToCache,
-    clearSessionCache,
     getDraft,
     setDraft,
     clearDraft,
+    getSessionCache,
+    setSessionCache,
+    appendToCache,
   };
 
   return (

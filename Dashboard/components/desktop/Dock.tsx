@@ -6,8 +6,6 @@ import {
 	Calendar,
 	FileText,
 	FolderOpen,
-	LayoutDashboard,
-	LayoutGrid,
 	Mail,
 	MessageCircle,
 	Monitor,
@@ -19,7 +17,12 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-
+// Import app manifests to trigger registration
+import '@/app/ember/manifest';
+import '@/app/job-search/manifest';
+import '@/app/speedrun/manifest';
+import '@/app/training-will/manifest';
+import '@/app/turbine/manifest';
 
 // ==========================================
 // CONSTANTS
@@ -114,22 +117,7 @@ const CORE_APPS: DockItem[] = [
 		gradient: 'from-[#DA7756] to-[#C15F3C]',
 		appWindow: 'messages',
 	},
-	{
-		id: 'widgets',
-		name: 'Claude Widgets',
-		icon: <LayoutDashboard className="w-6 h-6" />,
-		type: 'app',
-		gradient: 'from-purple-400 to-purple-600',
-		appWindow: 'widgets',
-	},
-	{
-		id: 'missions',
-		name: 'Claude Missions',
-		icon: <Rocket className="w-6 h-6" />,
-		type: 'app',
-		gradient: 'from-amber-400 to-orange-600',
-		appWindow: 'missions',
-	},
+	// Missions removed - system deleted
 	{
 		id: 'roles',
 		name: 'Claude Roles',
@@ -155,16 +143,16 @@ function getCustomApps(): DockItem[] {
 	return getApps()
 		.sort((a, b) => a.id.localeCompare(b.id))
 		.map((app) => {
-			const Icon = app.icon;
-			return {
-				id: app.id,
-				name: app.name,
-				icon: <Icon className="w-6 h-6" />,
-				type: 'app' as const,
-				gradient: 'from-blue-400 to-blue-600', // Consistent blue for all custom apps
-				route: getAppRootPath(app),
-			};
-		});
+		const Icon = app.icon;
+		return {
+			id: app.id,
+			name: app.name,
+			icon: <Icon className="w-6 h-6" />,
+			type: 'app' as const,
+			gradient: app.gradient,
+			route: getAppRootPath(app),
+		};
+	});
 }
 
 // ==========================================
@@ -192,6 +180,7 @@ const DockIcon = React.memo(function DockIcon({ item, scale, onClick, onMouseEnt
 		>
 			{/* Icon button */}
 			<button
+				data-testid={`dock-icon-${item.id}`}
 				onClick={onClick}
 				onMouseEnter={onMouseEnter}
 				onContextMenu={onContextMenu}
@@ -420,9 +409,8 @@ export function Dock() {
 				case 'calendar': return <Calendar className="w-5 h-5" />;
 				case 'contacts': return <Users className="w-5 h-5" />;
 				case 'settings': return <Settings className="w-5 h-5" />;
-				case 'widgets': return <LayoutGrid className="w-5 h-5" />;
+	
 				case 'email': return <Mail className="w-5 h-5" />;
-				case 'missions': return <Rocket className="w-5 h-5" />;
 				case 'roles': return <Users className="w-5 h-5" />;
 			}
 		}
@@ -437,9 +425,8 @@ export function Dock() {
 				case 'calendar': return 'from-red-400 to-red-600';
 				case 'contacts': return 'from-green-400 to-green-600';
 				case 'settings': return 'from-slate-500 to-slate-700';
-				case 'widgets': return 'from-purple-400 to-purple-600';
+	
 				case 'email': return 'from-sky-400 to-blue-600';
-				case 'missions': return 'from-amber-400 to-orange-600';
 			}
 		}
 		return 'from-gray-400 to-gray-600';
@@ -464,6 +451,7 @@ export function Dock() {
 			{/* Dock container with glass effect */}
 			<div
 				ref={dockRef}
+				data-testid="dock"
 				onMouseMove={handleMouseMove}
 				onMouseLeave={handleMouseLeave}
 				className="

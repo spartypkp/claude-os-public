@@ -12,6 +12,8 @@ interface ApplicationShellProps {
   subNav?: ReactNode;
   /** If set, this Core App can toggle to windowed mode (green button enabled) */
   appType?: CoreAppType;
+  /** When true, content area uses overflow-hidden with no padding. For canvas-based apps (React Flow, etc.) */
+  fullBleed?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ interface ApplicationShellProps {
  * - Consistent styling across all apps
  * - Green button for Core Apps: toggles to windowed mode
  */
-export function ApplicationShell({ children, title, icon, subNav, appType }: ApplicationShellProps) {
+export function ApplicationShell({ children, title, icon, subNav, appType, fullBleed }: ApplicationShellProps) {
   const router = useRouter();
   const { openAppWindow } = useWindowStore();
 
@@ -99,8 +101,8 @@ export function ApplicationShell({ children, title, icon, subNav, appType }: App
         )}
       </div>
 
-      {/* Content Area - pb-20 to prevent content from going under Dock */}
-      <div className="flex-1 overflow-auto pb-20">
+      {/* Content Area */}
+      <div className={fullBleed ? "flex-1 overflow-hidden" : "flex-1 overflow-auto pb-20"}>
         {children}
       </div>
     </div>

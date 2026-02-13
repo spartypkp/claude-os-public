@@ -6,6 +6,7 @@ import { HelpCircle } from 'lucide-react';
 import { useWindowStore, WindowState } from '@/store/windowStore';
 import { getExplanation, isSystemFile } from '@/lib/explanations';
 import { ExplanationTooltip } from './ExplanationTooltip';
+import { PathBar } from './PathBar';
 
 interface DesktopWindowProps {
   window: WindowState;
@@ -239,6 +240,11 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
             onClose={() => setShowExplanation(false)}
             onAskChief={handleAskChief}
           />
+        )}
+
+        {/* Path Bar - only for file windows (not app windows) */}
+        {!win.appType && win.filePath && (
+          <PathBar filePath={win.filePath} />
         )}
 
         {/* Content */}

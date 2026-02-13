@@ -22,7 +22,7 @@ export function ImageViewer({ filePath }: ImageViewerProps) {
 	const fileName = filePath.split('/').pop() || filePath;
 	// Strip "Desktop/" prefix if present (API expects paths relative to Desktop/)
 	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const imageUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(apiPath)}`;
+	const imageUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
 
 	// Reset state when file changes
 	useEffect(() => {

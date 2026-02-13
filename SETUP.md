@@ -8,7 +8,7 @@
 
 ```bash
 # Clone
-git clone https://github.com/your-username/claude-os.git
+git clone https://github.com/spartypkp/claude-os.git
 cd claude-os
 
 # Install (handles all dependencies)
@@ -38,7 +38,7 @@ The install script will handle Python, Node, tmux, and Claude Code CLI if you do
 ### Step 1: Clone and Install
 
 ```bash
-git clone https://github.com/your-username/claude-os.git
+git clone https://github.com/spartypkp/claude-os.git
 cd claude-os
 ./install.sh
 ```
@@ -94,12 +94,6 @@ Your browser opens to http://localhost:3000 automatically.
 
 ```bash
 ./stop.sh
-```
-
-### Check Status
-
-```bash
-./status.sh
 ```
 
 ### Attach to Running Session
@@ -166,8 +160,8 @@ Once running:
 3. **Talk to Claude** — In the chief tmux window, tell Claude about your goals
 
 Claude will:
-- Create your memory files (TODAY.md, MEMORY.md)
 - Learn your schedule from Apple Calendar
+- Start populating your memory files (TODAY.md, MEMORY.md)
 - Start managing your priorities
 
 See [CLAUDE.md](./CLAUDE.md) for the full operating manual.
@@ -234,7 +228,6 @@ rm .engine/data/db/system.db
 | `./install.sh` | One-time setup. Installs all dependencies. |
 | `./start.sh` | Starts Claude OS (backend, dashboard, Claude Code) |
 | `./stop.sh` | Stops Claude OS |
-| `./status.sh` | Shows what's running and health status |
 
 ### start.sh Options
 

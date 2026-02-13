@@ -2,10 +2,12 @@
 
 import { DocumentRouter } from '@/components/desktop/editors/DocumentRouter';
 import { useRecentFiles } from '@/hooks/useRecentFiles';
+import { openInMacOS } from '@/lib/api';
 import { getFileIconSpec } from '@/lib/fileTypes';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Monitor } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
 
 interface FileViewerProps {
 	path: string;
@@ -21,6 +23,14 @@ export function FileViewer({ path }: FileViewerProps) {
 	const { addRecentFile } = useRecentFiles();
 
 	const fileName = path.split('/').pop() || path;
+
+	const handleOpenInMacOS = useCallback(async () => {
+		try {
+			await openInMacOS(path);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Failed to open in macOS');
+		}
+	}, [path]);
 
 	useEffect(() => {
 		addRecentFile(path);
@@ -47,6 +57,14 @@ export function FileViewer({ path }: FileViewerProps) {
 						{path}
 					</div>
 				</div>
+
+				<button
+					onClick={handleOpenInMacOS}
+					className="btn btn-ghost btn-icon-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+					title="Open in macOS"
+				>
+					<Monitor className="w-4 h-4" />
+				</button>
 			</div>
 
 			<div className="flex-1 overflow-hidden">

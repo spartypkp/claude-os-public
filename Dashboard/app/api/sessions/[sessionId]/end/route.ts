@@ -14,7 +14,7 @@ export async function POST(
     const closeTmux = searchParams.get('close_tmux') !== 'false';
 
     const response = await fetch(
-      `${BACKEND_URL}/api/system/sessions/${sessionId}/end?close_tmux=${closeTmux}`,
+      `${BACKEND_URL}/api/sessions/${sessionId}/end?close_tmux=${closeTmux}`,
       {
         method: 'POST',
         headers: {

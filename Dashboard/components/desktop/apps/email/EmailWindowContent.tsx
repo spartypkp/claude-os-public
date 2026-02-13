@@ -53,6 +53,7 @@ interface EmailMessage {
 	mailbox: string;
 	account: string;
 	content?: string;
+	snippet?: string;
 	recipients?: string[];
 }
 
@@ -131,7 +132,8 @@ export function EmailWindowContent() {
 		queryFn: async () => {
 			const response = await fetch(`${API_BASE}/api/email/accounts/full`);
 			if (!response.ok) throw new Error('Failed to fetch accounts');
-			return response.json();
+			const data = await response.json();
+			return Array.isArray(data) ? data : data.accounts || [];
 		},
 		staleTime: 5 * 60 * 1000, // 5 minutes
 	});
@@ -157,7 +159,8 @@ export function EmailWindowContent() {
 				: `${API_BASE}/api/email/mailboxes`;
 			const response = await fetch(url);
 			if (!response.ok) throw new Error('Failed to fetch mailboxes');
-			return response.json();
+			const data = await response.json();
+			return Array.isArray(data) ? data : data.mailboxes || [];
 		},
 		enabled: !!selectedAccount,
 		staleTime: 60 * 1000, // 1 minute
@@ -173,7 +176,8 @@ export function EmailWindowContent() {
 			}
 			const response = await fetch(url);
 			if (!response.ok) throw new Error('Failed to fetch messages');
-			return response.json();
+			const data = await response.json();
+			return Array.isArray(data) ? data : data.messages || [];
 		},
 		enabled: !!selectedAccount && !searchQuery,
 		staleTime: 0, // Always fetch fresh to avoid cache issues
@@ -184,13 +188,14 @@ export function EmailWindowContent() {
 	const { data: searchResults = [], isLoading: searchLoading } = useQuery<EmailMessage[]>({
 		queryKey: ['email', 'search', searchQuery, selectedAccount],
 		queryFn: async () => {
-			let url = `${API_BASE}/api/email/search?q=${encodeURIComponent(searchQuery)}&limit=50`;
+			let url = `${API_BASE}/api/email/search?query=${encodeURIComponent(searchQuery)}&limit=50`;
 			if (selectedAccount) {
 				url += `&account=${encodeURIComponent(selectedAccount)}`;
 			}
 			const response = await fetch(url);
 			if (!response.ok) throw new Error('Search failed');
-			return response.json();
+			const data = await response.json();
+			return Array.isArray(data) ? data : data.messages || [];
 		},
 		enabled: !!searchQuery && !!selectedAccount,
 		staleTime: 10 * 1000, // 10 seconds
@@ -366,7 +371,7 @@ ${selectedMessage.content || '(no content)'}
 	};
 
 	return (
-		<div className="flex h-full bg-[#F5F5F5] dark:bg-[#1e1e1e] select-none">
+		<div className="flex h-full bg-[#F5F5F5] dark:bg-[#1e1e1e] select-none" data-testid="email-app">
 			{/* Sidebar - Claude OS branded */}
 			<div className="w-52 flex-shrink-0 bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl border-r border-[#D1D1D1] dark:border-[#3a3a3a] flex flex-col overflow-hidden">
 				{/* Claude OS branding header */}
@@ -610,6 +615,11 @@ ${selectedMessage.content || '(no content)'}
 										<p className={`text-sm truncate ${message.is_read ? 'text-[#6E6E73] dark:text-[#8e8e93]' : 'font-semibold text-[#1D1D1F] dark:text-white'}`}>
 											{message.subject || '(no subject)'}
 										</p>
+										{message.snippet && (
+											<p className="text-xs text-[#8E8E93] truncate mt-0.5">
+												{message.snippet}
+											</p>
+										)}
 									</button>
 								);
 							})}

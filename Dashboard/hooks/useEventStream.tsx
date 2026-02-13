@@ -3,7 +3,7 @@
  * 
  * Jan 2026 Architecture Overhaul:
  * Instead of 33 polling intervals (200+ API calls/min), we have:
- * - 1 SSE connection to /api/events
+ * - 1 SSE connection to /api/system/events
  * - Server pushes changes as they happen
  * - Provider invalidates React Query cache on events
  * 
@@ -69,7 +69,7 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 			eventSourceRef.current.close();
 		}
 
-		const eventSource = new EventSource(`${API_BASE}/api/events`);
+		const eventSource = new EventSource(`${API_BASE}/api/system/events`);
 		eventSourceRef.current = eventSource;
 
 		eventSource.onopen = () => {
@@ -114,12 +114,13 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 		// Also listen for specific event types (SSE can send named events)
 		const eventTypes = [
 			'session.started', 'session.ended', 'session.state', 'session.status',
+			'session.reset_initiated', 'session.handoff_generating', 'session.handoff_complete', 'session.respawned',
 			'worker.created', 'worker.started', 'worker.completed', 'worker.acked', 'worker.cancelled', 'worker.output_updated',
 			'priority.created', 'priority.updated', 'priority.completed', 'priority.deleted',
 			'mission.created', 'mission.updated', 'mission.deleted', 'mission.started', 'mission.completed',
 			'file.created', 'file.modified', 'file.deleted', 'file.moved',
 			'email.sent', 'email.queued', 'email.cancelled', 'email.read',
-			'email.flagged', 'email.deleted',
+			'email.flagged', 'email.deleted', 'email.triaged',
 			'calendar.created', 'calendar.updated', 'calendar.deleted',
 			'contact.created', 'contact.updated', 'contact.deleted',
 			'message.sent', 'message.received',

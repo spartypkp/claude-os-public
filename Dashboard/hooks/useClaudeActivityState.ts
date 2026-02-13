@@ -9,7 +9,7 @@
 'use client';
 
 import { useMemo, useEffect, useState, useRef } from 'react';
-import type { TranscriptEvent } from './useTranscriptStream';
+import type { TranscriptEvent } from './useConversation';
 
 export type ClaudeActivityState =
   | { type: 'idle' }

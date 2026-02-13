@@ -60,13 +60,13 @@ When invoked, you receive a project path (e.g., "Desktop/projects/example-projec
    - Notable choices: async patterns, error handling, state management
 
 7. **Synthesize findings (Write)**
-   - Write comprehensive architecture doc to `Desktop/working/{project}-architecture.md`
+   - Write comprehensive architecture doc to `Desktop/conversations/{project}-architecture.md`
    - Use structured format (see below)
    - Include both high-level overview and specific details
 
 8. **Return summary**
    - Brief summary of key findings (2-3 paragraphs)
-   - Pointer to architecture doc: "Full map → Desktop/working/{project}-architecture.md"
+   - Pointer to architecture doc: "Full map → Desktop/conversations/{project}-architecture.md"
 
 ## Tools and Usage
 
@@ -91,7 +91,7 @@ When invoked, you receive a project path (e.g., "Desktop/projects/example-projec
 - `git log --oneline -n 20` - Check recent activity
 
 **Write** - Create architecture document
-- Write findings to Desktop/working/{project}-architecture.md
+- Write findings to Desktop/conversations/{project}-architecture.md
 
 ## Success Criteria
 
@@ -103,11 +103,11 @@ Your map is successful when:
 4. **Data flow understood** - Can trace how data moves through system (request → database → response)
 5. **Patterns documented** - Architecture style, conventions, notable patterns identified
 6. **Actionable insights** - Map provides enough detail for someone to start contributing or refactoring
-7. **Written artifact created** - Desktop/working/{project}-architecture.md exists and is comprehensive
+7. **Written artifact created** - Desktop/conversations/{project}-architecture.md exists and is comprehensive
 
 ## Output Format
 
-Write to `Desktop/working/{project}-architecture.md`:
+Write to `Desktop/conversations/{project}-architecture.md`:
 
 ```markdown
 # {Project} Architecture
@@ -238,5 +238,5 @@ Process:
 6. Data flow: Event-driven with message queue (RabbitMQ)
 7. Patterns: CQRS, event sourcing, hexagonal architecture
 
-Output: Comprehensive doc → Desktop/working/ecommerce-platform-architecture.md (8-10 sections, 500+ lines)
+Output: Comprehensive doc → Desktop/conversations/ecommerce-platform-architecture.md (8-10 sections, 500+ lines)
 ```

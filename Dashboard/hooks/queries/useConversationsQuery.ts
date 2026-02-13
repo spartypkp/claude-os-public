@@ -64,7 +64,7 @@ interface ActivityResponse {
 }
 
 async function fetchActivity(): Promise<ActivityResponse> {
-  const response = await fetch(`${API_BASE}/api/system/sessions/activity`);
+  const response = await fetch(`${API_BASE}/api/sessions/activity`);
   if (!response.ok) {
     throw new Error(`Failed to fetch activity: ${response.statusText}`);
   }

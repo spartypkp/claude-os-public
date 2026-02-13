@@ -1,257 +1,101 @@
 ---
 name: create-role
-description: Create a new Claude role through conversation. Interview the user about the role's purpose, responsibilities, and modes, then generate the role file and mode files automatically.
+description: Create a new Claude specialist role through guided conversation. Generates the role definition and mode files. Use when user says "create a role", "I want a specialist for X", "add a new role", or needs a domain-specific Claude persona.
 ---
 
-# Create Role Skill
+# Create Role
 
-Create new Claude roles through conversation. This skill guides you through gathering requirements and generates all necessary files.
+Guide the user through creating a custom specialist role.
 
-## When to Use
+## What This Does
 
-User wants to add a new specialist role to the system. Examples:
-- "I want a role for helping me practice guitar"
-- "Create a role for research assistance"
-- "/create-role"
+A role is a Claude persona with specific expertise, tone, and context. Roles live in `.claude/roles/{name}/` with up to 5 files:
+- `role.md` — Identity and capabilities (required)
+- `interactive.md` — How to work in real-time with the user
+- `preparation.md` — How to plan work (specialist loop phase 1)
+- `implementation.md` — How to execute work (specialist loop phase 2)
+- `verification.md` — How to verify work (specialist loop phase 3)
 
-## The Interview Flow
+Not every role needs all 5. Interactive-only roles just need `role.md` + `interactive.md`.
 
-Guide the user through these questions. Adapt based on their answers—not every question is needed for every role.
+## The Conversation
 
-### Phase 1: Core Identity
+### Step 1: What's the Role?
 
-**Q1: What should this role specialize in?**
-- Get the primary function in one sentence
-- Examples: "Deep research and synthesis", "Guitar practice coaching", "Code review"
+Ask: **"What kind of specialist do you need?"**
 
-**Q2: What's a good name for this role?**
-- Should be single word, lowercase for file naming
-- Examples: researcher, coach, reviewer
+Examples that help frame it:
+- "A writing coach who reviews my drafts"
+- "A fitness tracker that plans workouts"
+- "A financial analyst for my investments"
 
-**Q3: Describe this role's identity in 2-3 sentences.**
-- How would you introduce this role?
-- What's its core posture?
+Get the **name** (short, lowercase, one word ideally) and **purpose** (one sentence).
 
-### Phase 2: Responsibilities
+### Step 2: How Does It Work?
 
-**Q4: What does this role DO?**
-- List 3-5 key responsibilities
-- Be specific: "Write research briefs" not "help with research"
+Ask: **"How would you use this role?"**
 
-**Q5: What section should it own in today.md?**
-Options:
-- Use existing section (Focus, System, Idea, Project)
-- Create new section (requires updating today.md template)
-- No section ownership (outputs go to Dump or calling role's section)
+Two patterns:
+- **Interactive** — You talk to it directly, pair-work style (like Chief)
+- **Autonomous** — You give it a task, it works through prep/implementation/verification alone (like Builder on a spec)
+- **Both** — Can do either depending on the task
 
-### Phase 3: Working Style
+This determines which mode files to generate.
 
-**Q6: How should this role work?**
-- Direct and opinionated, or collaborative?
-- Fast iterations or deep dives?
-- Any specific patterns from other roles to emulate?
+### Step 3: What Makes It Special?
 
-**Q7: What tools does this role need?**
-- Full access (default)?
-- Read-only for certain areas?
-- Specific MCP tools required?
-- Voice mode (`converse()`) needed?
+Ask: **"What should this role know or do differently from regular Claude?"**
 
-### Phase 4: Modes
+Listen for:
+- Domain expertise or context to load
+- Specific tools it should use
+- Tone (formal? casual? tough love?)
+- Files it should auto-include at session start
+- Constraints (what it should NOT do)
 
-**Q8: What modes should this role support?**
+### Step 4: Generate the Files
 
-| Mode | When Used | Include? |
-|------|-----------|----------|
-| interactive | Working directly with the user | Yes (always) |
-| background | Chief delegates task | Usually yes |
-| autonomous | Full autonomy (rare) | Ask |
-
-For each included mode, briefly discuss:
-- What's different in this mode?
-- Any special behaviors?
-
-### Phase 5: Example
-
-**Q9: Walk through a typical interaction.**
-- What would the user say to start?
-- What would the role do/say?
-- What's the outcome?
-
-This becomes the Example section in the role file.
-
-## Generation
-
-After gathering requirements, generate the files:
-
-### 1. Role File: `.claude/roles/{name}.md`
+**`role.md`** — The role definition. Format:
 
 ```markdown
+---
+auto_include:
+  - Desktop/SYSTEM-INDEX.md
+  {- any domain-specific files}
+---
+
 <session-role>
 # {Role Name}
 
-{2-3 sentence identity description from Q3}
+{2-3 paragraph description: who this role is, what it does, how it differs from other roles}
 
-## What You Do
+## Core Responsibilities
 
-{List from Q4, expanded}
+{Bullet list of what this role handles}
 
-## Your Section in today.md
+## How It Works
 
-{From Q5 - section ownership and what to write there}
-
-## How You Work
-
-{From Q6 - working style, patterns, posture}
+{How this role approaches problems — its methodology, priorities, style}
 
 ## Tools
 
-{From Q7 - what tools, any restrictions}
-
-## Example
-
-{From Q9 - concrete interaction}
+{Which MCP tools it primarily uses, if relevant}
 
 ## Access
 
-{Standard access statement based on Q7}
+{What files/systems it can read and modify}
 </session-role>
 ```
 
-### 2. Interactive Mode: `.claude/modes/{name}/interactive.md`
+**`interactive.md`** — Only if the role supports interactive use. Describe the conversational rhythm, what a typical session looks like, how to communicate.
 
-```markdown
-# {Role Name} — Interactive Mode
+**`preparation.md`**, **`implementation.md`**, **`verification.md`** — Only if the role supports autonomous specialist loop. Follow the patterns from Builder's mode files (read `.claude/roles/builder/preparation.md` etc. for reference).
 
-> {One-line summary of interactive mode behavior}
+### Step 5: Register and Verify
 
-## What This Mode Means
+After generating files:
+1. Confirm all files exist in `.claude/roles/{name}/`
+2. The role is immediately available — Chief can spawn it with `team("spawn", role="{name}", ...)`
+3. Tell the user how to invoke it
 
-the user is HERE, working with you:
-- {3-4 bullets about interactive behavior}
-
-**The rhythm:** {Describe the back-and-forth}
-
-## Tool Usage Patterns
-
-{Relevant MCP tool examples for this role}
-
-## When to Ask vs Continue
-
-| Situation | Action |
-|-----------|--------|
-| {situation} | {action} |
-
-## Example
-
-{Short interactive exchange}
-
-## Anti-Patterns
-
-{3-4 DON'T statements}
-```
-
-### 3. Background Mode: `.claude/modes/{name}/background.md`
-
-```markdown
-# {Role Name} — Background Mode
-
-> {One-line summary of background mode behavior}
-
-## What This Mode Means
-
-Chief (or the user) delegated a task:
-- Execute fully
-- Document in working doc
-- Call done() when finished (auto-notifies Chief)
-
-**The rhythm:** Task received → Work → Document → done().
-
-## Tool Usage Patterns
-
-{Relevant MCP tool examples for this role}
-
-## When to Continue vs done()
-
-| Situation | Action |
-|-----------|--------|
-| Task complete | done() with summary (auto-notifies Chief) |
-| Major milestone | Update working doc, continue |
-| True blocker | Note in working doc, continue other work |
-| Minor decisions | Make them, document |
-
-## Example
-
-{Short background task example}
-
-## Anti-Patterns
-
-**DON'T do partial work.** Complete the task.
-**DON'T over-update.** Batch progress in working doc.
-**DON'T skip documentation.** Working doc is required.
-**DON'T forget done().** Close gracefully.
-```
-
-### 4. Autonomous Mode (if requested): `.claude/modes/{name}/autonomous.md`
-
-```markdown
-# {Role Name} — Autonomous Mode
-
-> {One-line summary of autonomous behavior}
-
-## What This Mode Means
-
-Full autonomy granted. No check-ins needed except at boundaries.
-- Execute work queue
-- Document everything
-- Handoff at 60% context
-
-## Tool Usage Patterns
-
-{Include reset() for context management}
-
-## Guardrails
-
-{What this role should NOT do autonomously}
-```
-
-## After Generation
-
-1. **Verify files parse correctly** - Read them back
-2. **Create the mode directory** - `mkdir -p .claude/modes/{name}`
-3. **Test spawn** - Can Chief spawn this role?
-4. **Behavior probe** - Ask the new role "What do you do?"
-
-## File Locations
-
-```
-.claude/
-├── roles/
-│   └── {name}.md           # Role definition
-└── modes/
-    └── {name}/
-        ├── interactive.md  # Working with the user
-        ├── background.md   # Delegated task
-        └── autonomous.md   # Full autonomy (optional)
-```
-
-## Tips
-
-- **Start small.** A minimal viable role can always be expanded.
-- **Copy patterns.** Look at existing roles (system.md, focus.md, idea.md) for structure.
-- **Examples matter.** A good example teaches more than abstract descriptions.
-- **Test immediately.** Spawn the role and verify before considering it done.
-
-## Rollback
-
-If the new role doesn't work:
-
-```bash
-# Remove role file
-rm .claude/roles/{name}.md
-
-# Remove mode directory
-rm -rf .claude/modes/{name}/
-```
-
-No database entries, no service restarts—just file deletion.
+**Custom roles also need to be added to SYSTEM-INDEX.md** under the Custom Roles table if they're domain-specific (not one of the base seven).

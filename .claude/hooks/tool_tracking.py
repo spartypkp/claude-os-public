@@ -34,7 +34,8 @@ COMMS_LOG_PATH = REPO_ROOT / ".engine/data/logs/comms.log"
 
 sys.path.insert(0, str(REPO_ROOT / ".engine" / "src"))
 
-from services.storage import SystemStorage
+from core.storage import SystemStorage
+from session_lifecycle import emit_session_state_event
 
 
 # =============================================================================
@@ -187,8 +188,8 @@ def handle_validation(tool_name: str, tool_input: dict) -> bool:
             print_deny_response(f"Protected path: {reason}")
             return True
 
-    # Check Apple MCP communication tools
-    elif tool_name.startswith("mcp__apple__"):
+    # Check communication tools (messages, mail)
+    elif tool_name in ("mcp__life__messages",) or tool_name.startswith("mcp__apple__"):
         is_allowed, reason = check_comms_permission(tool_name, tool_input)
         if not is_allowed:
             print_deny_response(reason)
@@ -345,20 +346,27 @@ def check_comms_permission(tool_name: str, tool_input: dict) -> tuple[bool, str]
 
     operation = tool_input.get('operation', '')
 
-    # Handle messages tool
-    if tool_name == 'mcp__apple__messages':
-        # BLOCK ALL MESSAGE SENDING - Claude cannot send texts
-        # Draft texts in conversation for the user to copy/send manually
-        # Exception: contacts with claude_direct tag (temporarily enabled when needed)
+    # Handle messages tool (both life MCP and legacy apple MCP)
+    if tool_name in ('mcp__life__messages', 'mcp__apple__messages'):
+        # Whitelisted recipients (claude_direct) can be messaged freely
+        recipient = tool_input.get('recipient', '') or tool_input.get('phone_number', '') or tool_input.get('email', '')
+        CLAUDE_DIRECT_WHITELIST = [
+            # Add approved recipients here:
+            # 'friend@example.com',  # Description of who/what
+        ]
+
         if operation in ('send', 'schedule'):
+            if recipient.lower() in [w.lower() for w in CLAUDE_DIRECT_WHITELIST]:
+                return True, ""
             return False, "Message sending/scheduling is disabled. Draft the message for the user to send manually."
 
-        # Reading still requires consent
-        phone = tool_input.get('phone_number', '')
-        if operation in ('read', 'unread') and phone:
-            tags = get_contact_tags(phone)
+        # Reading still requires consent via claude_direct tag or whitelist
+        if operation in ('read', 'unread') and recipient:
+            if recipient.lower() in [w.lower() for w in CLAUDE_DIRECT_WHITELIST]:
+                return True, ""
+            tags = get_contact_tags(recipient)
             if 'claude_direct' not in tags:
-                return False, f"Contact {phone} has not consented to message reading."
+                return False, f"Contact {recipient} has not consented to message reading."
 
     # Handle mail tool
     elif tool_name == 'mcp__apple__mail':
@@ -459,21 +467,6 @@ def update_session_state(session_id: str, state: str):
         emit_session_state_event(session_id, state)
     except Exception as e:
         print(f"Warning: Failed to update session state: {e}", file=sys.stderr)
-
-
-def emit_session_state_event(session_id: str, state: str):
-    """Fire-and-forget HTTP POST to backend to emit session.state SSE event."""
-    try:
-        import requests
-        url = "http://localhost:5001/api/system/sessions/notify-event"
-        payload = {
-            "event_type": "session.state",
-            "session_id": session_id,
-            "data": {"state": state}
-        }
-        requests.post(url, json=payload, timeout=0.5)
-    except Exception:
-        pass  # Fire and forget - don't block on failures
 
 
 if __name__ == '__main__':

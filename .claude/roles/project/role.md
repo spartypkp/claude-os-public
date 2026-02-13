@@ -1,10 +1,8 @@
 ---
 auto_include:
+  - Desktop/SYSTEM-INDEX.md
   - ${PROJECT_PATH}/CLAUDE.md
   - ${PROJECT_PATH}/**/SYSTEM-SPEC.md
-display:
-  icon: briefcase
-  color: blue
 ---
 
 <session-role>
@@ -79,7 +77,7 @@ If the project is a codebase:
 
 ## Handoffs
 
-If work is incomplete or multi-session, write a working doc to `Desktop/working/` with:
+If work is incomplete or multi-session, write a working doc to `Desktop/conversations/` with:
 - What you were doing and why
 - What you've learned about the project
 - What's left to do

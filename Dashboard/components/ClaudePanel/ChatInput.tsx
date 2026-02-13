@@ -1,15 +1,28 @@
 'use client';
 
-import { Loader2, Send, Square, Upload } from 'lucide-react';
+import { Loader2, Send, Square } from 'lucide-react';
 import { KeyboardEvent, useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
+
+const DRAFT_KEY = 'claude-panel-drafts';
+
+function readDraft(id: string): string {
+	try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}')[id] || ''; }
+	catch { return ''; }
+}
+
+function writeDraft(id: string, text: string) {
+	try {
+		const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+		if (text) { drafts[id] = text; } else { delete drafts[id]; }
+		localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+	} catch { /* ignore */ }
+}
 
 interface ChatInputProps {
 	sessionId: string | null;
 	placeholder: string;
 	onSend: (message: string) => Promise<void>;
 	onInterrupt: () => void;
-	initialValue?: string;
-	onDraftChange?: (value: string) => void;
 }
 
 export interface ChatInputHandle {
@@ -21,17 +34,22 @@ export interface ChatInputHandle {
 
 /**
  * Self-contained chat input component.
- * Manages its own state to avoid parent re-renders on every keystroke.
+ * Manages its own state + per-conversation draft persistence in localStorage.
  */
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-	{ sessionId, placeholder, onSend, onInterrupt, initialValue = '', onDraftChange },
+	{ sessionId, placeholder, onSend, onInterrupt },
 	ref
 ) {
-	const [value, setValue] = useState(initialValue);
+	const [value, setValue] = useState(() => sessionId ? readDraft(sessionId) : '');
 	const [isSending, setIsSending] = useState(false);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Track current sessionId + value in refs for cleanup
+	const sessionIdRef = useRef(sessionId);
+	const valueRef = useRef(value);
+	sessionIdRef.current = sessionId;
+	valueRef.current = value;
 
 	// Expose methods to parent via ref
 	useImperativeHandle(ref, () => ({
@@ -41,29 +59,39 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 		setValue: (newValue: string) => setValue(newValue),
 	}), [value]);
 
-	// Reset value when session changes
+	// On session switch: flush old draft, load new draft
 	useEffect(() => {
-		setValue(initialValue);
-	}, [sessionId, initialValue]);
+		const id = sessionId;
+		setValue(id ? readDraft(id) : '');
 
-	// Debounced draft sync
-	useEffect(() => {
-		if (!onDraftChange) return;
-		
-		if (draftTimeoutRef.current) {
-			clearTimeout(draftTimeoutRef.current);
+		// Reset textarea height for new conversation
+		if (textareaRef.current) {
+			textareaRef.current.style.height = 'auto';
 		}
-		
-		draftTimeoutRef.current = setTimeout(() => {
-			onDraftChange(value);
-		}, 500);
-		
+
 		return () => {
+			// Flush draft for the session we're leaving
 			if (draftTimeoutRef.current) {
 				clearTimeout(draftTimeoutRef.current);
+				draftTimeoutRef.current = null;
 			}
+			if (id) writeDraft(id, valueRef.current);
 		};
-	}, [value, onDraftChange]);
+	}, [sessionId]);
+
+	// Debounced draft save on typing
+	useEffect(() => {
+		if (!sessionId) return;
+		if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
+
+		draftTimeoutRef.current = setTimeout(() => {
+			writeDraft(sessionId, value);
+		}, 500);
+
+		return () => {
+			if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
+		};
+	}, [value, sessionId]);
 
 	// Auto-resize textarea
 	const handleInput = useCallback(() => {
@@ -78,12 +106,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 	const handleSend = useCallback(async () => {
 		const trimmed = value.trim();
 		if (!trimmed || isSending) return;
-		
+
 		setIsSending(true);
 		try {
 			await onSend(trimmed);
 			setValue('');
-			// Reset textarea height
+			if (sessionIdRef.current) writeDraft(sessionIdRef.current, '');
 			if (textareaRef.current) {
 				textareaRef.current.style.height = '32px';
 			}
@@ -104,13 +132,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
 	return (
 		<div className="flex items-end gap-1.5">
-			<input
-				ref={fileInputRef}
-				type="file"
-				multiple
-				className="hidden"
-			/>
 			<textarea
+				data-testid="chat-input"
 				ref={textareaRef}
 				value={value}
 				onChange={(e) => setValue(e.target.value)}
@@ -123,14 +146,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 				style={{ maxHeight: '100px', minHeight: '32px' }}
 			/>
 			<button
-				onClick={() => fileInputRef.current?.click()}
-				className="p-2 rounded-lg bg-gray-100 dark:bg-[#333] text-gray-500 dark:text-[#888] hover:bg-gray-200 dark:hover:bg-[#444] transition-all shrink-0"
-				title="Attach file"
-				disabled={isSending}
-			>
-				<Upload className="w-3.5 h-3.5" />
-			</button>
-			<button
+				data-testid="stop-button"
 				onClick={onInterrupt}
 				className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-red-500/30 transition-all shrink-0"
 				title="Stop (Esc)"
@@ -138,6 +154,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 				<Square className="w-3.5 h-3.5" />
 			</button>
 			<button
+				data-testid="send-button"
 				onClick={handleSend}
 				disabled={!canSend}
 				className="p-2 rounded-lg bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white hover:from-[#e08566] hover:to-[#d16f4c] disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
@@ -154,5 +171,3 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 });
 
 export default ChatInput;
-
-

@@ -25,7 +25,7 @@ export function VideoViewer({ filePath }: VideoViewerProps) {
 
 	const fileName = filePath.split('/').pop() || filePath;
 	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const videoUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(apiPath)}`;
+	const videoUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
 
 	useEffect(() => {
 		setLoading(true);

@@ -64,7 +64,7 @@ When invoked, you receive an error message, stack trace, or bug description.
    - Check for related test failures (Grep test files for related assertions)
 
 7. **Synthesize findings (Write for complex cases)**
-   - For non-trivial investigations (15+ minutes), write findings to `Desktop/working/debug-{issue}.md`
+   - For non-trivial investigations (15+ minutes), write findings to `Desktop/conversations/debug-{issue}.md`
    - Include evidence, hypotheses ranked, and fix recommendations
    - Document dead ends investigated (so others don't repeat)
 
@@ -153,7 +153,7 @@ How to avoid this pattern:
 - Document API contract: which endpoints can return null
 ```
 
-For complex investigations, write detailed findings to `Desktop/working/debug-{issue}.md` and return summary + pointer to file.
+For complex investigations, write detailed findings to `Desktop/conversations/debug-{issue}.md` and return summary + pointer to file.
 
 ## Anti-patterns
 
@@ -204,7 +204,7 @@ Investigation:
    - Backup: Reset database between tests
    - Long-term: Use test database with transaction rollback
 
-Output: Detailed report → Desktop/working/debug-auth-test-failures.md
+Output: Detailed report → Desktop/conversations/debug-auth-test-failures.md
 ```
 
 **Example 3: Production performance degradation**
@@ -228,5 +228,5 @@ Evidence:
 - Traffic peak: 2pm-4pm daily (when deploy happened: 2:30pm)
 - Index size: 2.3GB (large table with 50M rows)
 
-Output: Comprehensive report → Desktop/working/debug-performance-regression.md
+Output: Comprehensive report → Desktop/conversations/debug-performance-regression.md
 ```

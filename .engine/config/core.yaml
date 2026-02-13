@@ -17,7 +17,7 @@ tools:
     purpose: "Hand off to fresh session when context is low"
     who: "All roles"
     when: "Context feels heavy, after major phase completes, at 60% in autonomous mode"
-    critical: "Write handoff notes BEFORE calling. Chief -> Workspace/handoffs/, others -> Workspace/working/"
+    critical: "Write handoff notes BEFORE calling. Chief -> Desktop/reset.md, others -> Desktop/conversations/"
 
   done:
     purpose: "Complete session and close"

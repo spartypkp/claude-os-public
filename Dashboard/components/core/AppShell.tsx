@@ -1,39 +1,36 @@
 'use client';
 
 import { ClaudePanel } from '@/components/ClaudePanel';
-import CommandPalette, { CommandItem } from './CommandPalette';
 import { ChatPanelProvider, useChatPanel } from '@/components/context/ChatPanelContext';
-import { HudProvider } from '@/components/context/HudContext';
 import { Dock } from '@/components/desktop/Dock';
 import { Menubar } from '@/components/desktop/Menubar';
-import { HelpOverlay } from './HelpOverlay';
-import { HudPanel } from './HudPanel';
-import { useWorkers } from '@/hooks/useWorkers';
 import {
 	Activity,
 	BarChart3,
 	Brain,
-	Building2,
 	FileText,
 	HelpCircle,
 	History,
 	Kanban,
 	Presentation,
-	RefreshCw,
 	Rocket,
 	Settings,
-	Target,
+	Target
 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import CommandPalette, { CommandItem } from './CommandPalette';
+import { HelpOverlay } from './HelpOverlay';
+
 
 // View types for navigation
 // Note: Calendar, Email, Contacts are Core Apps (accessed via Desktop Dock windows), not routes
-export type ViewType = 'desk' | 'system' | 'activity';
+export type ViewType = 'desk' | 'job-search' | 'job-search-leetcode' | 'job-search-dsa' | 'job-search-opportunities' | 'system' | 'activity';
 
 // Map routes to view types
 const ROUTE_TO_VIEW: Record<string, ViewType> = {
 	'/desktop': 'desk',
+	'/job-search': 'job-search',
 	'/system': 'system',
 	'/activity': 'activity',
 };
@@ -46,6 +43,7 @@ function getViewFromPath(pathname: string): ViewType {
 	}
 	// Check prefixes for nested routes
 	if (pathname.startsWith('/desktop')) return 'desk';
+	if (pathname.startsWith('/job-search')) return 'job-search';
 	if (pathname.startsWith('/system')) return 'system';
 	if (pathname.startsWith('/activity')) return 'activity';
 	// Default
@@ -87,8 +85,7 @@ export function AppShell({ children }: AppShellProps) {
 	const [showHelp, setShowHelp] = useState(false);
 	const [showCommandPalette, setShowCommandPalette] = useState(false);
 
-	// Centralized worker state
-	const workers = useWorkers();
+	// Workers system removed
 
 	// Mark as mounted
 	useEffect(() => {
@@ -99,6 +96,10 @@ export function AppShell({ children }: AppShellProps) {
 	const navigateToView = useCallback((view: ViewType) => {
 		const routes: Record<ViewType, string> = {
 			desk: '/desktop',
+			'job-search': '/job-search',
+			'job-search-leetcode': '/job-search/leetcode',
+			'job-search-dsa': '/job-search/dsa',
+			'job-search-opportunities': '/job-search/opportunities',
 			system: '/system',
 			activity: '/activity',
 		};
@@ -132,11 +133,12 @@ export function AppShell({ children }: AppShellProps) {
 				return;
 			}
 
-			// View switching with 1-3 (quick navigation)
+			// View switching with 1-4 (quick navigation)
 			const viewKeys: Record<string, ViewType> = {
 				'1': 'desk',
-				'2': 'activity',
-				'3': 'system',
+				'2': 'job-search',
+				'3': 'activity',
+				'4': 'system',
 			};
 
 			if (viewKeys[e.key]) {
@@ -182,11 +184,20 @@ export function AppShell({ children }: AppShellProps) {
 			action: () => navigateToView('desk'),
 		},
 		{
+			id: 'nav-job-search',
+			title: 'Go to Job Search',
+			description: 'Interview prep command center',
+			icon: <Rocket className="w-4 h-4" />,
+			shortcut: ['2'],
+			category: 'Navigation',
+			action: () => navigateToView('job-search'),
+		},
+		{
 			id: 'nav-activity',
 			title: 'Go to Activity',
 			description: 'Today\'s Claude sessions and tasks',
 			icon: <Activity className="w-4 h-4" />,
-			shortcut: ['2'],
+			shortcut: ['3'],
 			category: 'Navigation',
 			action: () => navigateToView('activity'),
 		},
@@ -195,9 +206,34 @@ export function AppShell({ children }: AppShellProps) {
 			title: 'Go to System',
 			description: 'Health, docs, metrics, and settings',
 			icon: <Settings className="w-4 h-4" />,
-			shortcut: ['3'],
+			shortcut: ['4'],
 			category: 'Navigation',
 			action: () => navigateToView('system'),
+		},
+		// Job Search sub-pages
+		{
+			id: 'nav-leetcode',
+			title: 'Go to Leetcode',
+			description: 'Category breakdown and problem tracking',
+			icon: <Target className="w-4 h-4" />,
+			category: 'Job Search',
+			action: () => navigateToPath('/job-search/leetcode'),
+		},
+		{
+			id: 'nav-dsa',
+			title: 'Go to DS&A',
+			description: 'Data structures & algorithms refresh',
+			icon: <Brain className="w-4 h-4" />,
+			category: 'Job Search',
+			action: () => navigateToPath('/job-search/dsa'),
+		},
+		{
+			id: 'nav-opportunities',
+			title: 'Go to Opportunities',
+			description: 'Kanban pipeline and company research',
+			icon: <Kanban className="w-4 h-4" />,
+			category: 'Job Search',
+			action: () => navigateToPath('/job-search/opportunities'),
 		},
 		// Claude sub-pages
 		{
@@ -251,51 +287,41 @@ export function AppShell({ children }: AppShellProps) {
 			category: 'Actions',
 			action: () => setShowHelp(true),
 		},
-		{
-			id: 'action-refresh',
-			title: 'Refresh Tasks',
-			description: 'Reload task data',
-			icon: <RefreshCw className="w-4 h-4" />,
-			category: 'Actions',
-			action: () => workers.refresh(),
-		},
-	], [navigateToView, navigateToPath, workers]);
+	], [navigateToView, navigateToPath]);
 
 	return (
-		<HudProvider>
-			<ChatPanelProvider>
-				<div className="h-screen flex flex-col bg-gray-100 dark:bg-[#0d0d0d]">
-					{/* Menubar - in flow, displaces content below */}
-					<Menubar />
 
-					{/* Main content area - fills remaining height */}
-					<main className="flex-1 flex min-h-0">
-						{/* Content area with Dock - shrinks when Claude Panel expands */}
-						<div className="flex-1 relative min-w-0 flex flex-col">
-							{children}
-							{/* Dock - absolute within content area so it shrinks with panel */}
-							<Dock />
-						</div>
+		<ChatPanelProvider>
+			<div className="h-screen flex flex-col bg-gray-100 dark:bg-[#0d0d0d]">
+				{/* Menubar - in flow, displaces content below */}
+				<Menubar />
 
-						{/* Claude Panel - in flow, pushes content left */}
-						<ClaudePanelWithToggle />
-					</main>
+				{/* Main content area - fills remaining height */}
+				<main className="flex-1 flex min-h-0">
+					{/* Content area with Dock - shrinks when Claude Panel expands */}
+					<div className="flex-1 relative min-w-0 flex flex-col">
+						{children}
+						{/* Dock - absolute within content area so it shrinks with panel */}
+						<Dock />
+					</div>
 
-					{/* HUD Panel */}
-					<HudPanel />
+					{/* Claude Panel - in flow, pushes content left */}
+					<ClaudePanelWithToggle />
+				</main>
 
-					{/* Help Overlay */}
-					<HelpOverlay isOpen={showHelp} onClose={() => setShowHelp(false)} />
 
-					{/* Command Palette */}
-					<CommandPalette
-						isOpen={showCommandPalette}
-						onClose={() => setShowCommandPalette(false)}
-						commands={commands}
-					/>
-				</div>
-			</ChatPanelProvider>
-		</HudProvider>
+				{/* Help Overlay */}
+				<HelpOverlay isOpen={showHelp} onClose={() => setShowHelp(false)} />
+
+				{/* Command Palette */}
+				<CommandPalette
+					isOpen={showCommandPalette}
+					onClose={() => setShowCommandPalette(false)}
+					commands={commands}
+				/>
+			</div>
+		</ChatPanelProvider>
+
 	);
 }
 

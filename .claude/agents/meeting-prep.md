@@ -141,7 +141,7 @@ Write to `Desktop/meeting-prep-{name}-{date}.md`:
 ### Recent Email Threads
 - **2026-01-10** - "Following up on demo" - Shared Claude OS demo, they asked about architecture
 - **2025-12-20** - "API project status" - Discussed timeline delays, rescheduled deadline to Jan 15
-- **2025-11-05** - "Introduction to Jordan" - They connected you to Jordan Topoleski (recruiter)
+- **2025-11-05** - "Introduction to Jamie" - They connected you to Jamie Taylor (recruiter)
 
 ### Outstanding Items
 - **From Dec 15 meeting:** User committed to sending resume by Jan 1 (DONE - sent Dec 30)
@@ -172,7 +172,7 @@ Write to `Desktop/meeting-prep-{name}-{date}.md`:
 ### Topics to Cover
 1. **Claude OS update** - Demo shipped, positive reception, Alpha release timeline (targeting Feb)
 2. **MCP architecture deep-dive** - Fulfill their request from Jan 10 email (prepare technical explanation)
-3. **Job search status** - Update on Anthropic opportunity (2 paths in motion), gauge interest in introduction to their company
+3. **Job search status** - Update on target opportunity (2 paths in motion), gauge interest in introduction to their company
 4. **API project** - If time, check on status of API redesign project (last update was Dec 20)
 
 ### Questions to Ask
@@ -183,7 +183,7 @@ Write to `Desktop/meeting-prep-{name}-{date}.md`:
 
 ### Updates to Share
 1. **Resume sent** - Fulfilled commitment from Dec 15 (sent Dec 30)
-2. **Anthropic progress** - Two paths in motion (Alex Bricken + Leadership via Sequoia)
+2. **Target Company progress** - Two paths in motion (Jane Smith + Leadership via Venture Capital Firm)
 3. **Demo shipped** - Major milestone, positive feedback from multiple viewers
 4. **Technical growth** - MCP tool system, autonomous agents, production-ready system design
 
@@ -232,7 +232,7 @@ What NOT to do:
 
 2. **Ancient history focus** - Meetings from 2+ years ago are rarely relevant. Focus on last 3-6 months unless there's specific reason to go further back.
 
-3. **Generic talking points** - "Catch up" is not a talking point. Be specific: "Update on job search, specifically Anthropic opportunity."
+3. **Generic talking points** - "Catch up" is not a talking point. Be specific: "Update on job search, specifically target opportunity."
 
 4. **Missing outstanding items** - If past interaction included commitments (user or them), those MUST be in prep doc. Follow-through matters.
 
@@ -245,18 +245,18 @@ What NOT to do:
 **Example 1: Recruiter follow-up**
 
 ```
-Task: Prep for meeting with Lauren Chen (recruiter at Sequoia) tomorrow 2pm
+Task: Prep for meeting with Lauren Chen (recruiter at Venture Capital Firm) tomorrow 2pm
 
 Research:
-1. Contact record: Met via Abhs referral, exploring FDE roles, last contact Jan 10
+1. Contact record: Met via Alex referral, exploring FDE roles, last contact Jan 10
 2. Email history: They requested demo, user sent Jan 13, positive response
-3. Job search LIFE-SPEC: Anthropic is S-tier target, Sequoia connection is key leverage
+3. Job search LIFE-SPEC: Target Company is S-tier target, Venture Capital Firm connection is key leverage
 4. No past meetings (first in-person conversation)
 
 Prep doc includes:
-- Person context: Sequoia recruiter, Abhs referral, interested in AI expertise
+- Person context: Venture Capital Firm recruiter, Alex referral, interested in AI expertise
 - Outstanding: Demo sent Jan 13, awaiting their feedback
-- Talking points: Anthropic paths (2 in motion), interest in other portfolio companies, FDE experience highlights
+- Talking points: Target Company paths (2 in motion), interest in other portfolio companies, engineering experience highlights
 - Questions: Feedback on demo? Other portfolio companies hiring? Next steps in process?
 
 Output: Meeting prep doc + summary
@@ -285,16 +285,16 @@ Output: Meeting prep doc + summary
 **Example 3: Networking coffee chat**
 
 ```
-Task: Prep for coffee with Jordan (mutual friend via Ernest) Tuesday 3pm
+Task: Prep for coffee with Jamie (mutual friend via a mutual friend) Tuesday 3pm
 
 Research:
-1. Contact record: Met via Ernest intro 3 months ago, works in AI safety, casual friendship
+1. Contact record: Met via a mutual friend intro 3 months ago, works in AI safety, casual friendship
 2. Email history: Sparse - original intro email, one follow-up about coffee
 3. No shared projects, this is purely relationship-building
 4. Memory note: They're interested in Claude OS concept, user wanted to show demo
 
 Prep doc includes:
-- Person context: Friend via Ernest, AI safety researcher, interested in AI tooling
+- Person context: Friend via a mutual friend, AI safety researcher, interested in AI tooling
 - Last contact: 3 months ago (time for catch-up)
 - Talking points: Life updates, Claude OS demo (they were curious), their current work in AI safety
 - Questions: What's your current research focus? How's work going? Want to try Claude OS Alpha?

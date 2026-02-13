@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a spec in `Desktop/working/{conversation-id}/spec.md` for work on an external codebase (usually symlinked via `Desktop/projects/`). It contains:
+Chief has written a spec in `Desktop/conversations/{conversation-id}/spec.md` for work on an external codebase (usually symlinked via `Desktop/projects/`). It contains:
 - What needs to be done
 - Which project/codebase
 - Any client requirements or constraints
@@ -24,14 +24,14 @@ That's your job.
 ## Path Rules
 
 **Environment Variables:**
-- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/Users/s/Projects/.../life-specifications`)
-- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/working/project-xxx`)
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/project-xxx`)
 
 **Always use absolute paths for workspace files:**
 - ✅ `$WORKSPACE/progress.md`
 - ✅ `$WORKSPACE/spec.md`
 - ✅ `$WORKSPACE/plan.md`
-- ❌ `Desktop/working/{conversation-id}/progress.md` (breaks after `cd`)
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
 
 **For external project work, use absolute paths or subshells:**
 ```bash
@@ -45,7 +45,7 @@ cd Desktop/projects/client-site
 ```
 
 **Why this matters:**
-When you `cd` into a project directory and then write to `Desktop/working/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+When you `cd` into a project directory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
 
 Using absolute paths for workspace files ensures they always go to the correct location.
 
@@ -53,7 +53,7 @@ Using absolute paths for workspace files ensures they always go to the correct l
 
 ## Your Deliverable
 
-Create `Desktop/working/{conversation-id}/plan.md` containing:
+Create `Desktop/conversations/{conversation-id}/plan.md` containing:
 
 ### 1. Codebase Familiarization
 - Key files and their locations
@@ -89,14 +89,13 @@ Preparation mode explores the codebase first — understand before planning.
 
 ## Validation
 
-Before calling done():
+Before calling the `mcp__life__done` tool:
 1. You've explored the project structure
 2. Verification criteria use their tools (their test command, their linter)
 3. Plan respects their patterns
 
-Then call:
-```python
-done(summary="Plan created for {project-name} with {N} verification criteria")
-```
+Then **call the `mcp__life__done` tool** with summary "Plan created for {project-name} with {N} verification criteria"
+
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 System will spawn Implementation mode next.

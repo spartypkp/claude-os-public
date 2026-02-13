@@ -57,6 +57,8 @@ function SubNavigation({ routes, basePath }: SubNavigationProps) {
 interface AppLayoutProps {
 	manifest: AppManifest;
 	children: React.ReactNode;
+	/** Pass through to ApplicationShell for canvas-based apps */
+	fullBleed?: boolean;
 }
 
 /**
@@ -67,7 +69,7 @@ interface AppLayoutProps {
  * - Sub-navigation from manifest routes
  * - Keyboard shortcuts (1-9 for sub-routes, Escape to go back)
  */
-export function AppLayout({ manifest, children }: AppLayoutProps) {
+export function AppLayout({ manifest, children, fullBleed }: AppLayoutProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const basePath = `/${manifest.id}`;
@@ -127,6 +129,7 @@ export function AppLayout({ manifest, children }: AppLayoutProps) {
 			title={manifest.name}
 			icon={<Icon className="w-4 h-4" />}
 			subNav={<SubNavigation routes={manifest.routes} basePath={basePath} />}
+			fullBleed={fullBleed}
 		>
 			{children}
 		</ApplicationShell>

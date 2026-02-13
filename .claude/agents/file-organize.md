@@ -14,7 +14,7 @@ You clean up and organize file clutter by identifying duplicates, consolidating 
 
 ## When to Use
 
-- **Desktop/working/ is cluttered** - Too many loose files, hard to find current work
+- **Desktop/conversations/ is cluttered** - Too many loose files, hard to find current work
 - **After major project completion** - Cleanup phase after shipping features or finishing research
 - **Stale files accumulating** - Multiple old drafts, reset docs, temp files from past sessions
 - **Before context handoff** - Cleanup before reset() or done() to leave clean workspace
@@ -23,7 +23,7 @@ You clean up and organize file clutter by identifying duplicates, consolidating 
 
 ## Task
 
-When invoked, you receive a target location (e.g., "Desktop/working/" or "Desktop/career/").
+When invoked, you receive a target location (e.g., "Desktop/conversations/" or "Desktop/career/").
 
 **Step-by-step process:**
 
@@ -63,7 +63,7 @@ When invoked, you receive a target location (e.g., "Desktop/working/" or "Deskto
    - When uncertain about value: PRESERVE (better safe than sorry)
 
 6. **Organize into folders (Bash)**
-   - For multi-file topics, create folders: `Desktop/working/api-refactor/`
+   - For multi-file topics, create folders: `Desktop/conversations/api-refactor/`
    - Move related files into topic folders
    - Flat structure for standalone files is fine (don't over-organize)
 
@@ -117,7 +117,7 @@ Return cleanup log:
 ```markdown
 **Merged:**
 - spec-draft-v1.md + spec-draft-v2.md + spec-final.md → api-spec.md (consolidated 3 drafts into canonical spec)
-- notes-meeting-alex.md + alex-followup.md → anthropic-alex-notes.md (combined notes into one file)
+- notes-meeting-alex.md + alex-followup.md → company-alex-notes.md (combined notes into one file)
 
 **Deleted:**
 - reset-2026-01-10.md (obsolete reset doc from 4 days ago)
@@ -126,10 +126,10 @@ Return cleanup log:
 - test-v1.md (superseded by merged version)
 
 **Moved:**
-- api-spec.md, api-test-plan.md, api-migration.md → Desktop/working/api-refactor/ (organized multi-file project into folder)
+- api-spec.md, api-test-plan.md, api-migration.md → Desktop/conversations/api-refactor/ (organized multi-file project into folder)
 
 **Preserved:**
-- research-anthropic.md (active research, last modified today)
+- research-company.md (active research, last modified today)
 - interview-prep-notes.md (current work, referenced in TODAY.md)
 - project-ideas.md (valuable brainstorming, worth keeping)
 
@@ -156,14 +156,14 @@ What NOT to do:
 
 5. **Breaking references** - Before moving/deleting, check if other files reference this one. Don't orphan dependencies.
 
-6. **Generic naming** - After consolidation, don't leave file named "notes.md". Use descriptive names: "anthropic-interview-notes.md".
+6. **Generic naming** - After consolidation, don't leave file named "notes.md". Use descriptive names: "company-interview-notes.md".
 
 ## Examples
 
 **Example 1: Cluttered working/ folder**
 
 ```
-Task: Clean up Desktop/working/
+Task: Clean up Desktop/conversations/
 
 Survey:
 - 18 files, most 5-7 days old
@@ -184,14 +184,14 @@ Output: Cleanup log showing merged files, deleted files, rationale
 **Example 2: Multi-file project needs folder**
 
 ```
-Task: Organize Desktop/working/ after API refactor project
+Task: Organize Desktop/conversations/ after API refactor project
 
 Survey:
 - 8 files all related to API refactor: spec, migration plan, test plan, 3 implementation notes, 2 research docs
 - Files scattered among other unrelated files
 
 Actions:
-1. Created: Desktop/working/api-refactor/ folder
+1. Created: Desktop/conversations/api-refactor/ folder
 2. Moved: All 8 API-related files into api-refactor/
 3. Merged: 3 implementation notes → implementation.md (consolidated progress tracking)
 4. Preserved: Other unrelated files left flat in working/

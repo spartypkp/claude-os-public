@@ -59,7 +59,7 @@ When invoked, you receive a research topic or question.
    - Distill insights (what's the takeaway?)
 
 6. **Create deliverable (Write for substantial research)**
-   - For 3+ sources or complex topics: Write to `Desktop/working/research-{topic}.md`
+   - For 3+ sources or complex topics: Write to `Desktop/conversations/research-{topic}.md`
    - For quick lookups (1-2 sources, simple question): Return inline brief
    - Use structured format with sections, citations, recommendations
 
@@ -82,7 +82,7 @@ When invoked, you receive a research topic or question.
 - Academic papers (if researching algorithms, theory)
 
 **Write** - Create research document for substantial findings
-- Write to Desktop/working/research-{topic}.md
+- Write to Desktop/conversations/research-{topic}.md
 - Structure: Summary, Details (by theme), Sources, Recommendations
 - Include direct quotes for key claims
 - Cite all sources with URLs
@@ -101,7 +101,7 @@ Your research is successful when:
 
 ## Output Format
 
-**For substantial research (3+ sources), write to Desktop/working/research-{topic}.md:**
+**For substantial research (3+ sources), write to Desktop/conversations/research-{topic}.md:**
 
 ```markdown
 # Research: {Topic}
@@ -254,7 +254,7 @@ Synthesis:
 - Trade-offs: Steeper learning curve, some ecosystem plugins lag
 - Migration: Incremental adoption possible (both routers coexist)
 
-Output: Comprehensive doc → Desktop/working/research-nextjs-app-router.md
+Output: Comprehensive doc → Desktop/conversations/research-nextjs-app-router.md
 ```
 
 **Example 3: Tool evaluation**

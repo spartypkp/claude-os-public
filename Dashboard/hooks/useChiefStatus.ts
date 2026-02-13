@@ -51,7 +51,7 @@ export function useChiefStatus(_pollInterval?: number) {
   // Spawn Chief - invalidates cache on success
   const spawnChief = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/chief/spawn`, { method: 'POST' });
+      const response = await fetch(`${API_BASE}/api/sessions/chief/spawn`, { method: 'POST' });
       const result = await response.json();
       if (result.success) {
         // Invalidate cache to trigger refetch
@@ -68,7 +68,7 @@ export function useChiefStatus(_pollInterval?: number) {
   // Wake Chief
   const wakeChief = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/chief/wake`, { method: 'POST' });
+      const response = await fetch(`${API_BASE}/api/sessions/chief/wake`, { method: 'POST' });
       return await response.json();
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to wake' };

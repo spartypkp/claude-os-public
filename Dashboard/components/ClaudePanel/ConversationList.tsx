@@ -1,519 +1,693 @@
 'use client';
 
-import type { ActiveSession, ActiveConversation } from '@/lib/types';
+/**
+ * ConversationList - Conversation-first tab bar
+ *
+ * Shows conversations, not sessions. Session is internal.
+ * Reset counts and mode transitions visible per conversation.
+ */
+
+import type { ActiveConversation } from '@/lib/types';
 import { useWindowStore } from '@/store/windowStore';
-import { useRolesQuery } from '@/hooks/queries';
-import { getRoleConfigBySlug, findRole } from '@/lib/roleConfig';
+import { getRoleConfig, ROLE_CONFIGS } from '@/lib/sessionUtils';
+import type { HandoffPhase } from '@/hooks/useHandoffState';
+import { ClaudeLogo } from './ClaudeLogo';
 import {
-	Briefcase,
-	Code2,
-	HelpCircle,
-	Lightbulb,
-	Loader2,
-	Minus,
-	Plus,
-	Target,
-	X,
+  Check,
+  Loader2,
+  Minus,
+  Plus,
+  RefreshCw,
+  X,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Activity states - minimal, Claude Code style
-type ActivityState = 'idle' | 'thinking' | 'working' | 'waiting';
+/**
+ * CloseConfirm - Inline confirmation popover for closing specialist sessions.
+ * Appears below the X button when clicked, with Confirm/Cancel.
+ */
+function CloseConfirm({
+  roleName,
+  onConfirm,
+  onCancel,
+}: {
+  roleName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
 
-// Simple dot indicator component
-function ActivityDotIndicator({ state }: { state: ActivityState; }) {
-	if (state === 'idle') {
-		return <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-[#555]" />;
-	}
-	if (state === 'thinking') {
-		return (
-			<span className="flex items-center gap-0.5">
-				<span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" />
-				<span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '150ms' }} />
-				<span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '300ms' }} />
-			</span>
-		);
-	}
-	if (state === 'waiting') {
-		// Waiting for workers - slower pulse, muted color
-		return <span className="w-2 h-2 rounded-full bg-amber-400 dark:bg-amber-500 animate-pulse" style={{ animationDuration: '2s' }} />;
-	}
-	// working
-	return <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />;
-}
+  // Close on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onCancel();
+      }
+    };
+    // Delay to avoid catching the triggering click
+    const timer = setTimeout(() => document.addEventListener('mousedown', handleClick), 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClick);
+    };
+  }, [onCancel]);
 
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onCancel]);
 
-// Derive activity state from session data
-function getActivityState(session: ActiveSession | null | undefined, hasActiveWorkers?: boolean): ActivityState {
-	if (!session) return 'idle';
-	const state = session.current_state;
-	if (!state || state === 'idle') {
-		// If idle but workers are running, show waiting state
-		if (hasActiveWorkers) return 'waiting';
-		return 'idle';
-	}
-	if (state === 'active') return 'thinking';
-	if (state === 'tool_active') return 'working';
-	return 'idle';
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full mt-1 z-50 w-44 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#404040] rounded-lg shadow-xl overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-3 py-2 text-[11px] text-gray-600 dark:text-[#999]">
+        Close {roleName}?
+      </div>
+      <div className="flex border-t border-gray-100 dark:border-[#333]">
+        <div
+          role="button"
+          onClick={onCancel}
+          className="flex-1 px-3 py-1.5 text-[11px] text-gray-500 dark:text-[#888] hover:bg-gray-50 dark:hover:bg-[#252525] transition-colors cursor-pointer text-center"
+        >
+          Cancel
+        </div>
+        <div
+          role="button"
+          onClick={onConfirm}
+          className="flex-1 px-3 py-1.5 text-[11px] font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-l border-gray-100 dark:border-[#333] cursor-pointer text-center"
+        >
+          Close
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
-// Claude logo
-function ClaudeLogo({ className = "w-4 h-4" }: { className?: string; }) {
-	return (
-		<svg className={className} viewBox="0 0 16 16" fill="currentColor">
-			<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
-		</svg>
-	);
+// Activity indicator - unified for Chief and Specialists
+function ActivityIndicator({ isActive, handoffPhase }: { isActive: boolean; handoffPhase?: HandoffPhase }) {
+  // Handoff in progress — show spinning refresh icon
+  if (handoffPhase) {
+    return (
+      <span className="flex items-center">
+        <RefreshCw className="w-3 h-3 text-[#da7756] animate-spin" />
+      </span>
+    );
+  }
+
+  if (isActive) {
+    return (
+      <span className="flex items-center gap-0.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" />
+        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '150ms' }} />
+        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '300ms' }} />
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-[10px] text-gray-400 dark:text-[#666] font-mono">
+      zzz
+    </span>
+  );
 }
 
-// Helper to render icon from role config
-function renderRoleIcon(roleSlug: string, className: string, roles: any[] | undefined) {
-	const role = findRole(roles, roleSlug);
-	if (!role) return null;
-
-	const { icon: iconName, is_logo } = role.display;
-
-	// Chief uses logo
-	if (is_logo) {
-		return <ClaudeLogo className={className} />;
-	}
-
-	// Map icon names to components for rendering
-	const iconMap: Record<string, any> = {
-		'code-2': Code2,
-		'target': Target,
-		'briefcase': Briefcase,
-		'lightbulb': Lightbulb,
-		'help-circle': HelpCircle,
-	};
-
-	const Icon = iconMap[iconName];
-	return Icon ? <Icon className={className} /> : null;
+function getIsActive(conversation: ActiveConversation | null): boolean {
+  if (!conversation) return false;
+  const state = conversation.current_state;
+  return state === 'active' || state === 'tool_active';
 }
 
-// Activity dot component
-function ActivityDot({ state, className = '' }: { state: string | null; className?: string; }) {
-	if (state === 'active') {
-		return <span className={`w-2 h-2 rounded-full bg-green-500 animate-pulse ${className}`} />;
-	}
-	if (state === 'tool_active') {
-		return <span className={`w-2 h-2 rounded-full bg-blue-500 animate-pulse ${className}`} />;
-	}
-	return null;
+// Format mode for display in status bar
+function formatMode(mode: string | null | undefined): string | null {
+  if (!mode || mode === 'interactive') return null;
+
+  const modeMap: Record<string, string> = {
+    'preparation': 'Prep',
+    'implementation': 'Impl',
+    'verification': 'Verif',
+  };
+
+  return modeMap[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
-// Chief Hero Tab - larger with activity indicator
-function ChiefHeroTab({
-	session,
-	isSelected,
-	onSelect,
-	resetCount = 0,
-	hasActiveWorkers = false,
+function renderRoleIcon(roleSlug: string, className: string) {
+  const config = getRoleConfig(roleSlug);
+  if (config.isLogo) return <ClaudeLogo className={className} />;
+  const Icon = config.icon;
+  return <Icon className={className} />;
+}
+
+
+// Chief tab
+function ChiefTab({
+  conversation,
+  isSelected,
+  onSelect,
+  handoffPhase,
 }: {
-	session: ActiveSession;
-	isSelected: boolean;
-	onSelect: () => void;
-	resetCount?: number;
-	hasActiveWorkers?: boolean;
+  conversation: ActiveConversation;
+  isSelected: boolean;
+  onSelect: () => void;
+  handoffPhase?: HandoffPhase;
 }) {
-	const { openContextMenu } = useWindowStore();
-	const activityState = getActivityState(session, hasActiveWorkers);
+  const { openContextMenu } = useWindowStore();
+  const isActive = getIsActive(conversation);
 
-	const handleContextMenu = useCallback((e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		openContextMenu(e.clientX, e.clientY, 'panel-chief', undefined, {
-			panelSessionId: session.session_id,
-			panelSessionRole: 'chief',
-			panelSessionStatus: session.status_text || 'Working...',
-		});
-	}, [openContextMenu, session.session_id, session.status_text]);
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, 'panel-chief', undefined, {
+      panelConversationId: conversation.conversation_id,
+      panelSessionId: conversation.latest_session_id,
+      panelSessionRole: 'chief',
+      panelSessionStatus: conversation.status_text || 'Working...',
+    });
+  }, [openContextMenu, conversation]);
 
-	return (
-		<button
-			onClick={onSelect}
-			onContextMenu={handleContextMenu}
-			className={`
-        group relative flex items-center gap-3 px-4 py-2.5 min-w-[140px]
+  return (
+    <button
+      data-conversation-id={conversation.conversation_id}
+      onClick={onSelect}
+      onContextMenu={handleContextMenu}
+      className={`
+        group relative flex items-center gap-3 px-4 py-2.5 min-w-[140px] flex-shrink-0
         transition-all rounded-t-lg
         ${isSelected
-					? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
-					: 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
-				}
+          ? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
+          : 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
+        }
       `}
-		>
-			{/* Claude logo */}
-			<span className={`flex-shrink-0 ${isSelected ? 'text-[#da7756]' : 'text-gray-400 dark:text-[#666]'}`}>
-				<ClaudeLogo className="w-4 h-4" />
-			</span>
+    >
+      <span className="flex-shrink-0 text-[#da7756]">
+        <ClaudeLogo className="w-4 h-4" />
+      </span>
 
-			{/* Name */}
-			<span className="font-medium text-sm">Chief</span>
+      <span className="font-medium text-sm">Chief</span>
 
-			{/* Reset count */}
-			{resetCount > 0 && (
-				<span className="text-[9px] text-gray-400 dark:text-[#555]" title={`${resetCount} resets`}>
-					×{resetCount + 1}
-				</span>
-			)}
-
-			{/* Activity indicator - simple dots */}
-			<div className="ml-auto">
-				<ActivityDotIndicator state={activityState} />
-			</div>
-		</button>
-	);
+      <div className="ml-auto flex-shrink-0">
+        <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
+      </div>
+    </button>
+  );
 }
 
-// Specialist tab - smaller, simpler
+// Phase accent color for autonomous specialist tabs
+const PHASE_ACCENT: Record<string, string> = {
+  preparation: '#60a5fa',
+  implementation: '#f59e0b',
+  verification: '#34d399',
+};
+
+// Specialist tab
 function SpecialistTab({
-	session,
-	role,
-	isSelected,
-	onSelect,
-	onClose,
-	resetCount = 0,
-	roles,
+  conversation,
+  isSelected,
+  onSelect,
+  onClose,
+  handoffPhase,
 }: {
-	session: ActiveSession;
-	role: string;
-	isSelected: boolean;
-	onSelect: () => void;
-	onClose?: () => void;
-	resetCount?: number;
-	roles: any[] | undefined;
+  conversation: ActiveConversation;
+  isSelected: boolean;
+  onSelect: () => void;
+  onClose?: () => void;
+  handoffPhase?: HandoffPhase;
 }) {
-	const [isHovered, setIsHovered] = useState(false);
-	const { openContextMenu } = useWindowStore();
-	const roleData = findRole(roles, role);
-	const roleName = roleData?.name || role;
+  const [isHovered, setIsHovered] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const { openContextMenu } = useWindowStore();
+  const role = conversation.role || 'builder';
+  const roleConfig = getRoleConfig(role);
+  const roleName = roleConfig.label;
+  const isActive = getIsActive(conversation);
+  const phaseColor = conversation.mode ? PHASE_ACCENT[conversation.mode] : undefined;
 
-	const handleContextMenu = useCallback((e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		openContextMenu(e.clientX, e.clientY, 'panel-specialist', undefined, {
-			panelSessionId: session.session_id,
-			panelSessionRole: role,
-			panelSessionStatus: session.status_text || 'Working...',
-		});
-	}, [openContextMenu, session.session_id, role, session.status_text]);
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, 'panel-specialist', undefined, {
+      panelConversationId: conversation.conversation_id,
+      panelSessionId: conversation.latest_session_id,
+      panelSessionRole: role,
+      panelSessionStatus: conversation.status_text || 'Working...',
+    });
+  }, [openContextMenu, conversation, role]);
 
-	const handleCloseClick = (e: React.MouseEvent) => {
-		e.stopPropagation();
-		onClose?.();
-	};
+  const handleCloseClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowCloseConfirm(true);
+  };
 
-	return (
-		<button
-			onClick={onSelect}
-			onContextMenu={handleContextMenu}
-			onMouseEnter={() => setIsHovered(true)}
-			onMouseLeave={() => setIsHovered(false)}
-			className={`
+  return (
+    <button
+      data-conversation-id={conversation.conversation_id}
+      onClick={onSelect}
+      onContextMenu={handleContextMenu}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`
         group relative flex items-center gap-2 px-3 py-2 text-xs font-medium self-end
-        transition-colors min-w-0 max-w-[140px] rounded-t-lg
+        transition-colors min-w-[100px] max-w-[140px] flex-shrink-0 rounded-t-lg overflow-hidden
         ${isSelected
-					? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
-					: 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
-				}
+          ? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
+          : 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
+        }
       `}
-		>
-			{/* Activity dot */}
-			<ActivityDot state={session.current_state || null} className="flex-shrink-0" />
+    >
+      {/* Phase accent stripe — top edge colored by current specialist phase */}
+      {phaseColor && (
+        <div
+          className="absolute top-0 left-0 right-0 h-[2px]"
+          style={{ backgroundColor: phaseColor }}
+        />
+      )}
 
-			{/* Icon */}
-			<span className={`flex-shrink-0 ${isSelected ? 'text-[#da7756]' : 'text-gray-400 dark:text-[#666]'}`}>
-				{renderRoleIcon(role, 'w-3.5 h-3.5', roles)}
-			</span>
+      <span className="flex-shrink-0 text-[#da7756]">
+        {renderRoleIcon(role, 'w-3.5 h-3.5')}
+      </span>
 
-			{/* Name */}
-			<span className="truncate">{roleName}</span>
+      <span className="truncate flex-1 text-left">{roleName}</span>
 
-			{/* Reset count */}
-			{resetCount > 0 && (
-				<span className="flex-shrink-0 text-[9px] text-gray-400 dark:text-[#666]">
-					×{resetCount + 1}
-				</span>
-			)}
+      <div className="flex-shrink-0 flex items-center gap-1.5">
+        <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
 
-			{/* Close button */}
-			{onClose && (isHovered || isSelected) && (
-				<span
-					onClick={handleCloseClick}
-					className="flex-shrink-0 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444] ml-auto"
-				>
-					<X className="w-3 h-3" />
-				</span>
-			)}
-		</button>
-	);
+        {onClose && (isHovered || isSelected) && (
+          <span
+            onClick={handleCloseClick}
+            className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444]"
+          >
+            <X className="w-3 h-3" />
+          </span>
+        )}
+      </div>
+
+      {/* Close confirmation popover */}
+      {showCloseConfirm && onClose && (
+        <CloseConfirm
+          roleName={roleName}
+          onConfirm={() => {
+            setShowCloseConfirm(false);
+            onClose();
+          }}
+          onCancel={() => setShowCloseConfirm(false)}
+        />
+      )}
+    </button>
+  );
 }
 
-// TODO (Phase 5): Update to accept ActiveConversation[] once hook provides grouping
 interface ConversationListProps {
-	sessions: ActiveSession[];
-	selectedSessionId: string | null;
-	onSelectSession: (sessionId: string, role: string) => void;
-	onEndSession: (sessionId: string) => void;
-	onForceHandoff: (sessionId: string) => void;
-	onResetChief: () => void;
-	onSpawnChief: () => Promise<void>;
-	onRefresh: () => void;
-	isChiefRunning: boolean;
-	onMinimize?: () => void;
-	activeWorkerCount?: number;
-	sseConnected?: boolean;
+  conversations: ActiveConversation[];
+  selectedConversationId: string | null;
+  onSelectConversation: (conversationId: string, role: string) => void;
+  onEndConversation: (conversationId: string) => void;
+  onSpawnChief: () => Promise<void>;
+  onRefresh: () => void;
+  onMinimize?: () => void;
+  sseConnected?: boolean;
+  /** Get handoff phase for a conversation */
+  getHandoffPhase?: (conversationId: string) => HandoffPhase;
 }
 
 export function ConversationList({
-	sessions,
-	selectedSessionId,
-	onSelectSession,
-	onEndSession,
-	onSpawnChief,
-	onRefresh,
-	onMinimize,
-	activeWorkerCount = 0,
-	sseConnected = true,
+  conversations,
+  selectedConversationId,
+  onSelectConversation,
+  onEndConversation,
+  onSpawnChief,
+  onRefresh,
+  onMinimize,
+  sseConnected = true,
+  getHandoffPhase,
 }: ConversationListProps) {
-	const [showSpawnDropdown, setShowSpawnDropdown] = useState(false);
-	const [spawningRole, setSpawningRole] = useState<string | null>(null);
-	const [spawningChief, setSpawningChief] = useState(false);
+  const [showSpawnDropdown, setShowSpawnDropdown] = useState(false);
+  const [spawningRole, setSpawningRole] = useState<string | null>(null);
+  const [spawningChief, setSpawningChief] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [hiddenRightCount, setHiddenRightCount] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-	// Fetch roles dynamically
-	const { data: roles } = useRolesQuery();
+  // Specialist roles for spawn dropdown (everything except chief)
+  const specialistRoles = Object.entries(ROLE_CONFIGS)
+    .filter(([slug]) => slug !== 'chief' && slug !== 'summarizer')
+    .map(([slug, config]) => ({ slug, ...config }));
 
-	// Get specialist roles (exclude chief)
-	const specialistRoles = roles?.filter(r => r.slug !== 'chief') || [];
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
 
-	// Separate Chief from Specialists (active sessions only)
-	const activeSessions = sessions.filter(s => !s.ended_at);
+    // Count tabs hidden beyond the right edge
+    const rightEdge = el.scrollLeft + el.clientWidth;
+    const tabs = el.querySelectorAll('[data-conversation-id]');
+    let hidden = 0;
+    tabs.forEach((tab) => {
+      const tabRight = (tab as HTMLElement).offsetLeft + (tab as HTMLElement).offsetWidth;
+      if (tabRight > rightEdge + 4) hidden++;
+    });
+    setHiddenRightCount(hidden);
+  }, []);
 
-	const chiefSession = activeSessions.find(s =>
-		s.role === 'chief' || s.session_subtype === 'chief' || s.session_subtype === 'main'
-	);
+  const scrollRight = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: 200, behavior: 'smooth' });
+  }, []);
 
-	const specialists = activeSessions.filter(s =>
-		s.role !== 'chief' && s.session_subtype !== 'chief' && s.session_subtype !== 'main'
-	).sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    checkScroll();
+    return () => el.removeEventListener('scroll', checkScroll);
+  }, [checkScroll]);
 
-	// Compute reset counts for each conversation (how many ended sessions share the same conversation_id)
-	const getResetCount = (session: ActiveSession): number => {
-		if (!session.conversation_id) return 0;
-		// Count ended sessions with same conversation_id (these are previous resets)
-		return sessions.filter(s =>
-			s.conversation_id === session.conversation_id &&
-			s.ended_at &&
-			s.session_id !== session.session_id
-		).length;
-	};
+  // Re-check scroll when tab count changes
+  useEffect(() => {
+    checkScroll();
+  }, [conversations.length, checkScroll]);
 
-	// Spawn a new specialist
-	const handleSpawn = async (role: string) => {
-		setSpawningRole(role);
-		try {
-			const response = await fetch(`${API_BASE}/api/system/sessions/spawn`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ role, mode: 'interactive' }),
-			});
-			const data = await response.json();
-			if (data.success) {
-				onRefresh();
-				if (data.session_id) {
-					onSelectSession(data.session_id, role);
-				}
-			}
-		} catch (err) {
-			console.error('Failed to spawn specialist:', err);
-		} finally {
-			setSpawningRole(null);
-			setShowSpawnDropdown(false);
-		}
-	};
+  // Auto-scroll selected tab into view
+  useEffect(() => {
+    if (!selectedConversationId || !scrollRef.current) return;
+    const tab = scrollRef.current.querySelector(
+      `[data-conversation-id="${selectedConversationId}"]`
+    );
+    if (tab) {
+      tab.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    }
+  }, [selectedConversationId]);
 
-	// Handle spawning Chief
-	const handleSpawnChief = async () => {
-		setSpawningChief(true);
-		try {
-			await onSpawnChief();
-		} finally {
-			setSpawningChief(false);
-		}
-	};
+  // Separate Chief from Specialists (active conversations only)
+  const activeConversations = conversations.filter(c => !c.ended_at);
+  const chiefConversation = activeConversations.find(c => c.role === 'chief');
+  const specialists = activeConversations
+    .filter(c => c.role !== 'chief')
+    .sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
 
-	// Handle ending a specialist session
-	const handleEndSession = (sessionId: string, role: string) => {
-		if (window.confirm(`End ${role} session?`)) {
-			onEndSession(sessionId);
-		}
-	};
+  const handleSpawn = async (role: string) => {
+    setSpawningRole(role);
+    try {
+      const response = await fetch(`${API_BASE}/api/sessions/spawn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, mode: 'interactive' }),
+      });
+      const data = await response.json();
+      if (data.success && data.conversation_id) {
+        onRefresh();
+        onSelectConversation(data.conversation_id, role);
+      }
+    } catch (err) {
+      console.error('Failed to spawn specialist:', err);
+    } finally {
+      setSpawningRole(null);
+      setShowSpawnDropdown(false);
+    }
+  };
 
-	// Find selected session for status bar
-	const selectedSession = selectedSessionId
-		? sessions.find(s => s.session_id === selectedSessionId)
-		: null;
+  const handleSpawnChief = async () => {
+    setSpawningChief(true);
+    try {
+      await onSpawnChief();
+    } finally {
+      setSpawningChief(false);
+    }
+  };
 
-	// Get activity info
-	const hasActiveWorkers = activeWorkerCount > 0;
-	const activityState = getActivityState(selectedSession, hasActiveWorkers);
-	const isWorking = activityState !== 'idle';
-	const statusText = selectedSession?.status_text || 'Ready';
+  const handleEndConversation = (conversationId: string) => {
+    onEndConversation(conversationId);
+  };
 
-	return (
-		<div className="flex flex-col">
-			{/* Tab bar - Chrome style */}
-			<div className="flex items-end gap-1 px-2 pt-1.5 bg-gray-100 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-[#333]">
-				{/* Chief hero tab or Start Chief button */}
-				{chiefSession ? (
-					<ChiefHeroTab
-						session={chiefSession}
-						isSelected={selectedSessionId === chiefSession.session_id}
-						onSelect={() => onSelectSession(chiefSession.session_id, 'chief')}
-						resetCount={getResetCount(chiefSession)}
-						hasActiveWorkers={hasActiveWorkers}
-					/>
-				) : (
-					<button
-						onClick={handleSpawnChief}
-						disabled={spawningChief}
-						className={`
-              flex flex-col gap-0.5 px-4 py-2 min-w-[140px]
-              bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white
-              hover:from-[#e08566] hover:to-[#d16f4c]
-              rounded-t-lg transition-colors disabled:opacity-50
-              border-t border-l border-r border-[#da7756]/30 mb-[-1px] z-10
-            `}
-					>
-						<div className="flex items-center gap-2">
-							{spawningChief ? (
-								<Loader2 className="w-4 h-4 animate-spin" />
-							) : (
-								<ClaudeLogo className="w-4 h-4" />
-							)}
-							<span className="font-semibold text-sm">Start Chief</span>
-						</div>
-						<span className="text-[10px] text-white/70">Click to begin</span>
-					</button>
-				)}
+  const selectedConversation = selectedConversationId
+    ? (conversations.find(c => c.conversation_id === selectedConversationId) ?? null)
+    : null;
 
-				{/* Specialist tabs */}
-				{specialists.map((session) => {
-					const role = session.role || session.session_subtype || 'builder';
-					return (
-						<SpecialistTab
-							key={session.session_id}
-							session={session}
-							role={role}
-							isSelected={selectedSessionId === session.session_id}
-							onSelect={() => onSelectSession(session.session_id, role)}
-							onClose={() => handleEndSession(session.session_id, role)}
-							resetCount={getResetCount(session)}
-							roles={roles}
-						/>
-					);
-				})}
+  const selectedHandoffPhase = selectedConversationId ? getHandoffPhase?.(selectedConversationId) : null;
+  const isWorking = getIsActive(selectedConversation);
+  const statusText = selectedConversation?.status_text || 'Ready';
 
-				{/* New specialist button */}
-				<div className="relative self-end mb-px">
-					<button
-						onClick={() => setShowSpawnDropdown(!showSpawnDropdown)}
-						className="flex items-center justify-center w-8 h-8 rounded-lg
-              text-gray-400 dark:text-[#666] hover:text-gray-600 dark:hover:text-white
-              hover:bg-gray-200 dark:hover:bg-[#333] transition-colors"
-						title="New specialist"
-					>
-						<Plus className="w-4 h-4" />
-					</button>
+  // Handoff status text
+  const handoffStatusText: Record<string, string> = {
+    resetting: 'Resetting session...',
+    generating: 'Generating memory handoff...',
+    complete: 'Handoff complete — spawning...',
+  };
 
-					{/* Spawn dropdown */}
-					{showSpawnDropdown && (
-						<>
-							<div
-								className="fixed inset-0 z-40"
-								onClick={() => setShowSpawnDropdown(false)}
-							/>
-							<div className="absolute left-0 top-full mt-1 z-50 w-52 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#404040] rounded-lg shadow-xl overflow-hidden">
-								<div className="px-3 py-2 border-b border-gray-100 dark:border-[#333] bg-gray-50 dark:bg-[#252525]">
-									<span className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#666]">
-										New Specialist
-									</span>
-								</div>
-								<div className="py-1">
-									{specialistRoles.map((role) => (
-										<button
-											key={role.slug}
-											onClick={() => handleSpawn(role.slug)}
-											disabled={spawningRole !== null}
-											className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-[#2a2a2a] transition-colors disabled:opacity-50"
-										>
-											<span className="text-[#da7756] flex-shrink-0">
-												{spawningRole === role.slug ? (
-													<Loader2 className="w-4 h-4 animate-spin" />
-												) : (
-													renderRoleIcon(role.slug, 'w-4 h-4', roles)
-												)}
-											</span>
-											<div className="flex-1 min-w-0">
-												<div className="text-[11px] font-medium text-gray-900 dark:text-white">
-													{role.name}
-												</div>
-												<div className="text-[10px] text-gray-500 dark:text-[#888]">
-													{role.slug}
-												</div>
-											</div>
-										</button>
-									))}
-								</div>
-							</div>
-						</>
-					)}
-				</div>
+  return (
+    <div data-testid="conversation-list" className="flex flex-col">
+      <div className="flex items-end px-2 pt-1.5 bg-gray-100 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-[#333]">
+        {/* Scrollable tab area */}
+        <div className="flex-1 overflow-hidden relative min-w-0">
+          <div
+            ref={scrollRef}
+            className="flex items-end gap-1 overflow-x-auto scrollbar-hide"
+          >
+            {chiefConversation ? (
+              <ChiefTab
+                conversation={chiefConversation}
+                isSelected={selectedConversationId === chiefConversation.conversation_id}
+                onSelect={() => onSelectConversation(chiefConversation.conversation_id, 'chief')}
+                handoffPhase={getHandoffPhase?.(chiefConversation.conversation_id)}
+              />
+            ) : (
+              <button
+                onClick={handleSpawnChief}
+                disabled={spawningChief}
+                className={`
+                  flex flex-col gap-0.5 px-4 py-2 min-w-[140px] flex-shrink-0
+                  bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white
+                  hover:from-[#e08566] hover:to-[#d16f4c]
+                  rounded-t-lg transition-colors disabled:opacity-50
+                  border-t border-l border-r border-[#da7756]/30 mb-[-1px] z-10
+                `}
+              >
+                <div className="flex items-center gap-2">
+                  {spawningChief ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ClaudeLogo className="w-4 h-4" />
+                  )}
+                  <span className="font-semibold text-sm">Start Chief</span>
+                </div>
+                <span className="text-[10px] text-white/70">Click to begin</span>
+              </button>
+            )}
 
-				{/* Spacer */}
-				<div className="flex-1" />
+            {specialists.map((conversation) => (
+              <SpecialistTab
+                key={conversation.conversation_id}
+                conversation={conversation}
+                isSelected={selectedConversationId === conversation.conversation_id}
+                onSelect={() => onSelectConversation(conversation.conversation_id, conversation.role)}
+                onClose={() => handleEndConversation(conversation.conversation_id)}
+                handoffPhase={getHandoffPhase?.(conversation.conversation_id)}
+              />
+            ))}
+          </div>
 
-				{/* SSE Connection Indicator */}
-				<div
-					className="flex items-center self-end mb-px mr-2"
-					title={sseConnected ? "Real-time updates connected" : "Reconnecting..."}
-				>
-					<span
-						className={`w-2 h-2 rounded-full transition-colors ${
-							sseConnected
-								? 'bg-green-500'
-								: 'bg-amber-500 animate-pulse'
-						}`}
-					/>
-				</div>
+          {/* Left fade gradient */}
+          {canScrollLeft && (
+            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-gray-100 dark:from-[#1a1a1a] to-transparent pointer-events-none z-20" />
+          )}
 
-				{/* Minimize button */}
-				{onMinimize && (
-					<button
-						onClick={onMinimize}
-						className="flex items-center justify-center w-8 h-8 rounded-lg self-end mb-px
-              text-gray-400 dark:text-[#555] hover:text-gray-600 dark:hover:text-[#888]
-              hover:bg-gray-200 dark:hover:bg-[#333] transition-colors mr-1"
-						title="Minimize panel"
-					>
-						<Minus className="w-3.5 h-3.5" />
-					</button>
-				)}
-			</div>
+          {/* Right overflow: fade + count pill */}
+          {hiddenRightCount > 0 && (
+            <>
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-100 dark:from-[#1a1a1a] to-transparent pointer-events-none z-20" />
+              <button
+                onClick={scrollRight}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-30
+                  px-1.5 py-0.5 rounded-full text-[10px] font-medium
+                  bg-gray-200 dark:bg-[#333] text-gray-600 dark:text-[#aaa]
+                  hover:bg-gray-300 dark:hover:bg-[#444] transition-colors"
+              >
+                +{hiddenRightCount}
+              </button>
+            </>
+          )}
+        </div>
 
-			{/* Status strip - just the status text */}
-			{selectedSession && (
-				<div className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-[#1e1e1e]">
-					<div className={`w-0.5 h-4 rounded-full ${isWorking ? 'bg-[#da7756]' : 'bg-gray-200 dark:bg-[#444]'}`} />
-					<span className={`text-[13px] truncate ${isWorking ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
-						{statusText}
-					</span>
-				</div>
-			)}
-		</div>
-	);
+        {/* Pinned action buttons */}
+        <div className="flex items-end flex-shrink-0">
+          <div className="relative">
+            <button
+              data-testid="spawn-specialist"
+              onClick={() => setShowSpawnDropdown(!showSpawnDropdown)}
+              className={`
+                flex items-center gap-1.5 px-2.5 py-1.5 self-end
+                text-[11px] font-medium rounded-t-lg transition-colors
+                text-gray-400 dark:text-[#666] hover:text-gray-600 dark:hover:text-white
+                hover:bg-gray-200/70 dark:hover:bg-[#252525]
+                ${showSpawnDropdown ? 'bg-gray-200/70 dark:bg-[#252525] text-gray-600 dark:text-white' : ''}
+              `}
+              title="New specialist"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+
+            {showSpawnDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowSpawnDropdown(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#404040] rounded-lg shadow-xl overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-100 dark:border-[#333] bg-gray-50 dark:bg-[#252525]">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#666]">
+                      New Specialist
+                    </span>
+                  </div>
+                  <div className="py-1">
+                    {specialistRoles.map((role) => (
+                      <button
+                        key={role.slug}
+                        onClick={() => handleSpawn(role.slug)}
+                        disabled={spawningRole !== null}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-[#2a2a2a] transition-colors disabled:opacity-50"
+                      >
+                        <span className="text-[#da7756] flex-shrink-0">
+                          {spawningRole === role.slug ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            renderRoleIcon(role.slug, 'w-4 h-4')
+                          )}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] font-medium text-gray-900 dark:text-white">
+                            {role.label}
+                          </div>
+                          {role.description && (
+                            <div className="text-[10px] text-gray-400 dark:text-[#666] truncate">
+                              {role.description}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {onMinimize && (
+            <button
+              data-testid="minimize-panel"
+              onClick={onMinimize}
+              className="flex items-center justify-center w-7 h-7 rounded-t-lg self-end
+                text-gray-400 dark:text-[#555] hover:text-gray-600 dark:hover:text-[#888]
+                hover:bg-gray-200/70 dark:hover:bg-[#252525] transition-colors"
+              title="Minimize panel"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {selectedConversation && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-[#1e1e1e]">
+          {/* LEFT: Status text with colored bar */}
+          <div className="flex items-center gap-3 min-w-0">
+            {selectedHandoffPhase ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 text-[#da7756] animate-spin flex-shrink-0" />
+                <span className="text-[13px] truncate text-[#da7756]">
+                  {handoffStatusText[selectedHandoffPhase]}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className={`w-0.5 h-4 rounded-full flex-shrink-0 ${isWorking ? 'bg-[#da7756]' : 'bg-gray-200 dark:bg-[#444]'}`} />
+                <span className={`text-[13px] truncate ${isWorking ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
+                  {statusText}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* RIGHT: Phase bar + Session count */}
+          <div className="flex items-center gap-2.5 flex-shrink-0 ml-4">
+            {(() => {
+              const mode = selectedConversation.mode;
+              const sessionCount = selectedConversation.session_count;
+              const phases = ['preparation', 'implementation', 'verification'] as const;
+              const phaseIdx = phases.indexOf(mode as typeof phases[number]);
+              const isSpecialist = phaseIdx >= 0;
+
+              const phaseColors: Record<string, string> = {
+                preparation: '#60a5fa',
+                implementation: '#f59e0b',
+                verification: '#34d399',
+              };
+
+              return (
+                <>
+                  {isSpecialist ? (
+                    <div className="flex items-center gap-0.5">
+                      {phases.map((phase, idx) => {
+                        const isCompleted = idx < phaseIdx;
+                        const isCurrent = idx === phaseIdx;
+                        const color = phaseColors[phase];
+
+                        return (
+                          <div key={phase} className="flex items-center gap-0.5">
+                            {idx > 0 && (
+                              <div
+                                className="w-2.5 h-px"
+                                style={{
+                                  backgroundColor: isCompleted || isCurrent ? color : 'var(--border-subtle)',
+                                  opacity: isCompleted || isCurrent ? 0.6 : 0.3,
+                                }}
+                              />
+                            )}
+                            {isCompleted ? (
+                              <Check className="w-2.5 h-2.5" style={{ color }} />
+                            ) : isCurrent ? (
+                              <div
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ backgroundColor: color }}
+                              />
+                            ) : (
+                              <div
+                                className="w-1.5 h-1.5 rounded-full border"
+                                style={{ borderColor: 'var(--text-muted)', opacity: 0.3 }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${isWorking ? 'bg-green-400' : 'bg-[#da7756]/40'}`} />
+                      <span className="text-[10px] font-medium text-gray-500 dark:text-[#666]">
+                        Interactive
+                      </span>
+                    </div>
+                  )}
+                  {sessionCount > 1 && (
+                    <span className="text-[11px] text-gray-500 dark:text-[#666]">
+                      {sessionCount} sessions
+                    </span>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default ConversationList;

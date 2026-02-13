@@ -18,7 +18,7 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
 	const fileName = filePath.split('/').pop() || filePath;
 	// Strip "Desktop/" prefix if present (API expects paths relative to Desktop/)
 	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const pdfUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(apiPath)}`;
+	const pdfUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
 
 	useEffect(() => {
 		setLoading(true);

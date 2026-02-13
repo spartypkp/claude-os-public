@@ -26,39 +26,8 @@ export interface AttentionItem {
 }
 
 // =========================================
-// WORKER TYPES (Background Workers - Agent SDK)
+// PRIORITIES
 // =========================================
-
-export interface Worker {
-  id: string;
-  attention_title: string;
-  worker_type: string;
-  status: 'running' | 'complete' | 'failed';
-  domain?: string;
-  created_at: string;
-  completed_at?: string;
-}
-
-// Queued worker (pending/scheduled/blocked)
-export interface QueuedWorker {
-  id: string;
-  worker_type: string;
-  title: string;
-  status: 'pending';
-  domain?: string;
-  instructions: string;
-  execute_at?: string;
-  depends_on: string[];
-  queue_reason: 'waiting' | 'scheduled' | 'blocked';
-  blocked_by?: string;
-  created_at: string;
-}
-
-export interface WorkerQueueData {
-  timestamp: string;
-  workers: QueuedWorker[];
-  total: number;
-}
 
 export interface Priorities {
   critical: string[];
@@ -70,7 +39,6 @@ export interface DashboardData {
   timestamp: string;
   schedule: CalendarEvent[];
   attention: AttentionItem[];
-  workers: Worker[];
   sessions: {
     count: number;
     active: boolean;
@@ -88,56 +56,6 @@ export interface MetricsData {
   weight: Array<{ date: string; value: number }>;
   energy: Array<{ date: string; value: number }>;
   anki: Array<{ date: string; completed: boolean }>;
-}
-
-// Worker History Types
-export interface HistoryWorker {
-  id: string;
-  worker_type: string;
-  title: string;
-  status: 'complete' | 'failed' | 'partial' | 'needs_clarification';
-  display_status: string;
-  domain?: string;
-  report_summary?: string;
-  created_at: string;
-  completed_at?: string;
-  workspace_path?: string;
-}
-
-export interface WorkerHistoryData {
-  timestamp: string;
-  workers: HistoryWorker[];
-  total: number;
-}
-
-export interface WorkerReport {
-  id: string;
-  worker_type: string;
-  title: string;
-  status: string;
-  instructions?: string;
-  report_md?: string;
-  report_summary?: string;
-  created_at: string;
-  completed_at?: string;
-  workspace_path?: string;
-  system_log_path?: string;
-}
-
-// Extended worker type for WorkersView that combines running and history workers
-export interface WorkerViewItem {
-  id: string;
-  title: string;
-  worker_type: string;
-  status: 'running' | 'complete_unacked' | 'complete_acked' | 'failed_unacked' | 'failed_acked';
-  display_status: 'running' | 'complete' | 'failed';
-  domain?: string;
-  report_summary?: string;
-  created_at: string;
-  completed_at?: string;
-  workspace_path?: string;
-  // For running workers - calculated elapsed time
-  elapsed_ms?: number;
 }
 
 // Files View Types
@@ -553,7 +471,7 @@ export interface ActiveWorker {
 }
 
 // Session role/mode taxonomy
-export type SessionRole = 'chief' | 'builder' | 'project' | 'deep-work' | 'idea' | string; // string for mission names
+export type SessionRole = 'chief' | 'builder' | 'writer' | 'researcher' | 'curator' | 'project' | 'idea' | string;
 export type SessionMode = 'interactive' | 'background' | 'mission';
 
 // Session state for activity indicators

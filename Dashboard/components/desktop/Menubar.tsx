@@ -1,10 +1,11 @@
 'use client';
 
 import { CoreAppType, useWindowStore } from '@/store/windowStore';
-import { Battery, BatteryCharging, BatteryWarning, Calendar, CheckSquare, Moon, RefreshCw, Sun, Wifi, WifiOff } from 'lucide-react';
+import { Calendar, CheckSquare, Mail, Moon, RefreshCw, Sun, Wifi, WifiOff } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarWidgetContent } from './widgets/CalendarWidgetContent';
+import { EmailWidgetContent } from './widgets/EmailWidgetContent';
 import { PrioritiesWidgetContent } from './widgets/PrioritiesWidgetContent';
 
 // ==========================================
@@ -26,6 +27,44 @@ function ClaudeLogo({ className = 'w-4 h-4' }: { className?: string; }) {
 }
 
 // ==========================================
+// CUSTOM BATTERY ICON (macOS-style)
+// ==========================================
+
+function BatteryIcon({ percentage, color }: { percentage: number; color: string }) {
+	const fillWidth = Math.max(0, Math.min(100, percentage));
+
+	const fillColor = color.includes('green') ? '#22c55e'
+		: color.includes('yellow') ? '#eab308'
+			: color.includes('orange') ? '#f97316'
+				: color.includes('red') ? '#ef4444'
+					: '#888';
+
+	return (
+		<svg width="22" height="11" viewBox="0 0 22 11" fill="none" className="mt-px">
+			{/* Battery body */}
+			<rect
+				x="0.5" y="0.5" width="18" height="10" rx="2.5"
+				stroke="currentColor" strokeWidth="1" fill="none"
+				className="text-[var(--text-secondary)]"
+			/>
+			{/* Fill bar */}
+			{fillWidth > 0 && (
+				<rect
+					x="2" y="2" width={Math.max(0.5, (fillWidth / 100) * 15)} height="7" rx="1.5"
+					fill={fillColor}
+				/>
+			)}
+			{/* Battery cap */}
+			<path
+				d="M19.5 3.5 C20.5 3.5, 21.5 4, 21.5 5.5 C21.5 7, 20.5 7.5, 19.5 7.5"
+				stroke="currentColor" strokeWidth="1" fill="none"
+				className="text-[var(--text-secondary)]"
+			/>
+		</svg>
+	);
+}
+
+// ==========================================
 // APP NAME MAPPING
 // ==========================================
 
@@ -34,26 +73,18 @@ const CORE_APP_NAMES: Record<CoreAppType, string> = {
 	calendar: 'Calendar',
 	settings: 'Settings',
 	contacts: 'Contacts',
-	widgets: 'Widgets',
 	email: 'Mail',
 	messages: 'Messages',
 	missions: 'Missions',
 	roles: 'Roles',
 };
 
-// Get app name based on pathname (for fullscreen custom apps) or focused window
 function getAppName(pathname: string, focusedAppType?: CoreAppType | null): string {
-	// 1. If a Core App window is focused, use its name
 	if (focusedAppType && CORE_APP_NAMES[focusedAppType]) {
 		return CORE_APP_NAMES[focusedAppType];
 	}
-
-	// 2. Check for Custom App routes (these still use fullscreen routes)
-	if (pathname.startsWith('/system')) {
-		return 'System';
-	}
-
-	// 3. Default: Desktop
+	if (pathname.startsWith('/job-search')) return 'Job Search';
+	if (pathname.startsWith('/system')) return 'System';
 	return 'Desktop';
 }
 
@@ -82,7 +113,6 @@ function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
         "
 				onClick={(e) => e.stopPropagation()}
 			>
-				{/* Header */}
 				<div className="flex flex-col items-center pt-6 pb-4 px-6">
 					<div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#da7756] to-[#C15F3C] flex items-center justify-center mb-4 shadow-lg">
 						<ClaudeLogo className="w-10 h-10 text-white" />
@@ -91,18 +121,16 @@ function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 					<p className="text-sm text-[var(--text-secondary)] mt-1">Version 1.0.0</p>
 				</div>
 
-				{/* Info */}
 				<div className="px-6 pb-6 text-center">
 					<p className="text-xs text-[var(--text-tertiary)] mb-4">
 						A macOS-inspired interface for<br />
-						your life management system
+						Life management system
 					</p>
 					<p className="text-xs text-[var(--text-muted)]">
 						Built with Next.js + Claude
 					</p>
 				</div>
 
-				{/* Close button */}
 				<div className="px-6 pb-6 flex justify-center">
 					<button
 						onClick={onClose}
@@ -137,7 +165,6 @@ interface WidgetDropdownProps {
 function WidgetDropdown({ icon, title, isOpen, onToggle, onClose, children }: WidgetDropdownProps) {
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
-	// Close dropdown when clicking outside
 	useEffect(() => {
 		if (!isOpen) return;
 
@@ -154,6 +181,7 @@ function WidgetDropdown({ icon, title, isOpen, onToggle, onClose, children }: Wi
 	return (
 		<div className="relative" ref={dropdownRef}>
 			<button
+				data-testid={`widget-${title.toLowerCase()}`}
 				onClick={onToggle}
 				aria-label={title}
 				className="
@@ -167,7 +195,6 @@ function WidgetDropdown({ icon, title, isOpen, onToggle, onClose, children }: Wi
 				{icon}
 			</button>
 
-			{/* Dropdown */}
 			{isOpen && (
 				<div
 					className="
@@ -213,29 +240,44 @@ function Clock() {
 	}, []);
 
 	return (
-		<span className="text-[13px] text-[var(--text-primary)] font-medium">
+		<span data-testid="menubar-clock" className="text-[13px] text-[var(--text-primary)] font-medium">
 			{time}
 		</span>
 	);
 }
 
 // ==========================================
-// API HEALTH INDICATOR
+// CONNECTION STATUS INDICATOR (clickable popover)
 // ==========================================
 
-function ApiHealthIndicator() {
-	const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
+interface SystemHealth {
+	backend: { healthy: boolean; latencyMs: number };
+	scheduler: { running: boolean; entries: number };
+	sessions: { active: number; chief: boolean };
+}
 
+function ConnectionStatusIndicator() {
+	const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
+	const [latencyMs, setLatencyMs] = useState<number | null>(null);
+	const [isOpen, setIsOpen] = useState(false);
+	const [health, setHealth] = useState<SystemHealth | null>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+
+	// Poll basic health every 30s
 	useEffect(() => {
 		const checkHealth = async () => {
 			try {
+				const start = performance.now();
 				const response = await fetch(`${API_BASE}/api/health`, {
 					method: 'GET',
 					signal: AbortSignal.timeout(3000),
 				});
+				const ms = Math.round(performance.now() - start);
+				setLatencyMs(ms);
 				setIsHealthy(response.ok);
 			} catch {
 				setIsHealthy(false);
+				setLatencyMs(null);
 			}
 		};
 
@@ -244,16 +286,178 @@ function ApiHealthIndicator() {
 		return () => clearInterval(interval);
 	}, []);
 
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		if (!isOpen) return;
+
+		const handleClickOutside = (e: MouseEvent) => {
+			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+				setIsOpen(false);
+			}
+		};
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => document.removeEventListener('mousedown', handleClickOutside);
+	}, [isOpen]);
+
+	// Fetch detailed health when popover opens
+	const fetchDetailedHealth = useCallback(async () => {
+		try {
+			const [scheduleRes, sessionsRes] = await Promise.all([
+				fetch(`${API_BASE}/api/schedule`).then(r => r.json()).catch(() => null),
+				fetch(`${API_BASE}/api/sessions/activity`).then(r => r.json()).catch(() => null),
+			]);
+
+			const activeSessions = sessionsRes?.sessions?.filter((s: { ended_at: string | null }) => !s.ended_at) || [];
+			const hasChief = activeSessions.some((s: { role: string }) => s.role === 'chief');
+
+			setHealth({
+				backend: { healthy: isHealthy ?? false, latencyMs: latencyMs ?? 0 },
+				scheduler: {
+					running: scheduleRes?.success ?? false,
+					entries: scheduleRes?.entries?.length ?? 0,
+				},
+				sessions: { active: activeSessions.length, chief: hasChief },
+			});
+		} catch {
+			setHealth(null);
+		}
+	}, [isHealthy, latencyMs]);
+
+	const handleToggle = () => {
+		const opening = !isOpen;
+		setIsOpen(opening);
+		if (opening) fetchDetailedHealth();
+	};
+
+	const StatusDot = ({ ok }: { ok: boolean }) => (
+		<span className={`inline-block w-1.5 h-1.5 rounded-full ${ok ? 'bg-green-500' : 'bg-red-500'}`} />
+	);
+
 	return (
-		<div className="flex items-center gap-1" title={isHealthy ? 'API Connected' : 'API Disconnected'}>
-			{isHealthy === null ? (
-				<Wifi className="w-4 h-4 text-[var(--text-muted)]" />
-			) : isHealthy ? (
-				<Wifi className="w-4 h-4 text-[var(--text-primary)]" />
-			) : (
-				<WifiOff className="w-4 h-4 text-[var(--color-error)]" />
+		<div className="relative" ref={dropdownRef}>
+			<button
+				data-testid="connection-status"
+				onClick={handleToggle}
+				aria-label="Connection Status"
+				className="
+					p-1 rounded-[4px]
+					hover:bg-[var(--surface-muted)]
+					transition-colors duration-75
+					focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+				"
+				title={isHealthy ? 'Connected' : 'Disconnected'}
+			>
+				{isHealthy === null ? (
+					<Wifi className="w-4 h-4 text-[var(--text-muted)]" />
+				) : isHealthy ? (
+					<Wifi className="w-4 h-4 text-[var(--text-primary)]" />
+				) : (
+					<WifiOff className="w-4 h-4 text-[var(--color-error)]" />
+				)}
+			</button>
+
+			{isOpen && (
+				<div
+					className="
+						absolute top-full right-0 mt-1
+						w-[280px]
+						bg-[var(--surface-raised)] border border-[var(--border-default)]
+						rounded-xl shadow-2xl overflow-hidden
+						z-[2000] p-4
+					"
+					onClick={(e) => e.stopPropagation()}
+				>
+					<h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
+						System Status
+					</h3>
+
+					{health ? (
+						<div className="space-y-2.5">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<StatusDot ok={health.backend.healthy} />
+									<span className="text-xs text-[var(--text-secondary)]">Backend API</span>
+								</div>
+								<span className="text-xs font-mono text-[var(--text-tertiary)]">
+									{health.backend.latencyMs}ms
+								</span>
+							</div>
+
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<StatusDot ok={health.scheduler.running} />
+									<span className="text-xs text-[var(--text-secondary)]">Scheduler</span>
+								</div>
+								<span className="text-xs font-mono text-[var(--text-tertiary)]">
+									{health.scheduler.entries} entries
+								</span>
+							</div>
+
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<StatusDot ok={health.sessions.chief} />
+									<span className="text-xs text-[var(--text-secondary)]">Chief</span>
+								</div>
+								<span className="text-xs font-mono text-[var(--text-tertiary)]">
+									{health.sessions.chief ? 'Running' : 'Offline'}
+								</span>
+							</div>
+
+							<div className="pt-2 border-t border-[var(--border-subtle)]">
+								<div className="flex items-center justify-between">
+									<span className="text-xs text-[var(--text-secondary)]">Active Sessions</span>
+									<span className="text-xs font-mono text-[var(--text-primary)]">
+										{health.sessions.active}
+									</span>
+								</div>
+							</div>
+						</div>
+					) : (
+						<div className="text-center py-3">
+							<p className="text-xs text-[var(--text-tertiary)]">Loading...</p>
+						</div>
+					)}
+				</div>
 			)}
 		</div>
+	);
+}
+
+// ==========================================
+// CLAUDE STATUS (left side — what Claude is doing)
+// ==========================================
+
+function ClaudeStatus() {
+	const [statusText, setStatusText] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchStatus = async () => {
+			try {
+				const res = await fetch(`${API_BASE}/api/sessions/activity`);
+				const data = await res.json();
+				// Find active chief session with status_text
+				const chief = data.sessions?.find(
+					(s: { role: string; ended_at: string | null; status_text: string | null }) =>
+						s.role === 'chief' && !s.ended_at && s.status_text
+				);
+				setStatusText(chief?.status_text ?? null);
+			} catch {
+				setStatusText(null);
+			}
+		};
+
+		fetchStatus();
+		const interval = setInterval(fetchStatus, 15000);
+		return () => clearInterval(interval);
+	}, []);
+
+	if (!statusText) return null;
+
+	return (
+		<span className="text-[12px] text-[var(--text-tertiary)] truncate max-w-[200px]" title={statusText}>
+			{statusText}
+		</span>
 	);
 }
 
@@ -291,8 +495,6 @@ function UsageBattery() {
 	// Fetch usage data
 	useEffect(() => {
 		fetchUsage();
-
-		// Poll every 60 seconds
 		const interval = setInterval(fetchUsage, 60000);
 		return () => clearInterval(interval);
 	}, []);
@@ -313,7 +515,7 @@ function UsageBattery() {
 
 	const fetchUsage = async () => {
 		try {
-			const response = await fetch(`${API_BASE}/api/usage/current`);
+			const response = await fetch(`${API_BASE}/api/analytics/usage/current`);
 			const data = await response.json();
 			setUsage(data);
 		} catch (error) {
@@ -325,8 +527,7 @@ function UsageBattery() {
 	const handleRefresh = async () => {
 		setIsRefreshing(true);
 		try {
-			await fetch(`${API_BASE}/api/usage/refresh`, { method: 'POST' });
-			// Wait a bit for refresh to complete
+			await fetch(`${API_BASE}/api/analytics/usage/refresh`, { method: 'POST' });
 			setTimeout(() => {
 				fetchUsage();
 				setIsRefreshing(false);
@@ -337,27 +538,27 @@ function UsageBattery() {
 		}
 	};
 
-	// Determine battery state based on usage
-	const getBatteryState = () => {
-		if (!usage || usage.status !== 'success') {
-			return { color: 'text-[var(--text-muted)]', icon: Battery };
-		}
+	// Determine battery color based on remaining usage
+	const getBatteryColor = (): string => {
+		if (!usage || usage.status !== 'success') return 'muted';
 
-		// Use the lower of session or weekly percentage
-		const percentage = Math.min(
-			100 - usage.session.percentage, // Invert: remaining percentage
+		const remaining = Math.min(
+			100 - usage.session.percentage,
 			usage.weekly ? 100 - usage.weekly.percentage : 100
 		);
 
-		if (percentage >= 80) {
-			return { color: 'text-green-500', icon: Battery };
-		} else if (percentage >= 30) {
-			return { color: 'text-yellow-500', icon: Battery };
-		} else if (percentage >= 10) {
-			return { color: 'text-orange-500', icon: BatteryWarning };
-		} else {
-			return { color: 'text-red-500', icon: BatteryWarning };
-		}
+		if (remaining >= 80) return 'green';
+		if (remaining >= 30) return 'yellow';
+		if (remaining >= 10) return 'orange';
+		return 'red';
+	};
+
+	const getRemainingPercentage = (): number => {
+		if (!usage || usage.status !== 'success') return 100;
+		return Math.min(
+			100 - usage.session.percentage,
+			usage.weekly ? 100 - usage.weekly.percentage : 100
+		);
 	};
 
 	const formatTimeUntil = (resetAt: string): string => {
@@ -370,9 +571,7 @@ function UsageBattery() {
 		const hours = Math.floor(diff / (1000 * 60 * 60));
 		const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-		if (hours > 0) {
-			return `${hours}h ${minutes}m`;
-		}
+		if (hours > 0) return `${hours}h ${minutes}m`;
 		return `${minutes}m`;
 	};
 
@@ -391,12 +590,13 @@ function UsageBattery() {
 		return num.toLocaleString();
 	};
 
-	const { color, icon: Icon } = getBatteryState();
+	const batteryColor = getBatteryColor();
+	const remaining = getRemainingPercentage();
 
 	return (
 		<div className="relative" ref={dropdownRef}>
-			{/* Battery Icon */}
 			<button
+				data-testid="usage-battery"
 				onClick={() => setIsOpen(!isOpen)}
 				aria-label="Claude Code Usage"
 				className="
@@ -408,13 +608,14 @@ function UsageBattery() {
 				title="Claude Code Usage"
 			>
 				{isRefreshing ? (
-					<BatteryCharging className={`w-4 h-4 ${color} animate-pulse`} />
+					<div className="animate-pulse">
+						<BatteryIcon percentage={remaining} color={batteryColor} />
+					</div>
 				) : (
-					<Icon className={`w-4 h-4 ${color}`} />
+					<BatteryIcon percentage={remaining} color={batteryColor} />
 				)}
 			</button>
 
-			{/* Dropdown */}
 			{isOpen && (
 				<div
 					className="
@@ -556,14 +757,13 @@ export function Menubar() {
 	const [showAbout, setShowAbout] = useState(false);
 	const [calendarDropdownOpen, setCalendarDropdownOpen] = useState(false);
 	const [prioritiesDropdownOpen, setPrioritiesDropdownOpen] = useState(false);
+	const [emailDropdownOpen, setEmailDropdownOpen] = useState(false);
 
 	const darkMode = useWindowStore((state) => state.darkMode);
 	const toggleDarkMode = useWindowStore((state) => state.toggleDarkMode);
 	const windows = useWindowStore((state) => state.windows);
 	const windowStack = useWindowStore((state) => state.windowStack);
 
-	// Compute the focused window's app type (if any)
-	// This subscribes to windows and windowStack changes
 	const focusedAppType = useMemo(() => {
 		for (const id of windowStack) {
 			const win = windows.find((w) => w.id === id && !w.minimized);
@@ -572,12 +772,12 @@ export function Menubar() {
 		return null;
 	}, [windows, windowStack]);
 
-	// Get app name based on focused window (for Core Apps) or pathname (for Custom Apps/Desktop)
 	const appName = getAppName(pathname, focusedAppType);
 
 	return (
 		<>
 			<div
+				data-testid="menubar"
 				className="
           h-[25px] shrink-0
           bg-[var(--surface-base)]/80 backdrop-blur-xl
@@ -588,10 +788,11 @@ export function Menubar() {
           select-none
         "
 			>
-				{/* Left Side: Claude Logo + App Name */}
-				<div className="flex items-center gap-0.5">
+				{/* Left Side: Claude Logo + App Name + Status */}
+				<div className="flex items-center gap-0.5 min-w-0">
 					{/* Claude Logo / About */}
 					<button
+						data-testid="about-button"
 						onClick={() => setShowAbout(true)}
 						aria-label="About Claude OS"
 						className="
@@ -600,6 +801,7 @@ export function Menubar() {
               rounded-[4px]
               transition-colors duration-75
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+              shrink-0
             "
 						title="About Claude OS"
 					>
@@ -607,14 +809,16 @@ export function Menubar() {
 					</button>
 
 					{/* Active App Name (bold) */}
-					<span className="px-2 text-[13px] font-semibold text-[var(--text-primary)]">
+					<span className="px-2 text-[13px] font-semibold text-[var(--text-primary)] shrink-0">
 						{appName}
 					</span>
+
+					{/* Claude status text */}
+					<ClaudeStatus />
 				</div>
 
 				{/* Center: Widgets */}
 				<div className="flex items-center gap-2">
-					{/* Calendar Widget Dropdown */}
 					<WidgetDropdown
 						icon={<Calendar className="w-4 h-4 text-[var(--text-primary)]" />}
 						title="Calendar"
@@ -622,13 +826,13 @@ export function Menubar() {
 						onToggle={() => {
 							setCalendarDropdownOpen(!calendarDropdownOpen);
 							if (prioritiesDropdownOpen) setPrioritiesDropdownOpen(false);
+							if (emailDropdownOpen) setEmailDropdownOpen(false);
 						}}
 						onClose={() => setCalendarDropdownOpen(false)}
 					>
 						<CalendarWidgetContent />
 					</WidgetDropdown>
 
-					{/* Priorities Widget Dropdown */}
 					<WidgetDropdown
 						icon={<CheckSquare className="w-4 h-4 text-[var(--text-primary)]" />}
 						title="Priorities"
@@ -636,10 +840,25 @@ export function Menubar() {
 						onToggle={() => {
 							setPrioritiesDropdownOpen(!prioritiesDropdownOpen);
 							if (calendarDropdownOpen) setCalendarDropdownOpen(false);
+							if (emailDropdownOpen) setEmailDropdownOpen(false);
 						}}
 						onClose={() => setPrioritiesDropdownOpen(false)}
 					>
 						<PrioritiesWidgetContent />
+					</WidgetDropdown>
+
+					<WidgetDropdown
+						icon={<Mail className="w-4 h-4 text-[var(--text-primary)]" />}
+						title="Email"
+						isOpen={emailDropdownOpen}
+						onToggle={() => {
+							setEmailDropdownOpen(!emailDropdownOpen);
+							if (calendarDropdownOpen) setCalendarDropdownOpen(false);
+							if (prioritiesDropdownOpen) setPrioritiesDropdownOpen(false);
+						}}
+						onClose={() => setEmailDropdownOpen(false)}
+					>
+						<EmailWidgetContent />
 					</WidgetDropdown>
 				</div>
 
@@ -647,6 +866,7 @@ export function Menubar() {
 				<div className="flex items-center gap-3">
 					{/* Dark Mode Toggle */}
 					<button
+						data-testid="dark-mode-toggle"
 						onClick={toggleDarkMode}
 						aria-label={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
 						className="
@@ -664,8 +884,8 @@ export function Menubar() {
 						)}
 					</button>
 
-					{/* API Health */}
-					<ApiHealthIndicator />
+					{/* Connection Status (clickable) */}
+					<ConnectionStatusIndicator />
 
 					{/* Usage Battery */}
 					<UsageBattery />

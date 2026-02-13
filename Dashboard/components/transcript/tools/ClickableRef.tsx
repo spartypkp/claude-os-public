@@ -11,7 +11,7 @@ import type { CoreAppType } from '@/store/windowStore';
  */
 export function useOpenInDesktop() {
   const { openWindow, openAppWindow } = useWindowStore();
-  const { openSession } = useChatPanel();
+  const { openConversation } = useChatPanel();
 
   /**
    * Open a file - decides between document viewer vs Finder
@@ -91,8 +91,8 @@ export function useOpenInDesktop() {
    * Switch to a session in Claude Panel
    */
   const switchSession = useCallback((sessionId: string, role?: string) => {
-    openSession(sessionId, role || 'builder');
-  }, [openSession]);
+    openConversation(sessionId, role || 'builder');
+  }, [openConversation]);
 
   return {
     openFile,

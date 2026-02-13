@@ -4,9 +4,6 @@
  * All configuration, role mappings, and static data for the ClaudePanel.
  */
 
-import type { LucideIcon } from 'lucide-react';
-import { Briefcase, Code2, HelpCircle, Lightbulb, Target } from 'lucide-react';
-
 // =============================================================================
 // PANEL DIMENSIONS
 // =============================================================================
@@ -35,38 +32,6 @@ export const INBOX_PATH = 'Inbox';
 // =============================================================================
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
-
-// =============================================================================
-// ROLE CONFIGURATION
-// =============================================================================
-
-export const ROLE_NAMES: Record<string, string> = {
-	chief: 'Chief',
-	builder: 'Builder',
-	focus: 'Focus',
-	project: 'Project',
-	idea: 'Idea',
-	interviewer: 'Interviewer',
-};
-
-export interface RoleIconConfig {
-	icon: LucideIcon | null;
-	color: string;
-	isLogo?: boolean;
-}
-
-/**
- * @deprecated Use dynamic role config from useRolesQuery() hook instead.
- * See lib/roleConfig.ts and hooks/queries/useRolesQuery.ts for dynamic approach.
- * ClaudePanel components have been migrated to use the new system.
- */
-export const ROLE_ICONS: Record<string, RoleIconConfig> = {
-	chief: { icon: null, color: 'text-[#da7756]', isLogo: true },
-	builder: { icon: Code2, color: 'text-blue-500' },
-	'deep-work': { icon: Target, color: 'text-green-500' },
-	project: { icon: Briefcase, color: 'text-purple-500' },
-	idea: { icon: Lightbulb, color: 'text-yellow-500' },
-};
 
 // =============================================================================
 // BREAK MESSAGES (Empty State)

@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/working/{conversation-id}/spec.md` — Chief's requirements
-- `Desktop/working/{conversation-id}/plan.md` — Preparation's implementation plan
-- `Desktop/working/{conversation-id}/progress.md` — Iteration history
+- `Desktop/conversations/{conversation-id}/spec.md` — Chief's requirements
+- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's implementation plan
+- `Desktop/conversations/{conversation-id}/progress.md` — Iteration history
 - The external codebase (via `Desktop/projects/{project-name}/`)
 
 ---
@@ -18,14 +18,14 @@ You have access to:
 ## Path Rules
 
 **Environment Variables:**
-- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/Users/s/Projects/.../life-specifications`)
-- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/working/project-xxx`)
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/project-xxx`)
 
 **Always use absolute paths for workspace files:**
 - ✅ `$WORKSPACE/progress.md`
 - ✅ `$WORKSPACE/spec.md`
 - ✅ `$WORKSPACE/plan.md`
-- ❌ `Desktop/working/{conversation-id}/progress.md` (breaks after `cd`)
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
 
 **For external project work, use absolute paths or subshells:**
 ```bash
@@ -39,7 +39,7 @@ cd Desktop/projects/client-site
 ```
 
 **Why this matters:**
-When you `cd` into a project directory and then write to `Desktop/working/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+When you `cd` into a project directory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
 
 Using absolute paths for workspace files ensures they always go to the correct location.
 
@@ -68,28 +68,23 @@ Calling for verification.
 
 ## Testing
 
-Run the project's tests before calling done(). Use their test command (from plan.md). Don't assume it works if you didn't test it in their environment.
+Run the project's tests before calling the `mcp__life__done` tool. Use their test command (from plan.md). Don't assume it works if you didn't test it in their environment.
 
 ---
 
 ## Context Management
 
-If context fills up:
-```python
-reset(
-    summary="Implemented X, still need Y",
-    path="Desktop/working/{conversation-id}/progress.md",
-    reason="context_low"
-)
-```
+If context fills up, call the `reset` MCP tool with summary "Implemented X, still need Y" and reason "context_low"
+
+Handoff auto-generates from transcript.
 
 ---
 
 ## When You're Done
 
-```python
-done(summary="Implementation complete, ready for verification")
-```
+**Call the `mcp__life__done` tool** with summary "Implementation complete, ready for verification"
+
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 System spawns Verification mode next.
 
@@ -101,7 +96,7 @@ If Verification fails:
 1. Read progress.md for attempt history
 2. Read VERIFICATION feedback
 3. Fix the issues
-4. Test again before calling done()
+4. Test again before calling the `mcp__life__done` tool
 
 ---
 

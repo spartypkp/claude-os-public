@@ -6,12 +6,18 @@
  */
 
 import {
-  Crown,
-  Terminal,
-  Target,
-  Crosshair,
+  Archive,
+  BookOpen,
+  Brain,
   Briefcase,
+  CircleDollarSign,
+  Code2,
+  Crosshair,
+  FolderGit2,
+  GraduationCap,
   Lightbulb,
+  Search as SearchIcon,
+  Telescope,
   LucideIcon,
 } from 'lucide-react';
 import { ActiveSession, SessionRole, SessionMode } from './types';
@@ -20,64 +26,123 @@ import { ActiveSession, SessionRole, SessionMode } from './types';
 // ROLE CONFIGURATION
 // =========================================
 
+// All roles use Claude's orange (#da7756). Icons differentiate roles, not colors.
+const CLAUDE_COLOR = 'text-[#da7756]';
+const CLAUDE_BG = 'bg-[#da7756]/10';
+const CLAUDE_RING = 'ring-[#da7756]/30';
+
 export interface RoleConfig {
   label: string;
+  description?: string; // Short one-liner for spawn dropdown
   icon: LucideIcon;
+  isLogo?: boolean;    // Chief uses Claude logo SVG instead of icon
   color: string;       // Tailwind text color class
   bgColor: string;     // Tailwind background color class
   ringColor: string;   // For focus/active states
 }
 
 /**
- * @deprecated Use dynamic role config from useRolesQuery() hook instead.
- * This static config is kept as a fallback for backwards compatibility.
- * See lib/roleConfig.ts and hooks/queries/useRolesQuery.ts for dynamic approach.
+ * Single source of truth for role icons and colors.
+ * All roles are orange (Claude brand). Icons distinguish roles.
  */
 export const ROLE_CONFIGS: Record<string, RoleConfig> = {
   chief: {
     label: 'Chief',
-    icon: Crown,
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/10',
-    ringColor: 'ring-amber-500/30',
+    icon: Crosshair,    // Unused — Chief renders ClaudeLogo SVG
+    isLogo: true,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
   },
   builder: {
     label: 'Builder',
-    icon: Terminal,
-    color: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/10',
-    ringColor: 'ring-cyan-500/30',
+    description: 'Code, infrastructure, debugging',
+    icon: Code2,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
   },
-  'deep-work': {
-    label: 'Deep Work',
-    icon: Target,
-    color: 'text-purple-400',
-    bgColor: 'bg-purple-500/10',
-    ringColor: 'ring-purple-500/30',
+  writer: {
+    label: 'Writer',
+    description: 'Writing, analysis, sustained focus',
+    icon: BookOpen,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
   },
   project: {
     label: 'Project',
-    icon: Briefcase,
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10',
-    ringColor: 'ring-blue-500/30',
+    description: 'External codebases and repos',
+    icon: FolderGit2,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
   },
   idea: {
     label: 'Idea',
+    description: 'Brainstorming, design, planning',
     icon: Lightbulb,
-    color: 'text-[var(--color-claude)]',           // Claude's terra cotta
-    bgColor: 'bg-[var(--color-claude-dim)]',
-    ringColor: 'ring-[var(--color-claude)]/30',
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  researcher: {
+    label: 'Researcher',
+    description: 'Investigations and synthesis',
+    icon: Telescope,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  curator: {
+    label: 'Curator',
+    description: 'Audits, organization, accuracy',
+    icon: Archive,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  // Custom roles
+  trainer: {
+    label: 'Trainer',
+    description: 'Tutoring and skill development',
+    icon: GraduationCap,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  money: {
+    label: 'Money',
+    description: 'Trading strategies and analysis',
+    icon: CircleDollarSign,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  'job-search': {
+    label: 'Job Search',
+    description: 'Pipeline, research, applications',
+    icon: SearchIcon,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  summarizer: {
+    label: 'Memory Agent',
+    icon: Brain,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
   },
 };
 
-// Default/fallback for unknown roles (e.g., mission names)
+// Default/fallback for unknown roles
 const DEFAULT_ROLE_CONFIG: RoleConfig = {
   label: 'Session',
   icon: Crosshair,
-  color: 'text-[var(--text-secondary)]',
-  bgColor: 'bg-[var(--surface-muted)]',
-  ringColor: 'ring-[var(--border-default)]',
+  color: CLAUDE_COLOR,
+  bgColor: CLAUDE_BG,
+  ringColor: CLAUDE_RING,
 };
 
 // =========================================

@@ -1,5 +1,7 @@
 'use client';
 
+import { usePromptModal } from '@/components/desktop/PromptModal';
+import { useFileEvents } from '@/hooks/useFileEvents';
 import {
 	finderCreateFile,
 	finderCreateFolder,
@@ -10,14 +12,13 @@ import {
 	moveToTrash
 } from '@/lib/api';
 import { getFileIconSpec } from '@/lib/fileTypes';
-import { CLAUDE_SYSTEM_FILES, CLAUDE_SYSTEM_FOLDERS, isProtectedFile } from '@/lib/systemFiles';
 import { getFolderColorClass } from '@/lib/folderCategories';
+import { CLAUDE_SYSTEM_FILES, CLAUDE_SYSTEM_FOLDERS, isProtectedFile } from '@/lib/systemFiles';
 import { FileTreeNode } from '@/lib/types';
 import { useWindowStore } from '@/store/windowStore';
 import {
 	ChevronLeft,
 	ChevronRight,
-	Clock,
 	Columns,
 	Eye,
 	EyeOff,
@@ -32,9 +33,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePromptModal } from '@/components/desktop/PromptModal';
 import { toast } from 'sonner';
-import { useFileEvents } from '@/hooks/useFileEvents';
 
 // Use FinderItem from api.ts instead of local FileItem
 type FileItem = FinderItem;
@@ -291,7 +290,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		}
 	}, [needsReload, currentPath, loadDirectory]);
 
-	// Load root on mount to populate sidebar (domains/apps) even if starting in subdirectory
+	// Load root on mount to populate sidebar (modules/apps) even if starting in subdirectory
 	useEffect(() => {
 		const loadSidebar = async () => {
 			try {
@@ -755,11 +754,10 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 				{/* Hide system files toggle */}
 				<button
 					onClick={() => setHideSystemFiles(!hideSystemFiles)}
-					className={`p-1.5 rounded-md border transition-colors ${
-						hideSystemFiles
+					className={`p-1.5 rounded-md border transition-colors ${hideSystemFiles
 							? 'bg-[#DA7756]/10 border-[#DA7756]/30 hover:bg-[#DA7756]/20'
 							: 'bg-white/50 dark:bg-white/10 border-[#C0C0C0] dark:border-[#4a4a4a] hover:bg-white/80 dark:hover:bg-white/20'
-					}`}
+						}`}
 					title={hideSystemFiles ? 'Show system files (⌘⇧H)' : 'Hide system files (⌘⇧H)'}
 				>
 					{hideSystemFiles ? (

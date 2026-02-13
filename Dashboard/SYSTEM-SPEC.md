@@ -80,7 +80,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 - Lightweight `DesktopIconPreview` component for DragOverlay (no logic, just visuals)
 - GPU acceleration via `willChange: transform` hint
 - `visibility: hidden` instead of opacity changes
-- See `Workspace/working/desktop-ux-audit.md` for full analysis
+- See `Desktop/conversations/desktop-ux-audit.md` for full analysis
 
 ---
 

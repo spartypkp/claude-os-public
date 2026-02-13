@@ -1,4 +1,4 @@
-import { BlockData, CalendarEvent, ClaudeActivityData, Contact, ContactDetail, DashboardData, FileContent, FileTreeNode, LifeTasksResponse, MemoryData, MetricsData, MetricsOverviewData, MetricsPatternsData, MissionsResponse, StageData, SystemConfigData, SystemDocsData, SystemHealth, SystemHealthData, SystemMetricsData, WorkerHistoryData, WorkerQueueData, WorkerReport } from './types';
+import { BlockData, CalendarEvent, ClaudeActivityData, Contact, ContactDetail, DashboardData, FileContent, FileTreeNode, LifeTasksResponse, MemoryData, MetricsData, MetricsOverviewData, MetricsPatternsData, MissionsResponse, StageData, SystemConfigData, SystemDocsData, SystemHealth, SystemHealthData, SystemMetricsData } from './types';
 import { CLAUDE_SYSTEM_FILES } from './systemFiles';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
@@ -85,7 +85,6 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 		timestamp: new Date().toISOString(),
 		schedule: [],
 		attention: [],
-		workers: [],
 		sessions: { count: 0, active: false },
 		priorities: { critical: [], medium: [], low: [] },
 	};
@@ -103,38 +102,6 @@ export async function fetchMetrics(): Promise<MetricsData> {
 	return res.json();
 }
 
-export async function fetchWorkerHistory(): Promise<WorkerHistoryData> {
-	const res = await fetch(`${API_BASE}/api/workers/history`, { cache: 'no-store' });
-	if (!res.ok) throw new Error('Failed to fetch worker history');
-	return res.json();
-}
-
-export async function fetchWorkerQueue(): Promise<WorkerQueueData> {
-	const res = await fetch(`${API_BASE}/api/workers/queue`, { cache: 'no-store' });
-	if (!res.ok) throw new Error('Failed to fetch worker queue');
-	return res.json();
-}
-
-export async function fetchWorkerReport(workerId: string): Promise<WorkerReport> {
-	const res = await fetch(`${API_BASE}/api/workers/${workerId}/report`, { cache: 'no-store' });
-	if (!res.ok) throw new Error('Failed to fetch worker report');
-	return res.json();
-}
-
-export interface WorkerOutputResponse {
-	id: string;
-	status: string;
-	output: string;
-	is_complete: boolean;
-	updated_at: string;
-}
-
-export async function fetchWorkerOutput(workerId: string): Promise<WorkerOutputResponse> {
-	const res = await fetch(`${API_BASE}/api/workers/${workerId}/output`, { cache: 'no-store' });
-	if (!res.ok) throw new Error('Failed to fetch worker output');
-	return res.json();
-}
-
 // =========================================
 // ACTION APIs
 // =========================================
@@ -143,32 +110,6 @@ interface ActionResponse {
 	success: boolean;
 	message?: string;
 	error?: string;
-	worker_id?: string;
-}
-
-export async function ackWorker(workerId: string): Promise<ActionResponse> {
-	const res = await fetch(`${API_BASE}/api/workers/${workerId}/ack`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-	});
-	return res.json();
-}
-
-export async function snoozeWorker(workerId: string, duration: string = '+1h'): Promise<ActionResponse> {
-	const res = await fetch(`${API_BASE}/api/workers/${workerId}/snooze`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ duration }),
-	});
-	return res.json();
-}
-
-export async function cancelWorker(workerId: string): Promise<ActionResponse> {
-	const res = await fetch(`${API_BASE}/api/workers/${workerId}/cancel`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-	});
-	return res.json();
 }
 
 interface CreateEventPayload {
@@ -189,21 +130,6 @@ export async function createCalendarEvent(payload: CreateEventPayload): Promise<
 			start_date: payload.start,
 			end_date: payload.end,
 		}),
-	});
-	return res.json();
-}
-
-interface CreateWorkerPayload {
-	type: 'research' | 'analyze' | 'organize' | 'propagate' | 'execute' | 'verify';
-	instructions: string;
-	execute_at?: string;
-}
-
-export async function createAsyncWorker(payload: CreateWorkerPayload): Promise<ActionResponse> {
-	const res = await fetch(`${API_BASE}/api/workers`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(payload),
 	});
 	return res.json();
 }
@@ -275,6 +201,38 @@ export async function updateFileContent(
 	}
 
 	return res.json();
+}
+
+/**
+ * Open a file in the native macOS default application.
+ * Pass reveal=true to reveal in Finder instead.
+ */
+export async function openInMacOS(path: string, reveal?: boolean): Promise<void> {
+	const res = await fetch(`${API_BASE}/api/files/open`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ path, reveal: reveal ?? false }),
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to open file' }));
+		throw new Error(error.detail || 'Failed to open file');
+	}
+}
+
+/**
+ * Send raw keystrokes to a session (no Dashboard prefix).
+ * Used for answering interactive prompts like AskUserQuestion.
+ */
+export async function sendKeystroke(sessionId: string, text: string): Promise<void> {
+	const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/keystroke`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ message: text }),
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to send keystroke' }));
+		throw new Error(error.detail || 'Failed to send keystroke');
+	}
 }
 
 // =========================================
@@ -465,12 +423,11 @@ export async function fetchClaudeState(): Promise<ClaudeStateResponse> {
 	return res.json();
 }
 
-// Mission System API (unified missions system)
+// Duties API (renamed from missions - backward compatibility)
 export async function fetchMissions(): Promise<MissionsResponse> {
-	// Uses /api/missions from the Missions Core App
-	// Legacy /api/system/missions also works but calls same unified system
-	const res = await fetch(`${API_BASE}/api/missions`, { cache: 'no-store' });
-	if (!res.ok) throw new Error('Failed to fetch missions');
+	// Missions system renamed to Duties - this function kept for backward compat
+	const res = await fetch(`${API_BASE}/api/duties`, { cache: 'no-store' });
+	if (!res.ok) throw new Error('Failed to fetch duties');
 	return res.json();
 }
 
@@ -503,7 +460,7 @@ export async function fetchMemory(): Promise<MemoryData> {
 // =========================================
 
 export async function fetchClaudeActivity(): Promise<ClaudeActivityData> {
-	const res = await fetch(`${API_BASE}/api/system/sessions/activity`, { cache: 'no-store' });
+	const res = await fetch(`${API_BASE}/api/sessions/activity`, { cache: 'no-store' });
 	if (!res.ok) throw new Error('Failed to fetch claude activity');
 	return res.json();
 }
@@ -546,10 +503,21 @@ export interface FinderSearchResponse {
 }
 
 /**
+ * Strip "Desktop/" prefix from paths.
+ * The file tree API returns repo-relative paths (Desktop/foo.md) but
+ * Finder mutation APIs expect Desktop-relative paths (foo.md).
+ * Call this on any path before passing to a Finder API.
+ */
+function toDesktopRelative(path: string): string {
+	return path.replace(/^Desktop\//, '');
+}
+
+/**
  * List contents of a directory in Desktop/.
  */
 export async function finderList(path: string = ''): Promise<FinderListResponse> {
-	const endpoint = path ? `/api/finder/list/${encodeURIComponent(path)}` : '/api/finder/list';
+	path = toDesktopRelative(path);
+	const endpoint = path ? `/api/files/list/${encodeURIComponent(path)}` : '/api/files/list';
 	const res = await fetch(`${API_BASE}${endpoint}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to list directory' }));
@@ -562,7 +530,8 @@ export async function finderList(path: string = ''): Promise<FinderListResponse>
  * Get detailed info for a file or folder.
  */
 export async function finderInfo(path: string): Promise<FinderItem> {
-	const res = await fetch(`${API_BASE}/api/finder/info/${encodeURIComponent(path)}`, { cache: 'no-store' });
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/info/${encodeURIComponent(path)}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to get info' }));
 		throw new Error(error.detail || 'Failed to get info');
@@ -574,7 +543,8 @@ export async function finderInfo(path: string): Promise<FinderItem> {
  * Read file content.
  */
 export async function finderRead(path: string): Promise<FinderFileContent> {
-	const res = await fetch(`${API_BASE}/api/finder/read/${encodeURIComponent(path)}`, { cache: 'no-store' });
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/read/${encodeURIComponent(path)}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to read file' }));
 		throw new Error(error.detail || 'Failed to read file');
@@ -586,7 +556,8 @@ export async function finderRead(path: string): Promise<FinderFileContent> {
  * Create a new file in Desktop/.
  */
 export async function finderCreateFile(path: string, content: string = ''): Promise<FinderItem> {
-	const res = await fetch(`${API_BASE}/api/finder/file`, {
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/file`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ path, content }),
@@ -602,7 +573,8 @@ export async function finderCreateFile(path: string, content: string = ''): Prom
  * Create a new folder in Desktop/.
  */
 export async function finderCreateFolder(path: string): Promise<FinderItem> {
-	const res = await fetch(`${API_BASE}/api/finder/folder`, {
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/folder`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ path }),
@@ -619,11 +591,12 @@ export async function finderCreateFolder(path: string): Promise<FinderItem> {
  * Uses multipart form data for upload.
  */
 export async function finderUpload(file: File, destPath: string = ''): Promise<FinderItem> {
+	destPath = toDesktopRelative(destPath);
 	const formData = new FormData();
 	formData.append('file', file);
 	formData.append('dest_path', destPath);
 
-	const res = await fetch(`${API_BASE}/api/finder/upload`, {
+	const res = await fetch(`${API_BASE}/api/files/upload`, {
 		method: 'POST',
 		body: formData,
 	});
@@ -643,7 +616,8 @@ export async function finderRename(path: string, newName: string): Promise<Finde
 		throw new Error('Cannot rename Claude system files');
 	}
 
-	const res = await fetch(`${API_BASE}/api/finder/rename/${encodeURIComponent(path)}`, {
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/rename/${encodeURIComponent(path)}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ new_name: newName }),
@@ -659,7 +633,9 @@ export async function finderRename(path: string, newName: string): Promise<Finde
  * Move a file or folder to a new location.
  */
 export async function finderMove(path: string, destPath: string): Promise<FinderItem> {
-	const res = await fetch(`${API_BASE}/api/finder/move/${encodeURIComponent(path)}`, {
+	path = toDesktopRelative(path);
+	destPath = toDesktopRelative(destPath);
+	const res = await fetch(`${API_BASE}/api/files/move/${encodeURIComponent(path)}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ dest_path: destPath }),
@@ -686,7 +662,7 @@ export async function finderDelete(path: string, recursive: boolean = false): Pr
 		throw new Error('Cannot delete Claude system files');
 	}
 
-	const res = await fetch(`${API_BASE}/api/finder/delete/${encodeURIComponent(path)}?recursive=${recursive}`, {
+	const res = await fetch(`${API_BASE}/api/files/delete/${encodeURIComponent(path)}?recursive=${recursive}`, {
 		method: 'DELETE',
 	});
 	if (!res.ok) {
@@ -700,7 +676,7 @@ export async function finderDelete(path: string, recursive: boolean = false): Pr
  * Search for files matching query.
  */
 export async function finderSearch(query: string, path: string = ''): Promise<FinderSearchResponse> {
-	const res = await fetch(`${API_BASE}/api/finder/search`, {
+	const res = await fetch(`${API_BASE}/api/files/search`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ query, path }),
@@ -756,7 +732,8 @@ export async function moveToTrash(path: string): Promise<TrashResponse> {
 		throw new Error('Cannot delete Claude system files');
 	}
 
-	const res = await fetch(`${API_BASE}/api/finder/trash`, {
+	path = toDesktopRelative(path);
+	const res = await fetch(`${API_BASE}/api/files/trash`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ path }),
@@ -772,7 +749,7 @@ export async function moveToTrash(path: string): Promise<TrashResponse> {
  * List all items in trash.
  */
 export async function listTrash(): Promise<TrashListResponse> {
-	const res = await fetch(`${API_BASE}/api/finder/trash`, { cache: 'no-store' });
+	const res = await fetch(`${API_BASE}/api/files/trash`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to list trash' }));
 		throw new Error(error.detail || 'Failed to list trash');
@@ -784,7 +761,7 @@ export async function listTrash(): Promise<TrashListResponse> {
  * Get info about a specific trashed item.
  */
 export async function getTrashItem(trashId: string): Promise<TrashItem> {
-	const res = await fetch(`${API_BASE}/api/finder/trash/${encodeURIComponent(trashId)}`, { cache: 'no-store' });
+	const res = await fetch(`${API_BASE}/api/files/trash/${encodeURIComponent(trashId)}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to get trash item' }));
 		throw new Error(error.detail || 'Failed to get trash item');
@@ -796,7 +773,7 @@ export async function getTrashItem(trashId: string): Promise<TrashItem> {
  * Restore an item from trash.
  */
 export async function restoreFromTrash(trashId: string, destPath?: string): Promise<RestoreResponse> {
-	const res = await fetch(`${API_BASE}/api/finder/trash/${encodeURIComponent(trashId)}/restore`, {
+	const res = await fetch(`${API_BASE}/api/files/trash/${encodeURIComponent(trashId)}/restore`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ dest_path: destPath }),
@@ -812,7 +789,7 @@ export async function restoreFromTrash(trashId: string, destPath?: string): Prom
  * Permanently delete a specific item from trash.
  */
 export async function permanentDelete(trashId: string): Promise<{ deleted: string; name: string; }> {
-	const res = await fetch(`${API_BASE}/api/finder/trash/${encodeURIComponent(trashId)}`, {
+	const res = await fetch(`${API_BASE}/api/files/trash/${encodeURIComponent(trashId)}`, {
 		method: 'DELETE',
 	});
 	if (!res.ok) {
@@ -826,7 +803,7 @@ export async function permanentDelete(trashId: string): Promise<{ deleted: strin
  * Empty the trash (permanently delete all items).
  */
 export async function emptyTrash(olderThanDays?: number): Promise<{ deleted_count: number; remaining_count: number; }> {
-	const res = await fetch(`${API_BASE}/api/finder/trash/empty`, {
+	const res = await fetch(`${API_BASE}/api/files/trash/empty`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ older_than_days: olderThanDays }),
@@ -834,6 +811,155 @@ export async function emptyTrash(olderThanDays?: number): Promise<{ deleted_coun
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to empty trash' }));
 		throw new Error(error.detail || 'Failed to empty trash');
+	}
+	return res.json();
+}
+
+// =========================================
+// LEETCODE SPEEDRUN APIs
+// =========================================
+
+export interface SpeedrunProblem {
+	problem_number: number;
+	name: string;
+	difficulty: string;
+	pattern: string;
+	front_text: string;
+	back_text: string;
+	signals?: string;
+}
+
+export interface SpeedrunSessionData {
+	session_id: string;
+	problems: SpeedrunProblem[];
+	mode: string;
+	count: number;
+	attempts: SpeedrunAttempt[];
+	created_at: string;
+}
+
+export interface SpeedrunAttempt {
+	problem_number: number;
+	outcome: 'correct' | 'partial' | 'missed';
+	user_answer: string;
+	canonical_answer: string;
+	response_seconds: number;
+	timestamp: string;
+	explanation: string;
+	next_review: string;
+}
+
+export interface SpeedrunSessionStats {
+	session_id: string;
+	total: number;
+	completed: number;
+	accuracy: number;
+	avg_seconds: number;
+	correct: number;
+	partial: number;
+	missed: number;
+	weak_patterns: { pattern: string; problem_number: number; problem_name: string; }[];
+}
+
+/**
+ * Start a new speedrun session.
+ */
+export async function startSpeedrunSession(
+	mode: 'random' | 'due' | 'weak',
+	count: number,
+	problemDomain: 'leetcode' | 'concurrency' | 'system-design' | 'debugging' = 'leetcode'
+): Promise<SpeedrunSessionData> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/start`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ mode, count, problem_domain: problemDomain }),
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to start session' }));
+		throw new Error(error.detail || 'Failed to start session');
+	}
+	return res.json();
+}
+
+/**
+ * Get session data including problems and attempts.
+ */
+export async function getSpeedrunSession(sessionId: string): Promise<SpeedrunSessionData> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get session' }));
+		throw new Error(error.detail || 'Failed to get session');
+	}
+	return res.json();
+}
+
+/**
+ * Submit an answer for a problem in the session.
+ */
+export async function submitSpeedrunAnswer(
+	sessionId: string,
+	problemNumber: number,
+	userAnswer: string,
+	responseSeconds: number
+): Promise<SpeedrunAttempt> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}/submit`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			problem_number: problemNumber,
+			user_answer: userAnswer,
+			response_seconds: responseSeconds
+		}),
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to submit answer' }));
+		throw new Error(error.detail || 'Failed to submit answer');
+	}
+	return res.json();
+}
+
+/**
+ * Get stats for a session.
+ */
+export async function getSpeedrunSessionStats(sessionId: string): Promise<SpeedrunSessionStats> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}/stats`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get session stats' }));
+		throw new Error(error.detail || 'Failed to get session stats');
+	}
+	return res.json();
+}
+
+/**
+ * Get global speedrun statistics.
+ */
+export async function getSpeedrunGlobalStats(): Promise<any> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/stats/global`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get global stats' }));
+		throw new Error(error.detail || 'Failed to get global stats');
+	}
+	return res.json();
+}
+
+/**
+ * Get count of problems due for review.
+ */
+export async function getSpeedrunDueCount(): Promise<{ count: number; }> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/due`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get due count' }));
+		throw new Error(error.detail || 'Failed to get due count');
 	}
 	return res.json();
 }
