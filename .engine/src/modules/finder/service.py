@@ -37,7 +37,7 @@ class FinderService:
         '.svg': 'image',
     }
     
-    def __init__(self, db):
+    def __init__(self, db=None):
         """Initialize with database connection (unused for now)."""
         self.db = db
         self.desktop_root = settings.repo_root / "Desktop"
