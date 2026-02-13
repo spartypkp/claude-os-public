@@ -8,12 +8,12 @@ instead of deciding what to delete, you decide what to keep.
 
 What it archives:
 1. Desktop/TODAY.md → Desktop/logs/YYYY/MM/DD/daily.md
-2. Desktop/conversations/ → Desktop/logs/YYYY/MM/DD/working/
-3. Desktop/sessions/ → Desktop/logs/YYYY/MM/DD/sessions/
+2. Desktop/conversations/chief/* → Desktop/logs/YYYY/MM/DD/chief/
+3. Desktop/conversations/* → Desktop/logs/YYYY/MM/DD/conversations/
 
 What it creates:
 - Fresh Desktop/TODAY.md from template
-- Empty Desktop/conversations/ and Desktop/sessions/ directories
+- Empty Desktop/conversations/ directory (chief/ subfolder persists)
 
 Usage:
     python reset_day.py                    # Archive yesterday
@@ -56,6 +56,24 @@ def ensure_archive_dir(archive_date):
     return archive_dir
 
 
+def check_already_archived(archive_dir):
+    """Check if archive already exists (idempotency check).
+
+    Returns: True if already archived (abort), False if safe to proceed
+    """
+    daily_file = archive_dir / "daily.md"
+
+    if daily_file.exists():
+        print(f"❌ Archive already exists for this date")
+        print(f"   {daily_file.relative_to(BASE_PATH)} already exists")
+        print(f"\n   Aborting to prevent data loss.")
+        print(f"   If you need to re-run, manually delete the archive first:")
+        print(f"   rm -rf {archive_dir.relative_to(BASE_PATH)}")
+        return True
+
+    return False
+
+
 def archive_today_md(archive_dir):
     """Archive Desktop/TODAY.md to logs.
 
@@ -81,46 +99,13 @@ def archive_today_md(archive_dir):
     return 1
 
 
-def archive_directory(source_name, archive_dir):
-    """Archive a directory from Desktop/ to logs.
-
-    Args:
-        source_name: Name of directory in Desktop/ (e.g., "sessions")
-        archive_dir: Target archive directory
-
-    Returns: Number of items archived
-    """
-    source_dir = DESKTOP_PATH / source_name
-    target_dir = archive_dir / source_name
-
-    if not source_dir.exists():
-        print(f"⚠️  {source_dir.relative_to(BASE_PATH)} doesn't exist - skipping")
-        return 0
-
-    # Count items before archiving
-    items = list(source_dir.iterdir())
-    if not items:
-        print(f"⚠️  {source_dir.relative_to(BASE_PATH)} is empty - skipping")
-        return 0
-
-    # Move directory to archive
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-    shutil.move(str(source_dir), str(target_dir))
-
-    # Recreate empty source directory
-    source_dir.mkdir(exist_ok=True)
-
-    print(f"✅ Archived: {len(items)} items from {source_name}/ → {target_dir.relative_to(BASE_PATH)}")
-    return len(items)
-
-
 def archive_conversations(archive_dir):
-    """Archive Desktop/conversations/ with special handling for chief/.
+    """Archive Desktop/conversations/ with unified date structure.
 
-    - chief/ folder persists (stable location), only contents archived
-    - chief/ contents go to logs/chief-YYYY-MM-DD/
-    - Other specialist folders go to logs/YYYY/MM/DD/conversations/
+    - chief/ contents go to logs/YYYY/MM/DD/chief/
+    - Other items go to logs/YYYY/MM/DD/conversations/
+
+    Both use the same date hierarchy (unified structure).
 
     Returns: Number of items archived
     """
@@ -132,20 +117,17 @@ def archive_conversations(archive_dir):
 
     total_archived = 0
 
-    # Handle chief/ separately
+    # Handle chief/ separately (but in unified structure)
     chief_dir = conversations_dir / "chief"
     if chief_dir.exists():
         chief_items = list(chief_dir.iterdir())
         if chief_items:
-            # Archive chief contents to logs/chief-YYYY-MM-DD/
-            date_str = archive_dir.name  # DD from YYYY/MM/DD
-            parent_str = archive_dir.parent.name  # MM
-            grandparent_str = archive_dir.parent.parent.name  # YYYY
-            chief_archive = DESKTOP_PATH / "logs" / f"chief-{grandparent_str}-{parent_str}-{date_str}"
-            chief_archive.mkdir(parents=True, exist_ok=True)
+            # Archive chief contents to logs/YYYY/MM/DD/chief/
+            target_chief = archive_dir / "chief"
+            target_chief.mkdir(parents=True, exist_ok=True)
 
             for item in chief_items:
-                target = chief_archive / item.name
+                target = target_chief / item.name
                 if target.exists():
                     if target.is_dir():
                         shutil.rmtree(target)
@@ -154,7 +136,7 @@ def archive_conversations(archive_dir):
                 shutil.move(str(item), str(target))
                 total_archived += 1
 
-            print(f"✅ Archived: {len(chief_items)} items from chief/ → {chief_archive.relative_to(BASE_PATH)}")
+            print(f"✅ Archived: {len(chief_items)} items from chief/ → {target_chief.relative_to(BASE_PATH)}")
 
     # Handle other items in conversations/
     target_dir = archive_dir / "conversations"
@@ -213,12 +195,16 @@ def main():
     archive_dir = ensure_archive_dir(archive_date)
     print(f"✅ Archive at: {archive_dir.relative_to(BASE_PATH)}")
 
+    # Idempotency check
+    print(f"\n🔍 Checking if already archived...")
+    if check_already_archived(archive_dir):
+        return False
+
     # Archive everything
     print(f"\n📦 Archiving files...")
     total_archived = 0
     total_archived += archive_today_md(archive_dir)
     total_archived += archive_conversations(archive_dir)
-    total_archived += archive_directory("sessions", archive_dir)
 
     # Create fresh TODAY.md
     print(f"\n📝 Creating fresh TODAY.md...")
@@ -230,10 +216,10 @@ def main():
     print("=" * 70)
     print(f"\nArchived to: {archive_dir.relative_to(BASE_PATH)}")
     print("\nNext steps:")
-    print("  1. Review archived daily.md for active items")
-    print("  2. Restore needed files from logs/YYYY/MM/DD/working/")
-    print("  3. Update TODAY.md with active tracking/bugs/friction")
-    print("  4. Update MEMORY.md (promote patterns, clear stale items)")
+    print("  1. Spawn Curator for memory consolidation")
+    print("  2. Curator extracts knowledge from archived daily.md")
+    print("  3. Curator updates MEMORY.md and TODAY.md")
+    print("  4. Chief writes morning brief")
 
     return True
 

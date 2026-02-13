@@ -100,9 +100,6 @@ interface WindowStore {
 	/** Window stack order (first = front) */
 	windowStack: string[];
 
-	/** Icon display order (paths in render order). Empty = use natural file order */
-	iconOrder: string[];
-
 	/** Widget states */
 	widgets: WidgetState[];
 
@@ -173,12 +170,6 @@ interface WindowStore {
 	// =========================================
 	// ICON ACTIONS
 	// =========================================
-
-	/** Set custom icon order (for drag reordering) */
-	setIconOrder: (order: string[]) => void;
-
-	/** Move icon to new index in order */
-	reorderIcon: (fromPath: string, toIndex: number) => void;
 
 	/** Select an icon */
 	selectIcon: (path: string, multiSelect?: boolean) => void;
@@ -254,19 +245,6 @@ interface WindowStore {
 	toggleMenubarWidget: (type: 'priorities' | 'calendar' | 'sessions') => void;
 
 	// =========================================
-	// SORT ACTIONS
-	// =========================================
-
-	/** Sort icons by name (alphabetically) */
-	sortIconsByName: (files: { path: string; name: string; type: string; }[]) => void;
-
-	/** Sort icons by kind (folders first, then files) */
-	sortIconsByKind: (files: { path: string; name: string; type: string; }[]) => void;
-
-	/** Reset to natural file order */
-	resetIconOrder: () => void;
-
-	// =========================================
 	// APPEARANCE ACTIONS
 	// =========================================
 
@@ -314,7 +292,6 @@ export const useWindowStore = create<WindowStore>()(
 		(set, get) => ({
 			windows: [],
 			windowStack: [],
-			iconOrder: [],
 			widgets: [
 				{ id: 'priorities-default', ...WIDGET_DEFAULTS.priorities },
 				{ id: 'calendar-default', ...WIDGET_DEFAULTS.calendar },
@@ -535,25 +512,6 @@ export const useWindowStore = create<WindowStore>()(
 			// ICON ACTIONS
 			// =========================================
 
-			setIconOrder: (order) => {
-				set({ iconOrder: order });
-			},
-
-			reorderIcon: (fromPath, toIndex) => {
-				set((state) => {
-					const currentOrder = [...state.iconOrder];
-					const fromIndex = currentOrder.indexOf(fromPath);
-					if (fromIndex === -1) return state;
-
-					// Remove from current position
-					currentOrder.splice(fromIndex, 1);
-					// Insert at new position
-					currentOrder.splice(toIndex, 0, fromPath);
-
-					return { iconOrder: currentOrder };
-				});
-			},
-
 			selectIcon: (path, multiSelect = false) => {
 				set((state) => ({
 					selectedIcons: multiSelect
@@ -707,34 +665,6 @@ export const useWindowStore = create<WindowStore>()(
 			},
 
 			// =========================================
-			// SORT ACTIONS
-			// =========================================
-
-			sortIconsByName: (files) => {
-				// Sort files alphabetically by name (case-insensitive)
-				const sorted = [...files].sort((a, b) =>
-					a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-				);
-				set({ iconOrder: sorted.map(f => f.path) });
-			},
-
-			sortIconsByKind: (files) => {
-				// Sort: folders first (alphabetically), then files (alphabetically)
-				const sorted = [...files].sort((a, b) => {
-					const aIsFolder = a.type === 'directory';
-					const bIsFolder = b.type === 'directory';
-
-					if (aIsFolder && !bIsFolder) return -1;
-					if (!aIsFolder && bIsFolder) return 1;
-					return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-				});
-				set({ iconOrder: sorted.map(f => f.path) });
-			},
-
-			resetIconOrder: () => {
-				set({ iconOrder: [] });
-			},
-
 			// =========================================
 			// APPEARANCE ACTIONS
 			// =========================================
@@ -749,7 +679,6 @@ export const useWindowStore = create<WindowStore>()(
 			name: 'claude-os-desktop',
 			partialize: (state) => ({
 				// Persist layout and window state
-				iconOrder: state.iconOrder,
 				widgets: state.widgets,
 				menubarWidgets: state.menubarWidgets,
 				darkMode: state.darkMode,
@@ -839,7 +768,6 @@ export const useWindows = () => useWindowStore((s) => s.windows);
 export const useWindowStack = () => useWindowStore((s) => s.windowStack);
 export const useWidgets = () => useWindowStore((s) => s.widgets);
 export const useMenubarWidgets = () => useWindowStore((s) => s.menubarWidgets);
-export const useIconOrder = () => useWindowStore((s) => s.iconOrder);
 export const useSelectedIcons = () => useWindowStore((s) => s.selectedIcons);
 export const useQuickLookPath = () => useWindowStore((s) => s.quickLookPath);
 export const useContextMenu = () => useWindowStore((s) => s.contextMenu);
@@ -870,14 +798,9 @@ export const useWindowActions = () => useWindowStore(
 
 export const useIconActions = () => useWindowStore(
 	useShallow((s) => ({
-		setIconOrder: s.setIconOrder,
-		reorderIcon: s.reorderIcon,
 		selectIcon: s.selectIcon,
 		selectAll: s.selectAll,
 		clearSelection: s.clearSelection,
-		sortIconsByName: s.sortIconsByName,
-		sortIconsByKind: s.sortIconsByKind,
-		resetIconOrder: s.resetIconOrder,
 	}))
 );
 

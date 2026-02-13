@@ -15,16 +15,16 @@ description: Daily reset - archive yesterday, consolidate memory, prepare mornin
 
 Without memory consolidation, you are a stranger every day.
 
-The user has ADHD. Their executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity.
+Will has ADHD. His executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE Will's continuity.
 
 If those files are wrong, the system fails.
 
-The morning brief gets the user working in under 2 minutes. The brief serves a parliament:
+The morning brief gets Will working in under 2 minutes. The brief serves a parliament:
 
-- **Morning Self** wants minimum decisions, one screen, "just tell me what to do"
-- **Evening Self** wants to look back and see they worked on what mattered
-- **Interview-Day Self** wants every morning to have prepared them
-- **System-Builder Self** wants Claude opinionated, not asking "what would you like?"
+- **Morning Will** wants minimum decisions, one screen, "just tell me what to do"
+- **Evening Will** wants to look back and see he worked on what mattered
+- **Interview-Day Will** wants every morning to have prepared him
+- **System-Builder Will** wants Claude opinionated, not asking "what would you like?"
 
 This is the difference between being **a partner who learns** vs **a tool that forgets**.
 
@@ -42,75 +42,61 @@ Run the reset script:
 
 This moves:
 - `Desktop/TODAY.md` → `Desktop/logs/YYYY/MM/DD/daily.md`
+- `Desktop/conversations/chief/*` → `Desktop/logs/YYYY/MM/DD/chief/`
 - `Desktop/conversations/*` → `Desktop/logs/YYYY/MM/DD/conversations/`
 
 Creates fresh TODAY.md from template.
 
-**The default is archive.** Everything goes to logs. You restore exceptions.
+**The default is archive.** Everything goes to logs. Curator then extracts what matters.
+
+**Unified structure:** All work from a date now lives in one location (`logs/YYYY/MM/DD/`).
 
 ---
 
-### Phase 2: Carry Forward
+### Phase 2: Spawn Curator for Memory Consolidation
 
-Read yesterday's daily.md. Ask: **What's genuinely still active?**
+Chief spawns Curator to extract knowledge from yesterday and audit memory:
 
-Restore to `Desktop/TODAY.md → Unstructured`:
-- Action items that aren't done
-- Follow-ups still pending
-- Observations worth tracking longer
+```python
+team("spawn",
+     role="curator",
+     spec_path="Desktop/conversations/chief/memory-consolidation-spec.md",
+     description="Memory consolidation")
+```
 
-Leave in logs:
-- Completed items
-- One-time events (they're history, not active)
-- Things that resolved themselves
+**What Curator does:**
+1. Read yesterday's daily.md from `logs/YYYY/MM/DD/`
+2. Extract knowledge (decisions, patterns, bugs, context, open loops)
+3. Audit MEMORY.md (active threads, waiting-on, backlog, patterns, hypotheses)
+4. Cross-verify files (MEMORY vs IDENTITY, check for contradictions)
+5. Carry forward to TODAY.md (only what matters today)
+6. Write audit summary to `Desktop/memory-audit-YYYY-MM-DD.md`
 
-Restore conversation files only if work is genuinely in-progress. Completed work stays in logs.
+**What Curator updates:**
+- `Desktop/MEMORY.md` (directly, with full authority)
+- `Desktop/TODAY.md` (context and open loops sections)
+- `Desktop/memory-audit-YYYY-MM-DD.md` (summary for Chief)
 
-**The bar:** If the user woke up and this wasn't in TODAY.md, would it matter? If no, leave it archived.
+**Why Curator, not Chief:**
+- Systematic knowledge extraction (not rushed)
+- Thorough memory auditing (checks every section)
+- Editorial judgment (promote patterns, remove stale items)
+- Chief can focus on the brief instead of dual responsibilities
 
----
+**While Curator works:** Chief can read calendar, check priorities, or wait. Curator runs autonomously (specialist 3-mode loop).
 
-### Phase 3: Update MEMORY.md
-
-Open MEMORY.md alongside yesterday's daily.md.
-
-**This Week section:**
-This clears weekly, not daily. Update if:
-- Active threads changed (new info, resolved, stale)
-- Waiting-on items resolved or need updating
-- System backlog items fixed or new ones appeared
-
-**Patterns section:**
-Promote from observations to Patterns only when **truly proven**:
-- Appeared across multiple days/contexts
-- Describes behavior, not status
-- Would survive a complete memory reset
-- Provides actionable guidance
-
-Most observations don't become patterns. That's fine.
-
-**Other sections:**
-- **Hypotheses** — Move observations here if noticed but not validated
-- **Recent Corrections** — Add explicit feedback from yesterday, clear items >1 week old
-- **Collaboration Experiments** — Update based on what we learned
-
-**Clear stale entries:**
-Remove anything that's:
-- No longer true
-- Resolved
-- Superseded by newer information
-
-**Reality > files.** If an entry contradicts current reality, delete or update it.
+**When Curator finishes:** Chief reads the memory-audit summary to understand what changed.
 
 ---
 
-### Phase 4: Prepare Morning Brief
+### Phase 3: Prepare Morning Brief
 
 Read context:
-- MEMORY.md
+- `Desktop/memory-audit-YYYY-MM-DD.md` (Curator's summary of changes)
+- `Desktop/MEMORY.md` (updated by Curator)
+- `Desktop/TODAY.md` (context and open loops populated by Curator)
 - Calendar (today's events)
 - Priorities (today's priorities)
-- TODAY.md (fresh file with carried-forward items)
 
 Write brief to `Desktop/morning-brief.md`:
 
@@ -135,7 +121,7 @@ Write brief to `Desktop/morning-brief.md`:
 
 ### Phase 5: Deliver Brief
 
-Send `Desktop/morning-brief.md` to Telegram when the user is likely awake (after 8 AM).
+Send `Desktop/morning-brief.md` to Telegram when Will is likely awake (after 8 AM).
 
 Use the email MCP tool to draft and send:
 ```python
@@ -144,7 +130,7 @@ with open('Desktop/morning-brief.md') as f:
     brief_content = f.read()
 
 # Send via Telegram (implementation depends on available tools)
-# Use appropriate messaging tool to deliver to the user
+# Use appropriate messaging tool to deliver to Will
 ```
 
 ---
@@ -179,24 +165,26 @@ If system was offline for multiple days:
 
 **Don't manufacture memories.** If you don't know, you don't know. Gaps are fine.
 
-**Morning Self vs Parliament.** Surface the hard thing, even if they don't love it. Evening Self and Future Self need honesty more than Morning Self needs comfort.
+**Morning Will vs Parliament.** Surface the hard thing, even if he doesn't love it. Evening Will and Future Will need honesty more than Morning Will needs comfort.
 
 ---
 
 ## Success Criteria
 
-- [ ] Desktop/conversations/ contains only genuinely active work
-- [ ] TODAY.md has only items that matter today
-- [ ] MEMORY.md reflects current reality
+- [ ] Archive script ran successfully (files moved to logs/YYYY/MM/DD/)
+- [ ] Curator spawned and completed memory consolidation
+- [ ] Curator's memory-audit summary reviewed
+- [ ] MEMORY.md reflects current reality (updated by Curator)
+- [ ] TODAY.md has context and open loops (populated by Curator)
 - [ ] Morning brief written (BLUF first, one opinionated suggestion)
 - [ ] Brief delivered to Telegram
-- [ ] Git committed
+- [ ] Git committed (TODAY.md, MEMORY.md, memory-audit, logs/)
 - [ ] <30 minutes total
 
 ---
 
 ## After Completion
 
-Call `done()` with brief summary. System transitions to normal Chief mode to receive the user's response to the brief.
+Call `done()` with brief summary. System transitions to normal Chief mode to receive Will's response to the brief.
 
-If the user disagrees with your suggestion, good — that's a conversation, not a failure. Adjust and move.
+If Will disagrees with your suggestion, good — that's a conversation, not a failure. Adjust and move.

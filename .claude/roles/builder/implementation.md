@@ -28,10 +28,10 @@ You're the builder making the vision real, not yet evaluating if it's perfect.
 **For directory-specific work, use subshells:**
 ```bash
 # Don't do this - persistent cd breaks subsequent relative paths:
-cd .engine/src/modules/my_app
+cd .engine/src/apps/training_will
 
 # Do this - subshell isolates the cd:
-(cd .engine/src/modules/my_app && pytest)
+(cd .engine/src/apps/training_will && pytest)
 ```
 
 **Why this matters:**
@@ -43,11 +43,11 @@ Using absolute paths ensures files always go to the correct location.
 
 ## What You Receive
 
-You have access to three key files in `Desktop/conversations/{conversation-id}/`:
+You have access to three key files:
 
-- **spec.md** - Chief's original requirements (what needs to be true)
-- **plan.md** - Preparation's technical plan (how to make it true)
-- **progress.md** - Iteration history (what's been tried, if iteration > 1)
+- **Spec** - Chief's original requirements (what needs to be true), passed via `$SPEC_PATH`
+- **$WORKSPACE/plan.md** - Preparation's technical plan (how to make it true)
+- **$WORKSPACE/progress.md** - Iteration history (what's been tried, if iteration > 1)
 
 Read all three before starting work. The spec defines success, the plan defines approach, and progress shows what's already been attempted.
 

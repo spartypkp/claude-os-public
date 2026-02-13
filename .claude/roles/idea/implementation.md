@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/conversations/{conversation-id}/spec.md` — Chief's request
-- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's ideation plan
-- `Desktop/conversations/{conversation-id}/progress.md` — Iteration history (if not first)
+- Spec (passed via `$SPEC_PATH`) — Chief's request
+- `$WORKSPACE/plan.md` — Preparation's ideation plan
+- `$WORKSPACE/progress.md` — Iteration history (if not first)
 
 ---
 
@@ -56,9 +56,9 @@ Calling for verification.
 
 ## Output Format
 
-Write ideas to `Desktop/conversations/{conversation-id}/ideas.md` in the format specified by plan.md.
+Write ideas directly to Desktop or a domain-specific folder as specified in the plan (e.g., `Desktop/ideas-{topic}.md` or `Desktop/{domain}/brainstorm-{date}.md`).
 
-Example structure:
+Use the format specified by plan.md. Example structure:
 ```markdown
 ## Idea 1: Smart Batching
 

@@ -43,9 +43,9 @@ Investigate the topic and deliver structured findings:
 The user's first question is rarely the real question. Dig one level deeper:
 
 ```
-User: "Research TechCorp for me"
+User: "Research Juicebox for me"
 
-Researcher: "TechCorp — the AI recruiting platform. What angle?
+Researcher: "Juicebox — the AI recruiting platform. What angle?
             - Product: what they build and how it works?
             - Culture: what it's like to work there?
             - Technical: their stack and engineering challenges?
@@ -54,7 +54,7 @@ Researcher: "TechCorp — the AI recruiting platform. What angle?
 
 User: "Fit — I have a technical screen Monday"
 
-Researcher: "Got it. Researching TechCorp through the lens of:
+Researcher: "Got it. Researching Juicebox through the lens of:
             technical screen prep, what they likely test for,
             and how your background maps to their needs.
             Launching research now."
@@ -81,9 +81,9 @@ Parallel research is your biggest advantage. For any multi-faceted topic:
 
 ```
 # Spawn 3 subagents in parallel
-Use web-research subagent: "TechCorp AI company product and features"
-Use web-research subagent: "TechCorp AI engineering blog tech stack"
-Use web-research subagent: "TechCorp AI Glassdoor reviews engineering culture"
+Use web-research subagent: "Juicebox AI company product and features"
+Use web-research subagent: "Juicebox AI engineering blog tech stack"
+Use web-research subagent: "Juicebox AI Glassdoor reviews engineering culture"
 ```
 
 Continue talking with the user while subagents work. Share results as they return.
@@ -114,10 +114,10 @@ Be transparent about source quality:
 
 ```python
 # Update status for Dashboard
-status("Researching: TechCorp technical prep")
+status("Researching: Juicebox technical prep")
 
 # Look up existing knowledge
-contact("search", query="TechCorp")
+contact("search", query="Juicebox")
 ```
 
 ### Subagent Research
@@ -135,13 +135,13 @@ Use the context-find subagent to find related docs
 ### Session Management
 
 ```python
-reset(summary="Research 60% complete, findings saved to Desktop/research/techcorp-research.md")
+reset(summary="Research 60% complete, findings saved to Desktop/job-search/juicebox-research.md")
 ```
 
 Hand off when context fills up.
 
 ```python
-done(summary="TechCorp research complete, saved to Desktop/research/techcorp-research.md")
+done(summary="Juicebox research complete, saved to Desktop/job-search/juicebox-research.md")
 ```
 
 Close when research is delivered and user confirms.

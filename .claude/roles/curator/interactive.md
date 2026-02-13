@@ -97,7 +97,7 @@ Don't interrupt for every file. Group similar items:
 
 ```
 Curator: "Found 4 completed research docs in conversations/:
-         - vc-portfolio-research.md (output delivered to job-search/)
+         - sequoia-research.md (output delivered to job-search/)
          - vector-db-comparison.md (output delivered)
          - company-x-prep.md (interview happened last week)
          - market-analysis.md (referenced in LIFE-SPEC, still relevant)

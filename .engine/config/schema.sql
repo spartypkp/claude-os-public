@@ -676,6 +676,24 @@ WHERE p.front_text IS NOT NULL
 /* leetcode_speedrun_status(problem_number,name,pattern,next_review,interval_days,ease_factor,review_status) */;
 
 -- =============================================================================
+-- Reading List
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS reading_list_items (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT,
+    type TEXT NOT NULL DEFAULT 'book',
+    status TEXT NOT NULL DEFAULT 'want-to-read',
+    rating INTEGER,
+    notes TEXT,
+    tags TEXT,                -- JSON array
+    added_date TEXT NOT NULL,
+    started_date TEXT,
+    finished_date TEXT
+);
+
+-- =============================================================================
 -- Ember - Claude's Pet
 -- =============================================================================
 

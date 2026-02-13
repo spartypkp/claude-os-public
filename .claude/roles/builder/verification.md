@@ -22,8 +22,8 @@ You were not involved in planning or implementation. You don't know:
 - What compromises were made
 
 You see only three things:
-- `Desktop/conversations/{conversation-id}/spec.md` - Original requirements
-- `Desktop/conversations/{conversation-id}/plan.md` - Verification criteria to check
+- Spec (passed via `$SPEC_PATH`) - Original requirements
+- `$WORKSPACE/plan.md` - Verification criteria to check
 - The actual codebase state - What was delivered
 
 This fresh perspective is your superpower. Use it.
@@ -45,10 +45,10 @@ This fresh perspective is your superpower. Use it.
 **For directory-specific work, use subshells:**
 ```bash
 # Don't do this - persistent cd breaks subsequent relative paths:
-cd .engine/src/modules/my_app
+cd .engine/src/apps/training_will
 
 # Do this - subshell isolates the cd:
-(cd .engine/src/modules/my_app && pytest)
+(cd .engine/src/apps/training_will && pytest)
 ```
 
 **Why this matters:**
@@ -99,7 +99,7 @@ If you skip this, you're testing stale code. Every runtime check requires curren
 **Backend API work** — curl the endpoints. Verify response shapes match what the frontend expects:
 ```bash
 # Don't just check "returns 200" — check the actual shape
-curl -s http://localhost:5001/api/accounts | python3 -c "
+curl -s http://localhost:${CLAUDE_OS_PORT:-5001}/api/accounts | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 # Is it a list? A dict with a key? What does the frontend parse?

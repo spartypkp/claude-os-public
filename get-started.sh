@@ -270,10 +270,13 @@ else
     fi
 fi
 
-# Wait for backend
+# Wait for services (restart.sh already waits, but double-check for first install)
+BACKEND_PORT="${CLAUDE_OS_PORT:-5001}"
+DASH_PORT="${DASHBOARD_PORT:-3000}"
+
 info "Waiting for services..."
 for i in $(seq 1 15); do
-    if curl -s --max-time 2 http://localhost:5001/api/health >/dev/null 2>&1; then
+    if curl -s --max-time 2 "http://localhost:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
         success "Backend ready"
         break
     fi
@@ -281,9 +284,8 @@ for i in $(seq 1 15); do
     sleep 1
 done
 
-# Wait for dashboard
 for i in $(seq 1 20); do
-    if curl -s --max-time 2 http://localhost:3000 >/dev/null 2>&1; then
+    if curl -s --max-time 2 "http://localhost:${DASH_PORT}" >/dev/null 2>&1; then
         success "Dashboard ready"
         break
     fi
@@ -292,7 +294,7 @@ for i in $(seq 1 20); do
 done
 
 # Open Dashboard
-open http://localhost:3000 2>/dev/null || true
+open "http://localhost:${DASH_PORT}" 2>/dev/null || true
 
 # ══════════════════════════════════════════════
 # Phase 6: Launch Claude for Onboarding
@@ -302,11 +304,21 @@ echo ""
 echo "╔═══════════════════════════════════════╗"
 echo "║        Claude OS is running!          ║"
 echo "╠═══════════════════════════════════════╣"
-echo "║  Dashboard:  http://localhost:3000    ║"
-echo "║  Backend:    http://localhost:5001    ║"
+echo "║  Dashboard:  http://localhost:${DASH_PORT}    ║"
+echo "║  Backend:    http://localhost:${BACKEND_PORT}    ║"
 echo "╚═══════════════════════════════════════╝"
 echo ""
-echo -e "${DIM}Launching Claude Code for onboarding...${NC}"
+echo -e "${DIM}Launching Claude inside tmux...${NC}"
 echo ""
 
-claude "/setup"
+# Wait for Claude to be ready in the chief pane
+# (spawn_chief.py was called by restart.sh, Claude is booting)
+info "Waiting for Claude to initialize..."
+sleep 5  # Give Claude time to start and load hooks
+
+# Inject /setup into the running Chief session
+tmux send-keys -t life:chief "/setup" C-m
+
+# Attach user to tmux on the chief window
+tmux select-window -t life:chief
+exec tmux attach-session -t life

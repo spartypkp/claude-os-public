@@ -52,6 +52,7 @@ class Settings:
         self.host = os.environ.get("CLAUDE_OS_HOST", "0.0.0.0")
         self.port = int(os.environ.get("CLAUDE_OS_PORT", "5001"))
         self.debug = os.environ.get("CLAUDE_OS_DEBUG", "false").lower() == "true"
+        self.backend_url = f"http://localhost:{self.port}"
 
         # === Timezone ===
         # User timezone for event timestamps, calendar display, etc.
@@ -104,10 +105,11 @@ class Settings:
         # === Claude System Files ===
         # Protected from deletion, displayed with badge
         self.claude_system_files: Set[str] = {
-            "TODAY.md", "MEMORY.md", "IDENTITY.md", "SYSTEM-INDEX.md"
+            "TODAY.md", "MEMORY.md", "IDENTITY.md", "SYSTEM-INDEX.md",
+            "SCHEDULE.md", "HEARTBEAT.md"
         }
         self.claude_system_folders: Set[str] = {
-            "sessions", "working", "prepared", "logs"
+            "sessions", "working", "prepared", "logs", "conversations"
         }
 
         # === Rate Limits ===

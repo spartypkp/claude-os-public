@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a lightweight spec in `Desktop/conversations/{conversation-id}/spec.md` containing:
+Chief has written a lightweight spec, passed to you via `$SPEC_PATH`. It contains:
 - Audit scope (which areas to examine)
 - Motivation (why this audit is needed)
 - Constraints (what to preserve, what's off-limits)
@@ -33,7 +33,7 @@ That's your job.
 
 ## Your Deliverable
 
-Create `Desktop/conversations/{conversation-id}/plan.md` containing:
+Create `$WORKSPACE/plan.md` containing:
 
 ### 1. Audit Scope
 Enumerate exactly what will be checked. Be exhaustive within the spec's boundaries.

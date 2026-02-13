@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a spec in `Desktop/conversations/{conversation-id}/spec.md` for work on an external codebase (usually symlinked via `Desktop/projects/`). It contains:
+Chief has written a spec, passed to you via `$SPEC_PATH`, for work on an external codebase (usually symlinked via `Desktop/projects/`). It contains:
 - What needs to be done
 - Which project/codebase
 - Any client requirements or constraints
@@ -53,7 +53,7 @@ Using absolute paths for workspace files ensures they always go to the correct l
 
 ## Your Deliverable
 
-Create `Desktop/conversations/{conversation-id}/plan.md` containing:
+Create `$WORKSPACE/plan.md` containing:
 
 ### 1. Codebase Familiarization
 - Key files and their locations

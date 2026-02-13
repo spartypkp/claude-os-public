@@ -2,13 +2,14 @@
 
 import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileTree, finderMove, finderUpload, listTrash, moveToTrash } from '@/lib/api';
+import { CLAUDE_SYSTEM_FILES } from '@/lib/systemFiles';
+import { getFolderCategory } from '@/lib/folderCategories';
 import { FileTreeNode } from '@/lib/types';
 import { useDesktopStore } from '@/store/desktopStore';
 import {
 	useContextMenuActions,
 	useDarkMode,
 	useIconActions,
-	useIconOrder,
 	useQuickLookActions,
 	useQuickLookPath,
 	useSelectedIcons,
@@ -71,14 +72,13 @@ export function ClaudeOS() {
 
 	// Window store - using selectors to avoid re-renders on unrelated state changes
 	const windows = useWindows();
-	const iconOrder = useIconOrder();
 	const selectedIcons = useSelectedIcons();
 	const quickLookPath = useQuickLookPath();
 	const darkMode = useDarkMode();
 
 	// Actions (stable references, won't cause re-renders)
 	const { openWindow, openAppWindow, closeFocusedWindow } = useWindowActions();
-	const { selectIcon, selectAll, clearSelection, setIconOrder, reorderIcon, sortIconsByName, sortIconsByKind, resetIconOrder } = useIconActions();
+	const { selectIcon, selectAll, clearSelection } = useIconActions();
 	const { toggleQuickLook, closeQuickLook } = useQuickLookActions();
 	const { openContextMenu, closeContextMenu } = useContextMenuActions();
 
@@ -137,29 +137,6 @@ export function ClaudeOS() {
 		},
 		enabled: mounted,
 	});
-
-	// Listen for sort events from context menu or menubar
-	useEffect(() => {
-		const handleSort = (e: CustomEvent<{ type: string; }>) => {
-			const sortType = e.detail.type;
-
-			switch (sortType) {
-				case 'name':
-					sortIconsByName(files.map(f => ({ path: f.path, name: f.name, type: f.type })));
-					break;
-				case 'kind':
-					sortIconsByKind(files.map(f => ({ path: f.path, name: f.name, type: f.type })));
-					break;
-				case 'cleanup':
-					// Reset to natural file order
-					resetIconOrder();
-					break;
-			}
-		};
-
-		window.addEventListener('desktop-sort', handleSort as EventListener);
-		return () => window.removeEventListener('desktop-sort', handleSort as EventListener);
-	}, [files, sortIconsByName, sortIconsByKind, resetIconOrder]);
 
 	// Listen for refresh events from context menu
 	useEffect(() => {
@@ -243,7 +220,7 @@ export function ClaudeOS() {
 			setActiveDragId(null);
 			setOverTrash(false);
 		},
-		[files, iconOrder, setIconOrder]
+		[files]
 	);
 
 	// Handle icon selection
@@ -338,26 +315,27 @@ export function ClaudeOS() {
 		[openContextMenu]
 	);
 
-	// Sort files by custom order if set, otherwise use natural order (folders first, then alphabetical)
-	const orderedFiles = useMemo(() => {
-		if (iconOrder.length > 0) {
-			// Use custom order - put ordered files first, then any new files at the end
-			const orderMap = new Map(iconOrder.map((path, idx) => [path, idx]));
-			return [...files].sort((a, b) => {
-				const aOrder = orderMap.get(a.path) ?? Infinity;
-				const bOrder = orderMap.get(b.path) ?? Infinity;
-				if (aOrder !== bOrder) return aOrder - bOrder;
-				// Fallback: folders first, then alphabetical
-				if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-				return a.name.localeCompare(b.name);
-			});
+	// Sort priority: 0=claude system, 1=projects, 2=custom apps, 3=regular folders, 4=regular files
+	const getSortGroup = useCallback((node: FileTreeNode): number => {
+		if (node.type === 'file') {
+			return CLAUDE_SYSTEM_FILES.has(node.name) ? 0 : 4;
 		}
-		// Default: folders first, then alphabetical
+		const category = getFolderCategory(node);
+		if (category === 'claude-system') return 0;
+		if (category === 'project') return 1;
+		if (category === 'custom-app') return 2;
+		return 3;
+	}, []);
+
+	// Sort: claude system → projects → custom apps → regular folders → regular files
+	const orderedFiles = useMemo(() => {
 		return [...files].sort((a, b) => {
-			if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+			const aGroup = getSortGroup(a);
+			const bGroup = getSortGroup(b);
+			if (aGroup !== bGroup) return aGroup - bGroup;
 			return a.name.localeCompare(b.name);
 		});
-	}, [files, iconOrder]);
+	}, [files, getSortGroup]);
 
 	// Keyboard shortcuts
 	useEffect(() => {
@@ -612,7 +590,7 @@ export function ClaudeOS() {
 			data-testid="desktop"
 			className={`relative flex-1 overflow-hidden ${darkMode ? 'dark' : ''}`}
 			style={{
-				backgroundColor: 'white',
+				backgroundColor: '#ffffff',
 			}}
 			onClick={handleDesktopClick}
 			onContextMenu={handleDesktopContextMenu}
@@ -661,7 +639,7 @@ export function ClaudeOS() {
 						display: 'grid',
 						gridTemplateColumns: `repeat(auto-fill, ${GRID_CELL_WIDTH}px)`,
 						gridTemplateRows: `repeat(auto-fill, ${GRID_CELL_HEIGHT}px)`,
-						gridAutoFlow: 'column', // Vertical-first like macOS
+						gridAutoFlow: 'row', // Left-to-right, groups form horizontal bands
 						gap: '4px',
 						alignContent: 'start',
 					}}

@@ -8,8 +8,8 @@
 ## Why You're Fresh
 
 You didn't implement the changes. You have no memory of what was tried or what was hard. You see only:
-- `Desktop/conversations/{conversation-id}/spec.md` — Requirements
-- `Desktop/conversations/{conversation-id}/plan.md` — Verification criteria
+- Spec (passed via `$SPEC_PATH`) — Requirements
+- `$WORKSPACE/plan.md` — Verification criteria
 - The current state of the external codebase
 
 Unbiased judgment.

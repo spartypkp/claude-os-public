@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/conversations/{conversation-id}/spec.md` — Chief's original goal
-- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's research plan
-- `Desktop/conversations/{conversation-id}/progress.md` — History of iterations (if not iteration 1)
+- Spec (passed via `$SPEC_PATH`) — Chief's original goal
+- `$WORKSPACE/plan.md` — Preparation's research plan
+- `$WORKSPACE/progress.md` — History of iterations (if not iteration 1)
 
 ---
 
@@ -94,9 +94,9 @@ If Verification finds gaps:
 
 ## Output Location
 
-Write your deliverable to:
-- `Desktop/conversations/{conversation-id}/output.md` for documents
-- `Desktop/conversations/{conversation-id}/report.md` for research reports
-- `Desktop/conversations/{conversation-id}/analysis.md` for analysis
+Write your deliverable directly to Desktop or a domain-specific folder:
+- `Desktop/document-name.md` for general documents
+- `Desktop/{domain}/report-name.md` for domain-specific reports
+- `Desktop/analysis-name.md` for analysis
 
-Or whatever filename Preparation specified in the plan.
+The plan should specify the exact output path. Never write final outputs to workspace — they go directly to their permanent location.

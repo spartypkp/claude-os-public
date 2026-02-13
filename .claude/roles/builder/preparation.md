@@ -28,10 +28,10 @@ You're the architect designing the solution, not yet building it.
 **For directory-specific work, use subshells:**
 ```bash
 # Don't do this - persistent cd breaks subsequent relative paths:
-cd .engine/src/modules/my_app
+cd .engine/src/apps/training_will
 
 # Do this - subshell isolates the cd:
-(cd .engine/src/modules/my_app && pytest)
+(cd .engine/src/apps/training_will && pytest)
 ```
 
 **Why this matters:**
@@ -43,7 +43,7 @@ Using absolute paths ensures files always go to the correct location.
 
 ## What You Receive
 
-Chief has written a lightweight functional spec in `Desktop/conversations/{conversation-id}/spec.md` containing:
+Chief has written a lightweight functional spec, passed to you via `$SPEC_PATH`. It contains:
 - **Problem statement** - What's broken or missing
 - **Functional requirements** - What needs to be true when done
 - **Context** - Where the code lives, relevant background
@@ -59,7 +59,7 @@ That's your responsibility.
 
 ## Your Job
 
-Create `Desktop/conversations/{conversation-id}/plan.md` with four key sections:
+Create `$WORKSPACE/plan.md` with four key sections:
 
 ### 1. Technical Approach
 Break down HOW you'll solve this into specific steps. Be concrete about what needs to change.
@@ -104,7 +104,7 @@ Include these as a baseline depending on what's being built. Preparation can add
 
 **Backend work:**
 - `python3 -c "import module"` — syntax valid
-- `curl http://localhost:5001/api/endpoint` — returns expected response
+- `curl http://localhost:${CLAUDE_OS_PORT:-5001}/api/endpoint` — returns expected response
 - Response JSON shape matches what frontend expects (if frontend consumes it)
 
 **UI/Frontend work:**

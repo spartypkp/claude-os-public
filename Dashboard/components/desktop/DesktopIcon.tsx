@@ -28,6 +28,41 @@ function ClaudeBadge() {
 	);
 }
 
+// Lock badge for protected folders (e.g. Projects)
+function LockBadge() {
+	return (
+		<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-[#22C55E] to-[#16A34A] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#1e1e1e]">
+			<svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+				<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+				<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+			</svg>
+		</div>
+	);
+}
+
+// App badge for custom app folders — small grid icon
+function AppBadge() {
+	return (
+		<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#2563EB] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#1e1e1e]">
+			<svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="currentColor">
+				<rect x="1" y="1" width="6" height="6" rx="1" />
+				<rect x="9" y="1" width="6" height="6" rx="1" />
+				<rect x="1" y="9" width="6" height="6" rx="1" />
+				<rect x="9" y="9" width="6" height="6" rx="1" />
+			</svg>
+		</div>
+	);
+}
+
+// File type badge — small pill showing extension in bottom-right (matches ClaudeBadge position)
+function FileTypeBadge({ ext }: { ext: string }) {
+	return (
+		<div className="absolute -bottom-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-gray-500/80 flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#1e1e1e]">
+			<span className="text-[7px] font-bold text-white uppercase leading-none">{ext}</span>
+		</div>
+	);
+}
+
 
 interface DesktopIconProps {
 	node: FileTreeNode;
@@ -151,6 +186,8 @@ export function DesktopIcon({
 	// Use isSystem from API if available, fallback to hardcoded check for backwards compatibility
 	const category = node.type === 'directory' ? getFolderCategory(node) : 'regular';
 	const isClaudeSystem = node.isSystem ?? (category === 'claude-system' || CLAUDE_SYSTEM_FILES.has(node.name));
+	const isProject = category === 'project';
+	const isCustomApp = category === 'custom-app';
 
 	// Get icon config with proper defaults
 	const fileIconSpec = getFileIconSpec(node.name, { isSystemFile: isClaudeSystem });
@@ -160,10 +197,18 @@ export function DesktopIcon({
 
 	const Icon = config.icon;
 
-	// Format display name
-	const displayName = node.name
-		.replace(/_/g, ' ')
-		.replace(/-/g, ' ');
+	// File extension for type badge
+	const fileExt = node.type === 'file'
+		? (node.name.split('.').pop() || '').toLowerCase()
+		: null;
+
+	// Format display name: strip .md extension, underscores to spaces for folders
+	const baseName = node.type === 'file'
+		? node.name.replace(/\.md$/, '')
+		: node.name;
+	const displayName = node.type === 'directory'
+		? baseName.replace(/[-_]/g, ' ')
+		: baseName.replace(/_/g, ' ');
 
 	const capitalizedName = node.type === 'directory'
 		? displayName
@@ -197,6 +242,9 @@ export function DesktopIcon({
 					)}
 				</div>
 				{isClaudeSystem && <ClaudeBadge />}
+				{isProject && <LockBadge />}
+				{isCustomApp && <AppBadge />}
+				{!isClaudeSystem && fileExt && <FileTypeBadge ext={fileExt} />}
 			</div>
 		);
 	};
@@ -214,7 +262,7 @@ export function DesktopIcon({
 					? 'bg-[#DA7756]/30 ring-1 ring-[#DA7756]'
 					: (isOver || isNativeDragOver) && !isDragging && node.type === 'directory'
 					? 'bg-[#DA7756]/20 ring-2 ring-[#DA7756]/50 ring-dashed'
-					: 'hover:bg-white/15'
+					: 'hover:bg-black/5 dark:hover:bg-white/15'
 				}
       `}
 			onClick={onSelect}
@@ -255,8 +303,7 @@ export function DesktopIcon({
 				/>
 			) : (
 				<span
-				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-white font-medium"
-				style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0px 1px rgba(0,0,0,0.5)' }}
+				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-gray-800 dark:text-white font-medium"
 			>
 				{capitalizedName}
 			</span>

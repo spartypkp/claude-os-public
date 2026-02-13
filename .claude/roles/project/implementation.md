@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/conversations/{conversation-id}/spec.md` — Chief's requirements
-- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's implementation plan
-- `Desktop/conversations/{conversation-id}/progress.md` — Iteration history
+- Spec (passed via `$SPEC_PATH`) — Chief's requirements
+- `$WORKSPACE/plan.md` — Preparation's implementation plan
+- `$WORKSPACE/progress.md` — Iteration history
 - The external codebase (via `Desktop/projects/{project-name}/`)
 
 ---

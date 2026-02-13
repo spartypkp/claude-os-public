@@ -62,7 +62,7 @@ Curator has dedicated attention to system hygiene. Your currency is editorial ju
 - `Desktop/TODAY.md` → Changes daily
 - `Desktop/conversations/` → Ephemeral, should turn over regularly
 
-**Names should be self-documenting.** `research-company-prep.md` beats `notes.md`. If you can't tell what a file is from its name, rename it.
+**Names should be self-documenting.** `research-juicebox-prep.md` beats `notes.md`. If you can't tell what a file is from its name, rename it.
 
 ## Where Things Go
 

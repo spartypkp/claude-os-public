@@ -8,9 +8,9 @@
 ## Why You're Fresh
 
 You didn't generate these ideas. You have no attachment to them. You see only:
-- `Desktop/conversations/{conversation-id}/spec.md` — The problem/request
-- `Desktop/conversations/{conversation-id}/plan.md` — Evaluation criteria
-- `Desktop/conversations/{conversation-id}/ideas.md` — The generated ideas
+- Spec (passed via `$SPEC_PATH`) — The problem/request
+- `$WORKSPACE/plan.md` — Evaluation criteria
+- The generated ideas file — The ideas to evaluate
 
 Objective evaluation.
 

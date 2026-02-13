@@ -8,18 +8,21 @@ set -euo pipefail
 
 SESSION="life"
 MODE="restart"
+START_CHIEF="true"
 
 usage() {
-    echo "Usage: ./restart.sh [--stop]"
+    echo "Usage: ./restart.sh [--stop] [--no-chief]"
     echo ""
     echo "Options:"
-    echo "  --stop    Stop Claude OS (kill tmux session)"
-    echo "  --help    Show this help"
+    echo "  --stop      Stop Claude OS (kill tmux session)"
+    echo "  --no-chief  Only restart services, don't touch Chief"
+    echo "  --help      Show this help"
 }
 
 for arg in "$@"; do
     case "$arg" in
         --stop) MODE="stop" ;;
+        --no-chief) START_CHIEF="false" ;;
         --help|-h)
             usage
             exit 0
@@ -36,8 +39,10 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${SCRIPT_DIR}/.engine/data/logs"
 
-BACKEND_URL="http://localhost:5001/api/health"
-DASHBOARD_URL="http://localhost:3000/"
+BACKEND_PORT="${CLAUDE_OS_PORT:-5001}"
+DASH_PORT="${DASHBOARD_PORT:-3000}"
+BACKEND_URL="http://localhost:${BACKEND_PORT}/api/health"
+DASHBOARD_URL="http://localhost:${DASH_PORT}/"
 
 BACKEND_CMD="cd \"${SCRIPT_DIR}\" && \"${SCRIPT_DIR}/venv/bin/python\" .engine/src/main.py 2>&1 | tee -a \"${LOG_DIR}/backend.log\""
 DASHBOARD_CMD="cd \"${SCRIPT_DIR}/Dashboard\" && npm run dev 2>&1 | tee -a \"${LOG_DIR}/dashboard.log\""
@@ -128,11 +133,17 @@ echo ""
 
 ensure_session
 
-# Backend
+# Backend (start first — Dashboard depends on it)
 ensure_window "backend" "${SCRIPT_DIR}"
 respawn_service "backend" "${BACKEND_CMD}"
 
-# Dashboard
+echo "==> Waiting for backend..."
+if ! wait_for_url "${BACKEND_URL}" "Backend"; then
+    print_pane_tail "backend" 80
+    exit 1
+fi
+
+# Dashboard (start after backend is healthy)
 ensure_window "dashboard" "${SCRIPT_DIR}"
 respawn_service "dashboard" "${DASHBOARD_CMD}"
 
@@ -140,26 +151,23 @@ respawn_service "dashboard" "${DASHBOARD_CMD}"
 # ensure_window "my-project-api" "${CUSTOM_PROJECT_DIR}"
 # respawn_service "my-project-api" "${CUSTOM_PROJECT_CMD}"
 
-# Chief window (no auto-start of Claude)
-if ! window_exists "chief"; then
-    tmux new-window -t "${SESSION}" -n chief -c "${SCRIPT_DIR}"
-    tmux send-keys -t "${SESSION}:chief" "source venv/bin/activate" C-m
-    tmux send-keys -t "${SESSION}:chief" "# Run 'claude' to start Claude Code" C-m
-fi
+# Chief window
+ensure_window "chief" "${SCRIPT_DIR}"
 
-echo "==> Waiting for services..."
-if ! wait_for_url "${BACKEND_URL}" "Backend"; then
-    print_pane_tail "backend" 80
-    exit 1
-fi
-
+echo "==> Waiting for dashboard..."
 if ! wait_for_url "${DASHBOARD_URL}" "Dashboard"; then
     print_pane_tail "dashboard" 80
     exit 1
 fi
 
+# Chief session (proper env vars via spawn_chief.py)
+if [[ "${START_CHIEF}" == "true" ]]; then
+    echo "==> Starting Chief..."
+    "${SCRIPT_DIR}/venv/bin/python" "${SCRIPT_DIR}/.engine/src/adapters/cli/spawn_chief.py" --force 2>&1 || true
+fi
+
 echo ""
 echo "Claude OS services restarted."
-echo "  Backend:    http://localhost:5001"
-echo "  Dashboard:  http://localhost:3000"
+echo "  Backend:    http://localhost:${BACKEND_PORT}"
+echo "  Dashboard:  http://localhost:${DASH_PORT}"
 echo ""

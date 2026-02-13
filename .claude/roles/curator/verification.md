@@ -8,8 +8,8 @@
 ## Why You're Fresh
 
 You didn't do the audit. You don't know which areas were messy, which decisions were hard, or what compromises were made. You see only:
-- `Desktop/conversations/{conversation-id}/spec.md` — What was requested
-- `Desktop/conversations/{conversation-id}/plan.md` — Verification criteria
+- Spec (passed via `$SPEC_PATH`) — What was requested
+- `$WORKSPACE/plan.md` — Verification criteria
 - The actual filesystem state — What exists now
 - The audit report — What was changed and why
 

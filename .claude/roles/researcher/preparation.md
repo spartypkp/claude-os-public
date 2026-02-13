@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a lightweight spec in `Desktop/conversations/{conversation-id}/spec.md` containing:
+Chief has written a lightweight spec, passed to you via `$SPEC_PATH`. It contains:
 - Research question or topic
 - Why the research matters (context)
 - Scope constraints (depth, timeline, specific angles)
@@ -36,7 +36,7 @@ That's your job.
 
 ## Your Deliverable
 
-Create `Desktop/conversations/{conversation-id}/plan.md` containing:
+Create `$WORKSPACE/plan.md` containing:
 
 ### 1. Research Questions
 Break the spec's topic into specific, answerable questions. The original question is often too broad — decompose it.

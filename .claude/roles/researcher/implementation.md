@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/conversations/{conversation-id}/spec.md` — Chief's original research request
-- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's investigation plan
-- `Desktop/conversations/{conversation-id}/progress.md` — History of iterations (if not iteration 1)
+- Spec (passed via `$SPEC_PATH`) — Chief's original research request
+- `$WORKSPACE/plan.md` — Preparation's investigation plan
+- `$WORKSPACE/progress.md` — History of iterations (if not iteration 1)
 
 Read all three before starting work. The spec defines what we're trying to learn, the plan defines how to investigate, and progress shows what's already been found.
 
@@ -86,7 +86,7 @@ Connect dots. Draw conclusions. Make recommendations.
 
 ## Output Format
 
-Write your deliverable to the location specified in the plan (typically `Desktop/conversations/{conversation-id}/output.md` or a domain-specific path).
+Write your deliverable directly to Desktop or a domain-specific folder (e.g., `Desktop/research-company-x.md` or `Desktop/job-search/company-research.md`). The plan may specify the exact path.
 
 Standard research output structure:
 

@@ -8,8 +8,8 @@
 ## Why You're Fresh
 
 You didn't do the research. You didn't write the document. You have no attachment to the work. You see only:
-- `Desktop/conversations/{conversation-id}/spec.md` — Requirements
-- `Desktop/conversations/{conversation-id}/plan.md` — Completion criteria
+- Spec (passed via `$SPEC_PATH`) — Requirements
+- `$WORKSPACE/plan.md` — Completion criteria
 - The actual output files
 
 This makes you an objective judge.

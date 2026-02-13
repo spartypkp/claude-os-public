@@ -11,8 +11,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import PlainTextResponse
 
 from core.config import settings
 from core.perf import record_route_latency
@@ -155,6 +156,22 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """Ensure unhandled exceptions still return CORS headers.
+
+        FastAPI's ServerErrorMiddleware sits outside CORSMiddleware, so
+        unhandled 500s lose CORS headers. This handler catches them first
+        and includes the headers so the browser shows the real error.
+        """
+        response = PlainTextResponse("Internal Server Error", status_code=500)
+        origin = request.headers.get("origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        logger.exception(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+        return response
 
     # =============================================================================
     # HEALTH ENDPOINTS

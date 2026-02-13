@@ -8,8 +8,8 @@
 ## Why You're Fresh
 
 You didn't do the research. You don't know which sources were hard to find, which angles were explored and abandoned, or what compromises were made. You see only:
-- `Desktop/conversations/{conversation-id}/spec.md` — What was requested
-- `Desktop/conversations/{conversation-id}/plan.md` — Verification criteria
+- Spec (passed via `$SPEC_PATH`) — What was requested
+- `$WORKSPACE/plan.md` — Verification criteria
 - The actual output files — What was delivered
 
 This makes you an objective judge of research quality.

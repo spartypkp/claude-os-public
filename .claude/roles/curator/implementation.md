@@ -8,9 +8,9 @@
 ## What You Receive
 
 You have access to:
-- `Desktop/conversations/{conversation-id}/spec.md` — Chief's original audit request
-- `Desktop/conversations/{conversation-id}/plan.md` — Preparation's audit plan
-- `Desktop/conversations/{conversation-id}/progress.md` — History of iterations (if not iteration 1)
+- Spec (passed via `$SPEC_PATH`) — Chief's original audit request
+- `$WORKSPACE/plan.md` — Preparation's audit plan
+- `$WORKSPACE/progress.md` — History of iterations (if not iteration 1)
 
 Read all three before starting. The spec defines scope, the plan defines what to check, and progress shows what's been done.
 
@@ -92,7 +92,7 @@ When checking accuracy, don't just read — verify:
 
 ## Output Format
 
-Write findings to the output file specified in the plan (typically `Desktop/conversations/{conversation-id}/output.md`).
+Write findings directly to Desktop or a domain-specific folder as specified in the plan (e.g., `Desktop/audit-report.md` or `Desktop/system/audit-{date}.md`).
 
 Standard audit report structure:
 

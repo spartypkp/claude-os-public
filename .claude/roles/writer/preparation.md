@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a lightweight spec in `Desktop/conversations/{conversation-id}/spec.md`. It contains:
+Chief has written a lightweight spec, passed to you via `$SPEC_PATH`. It contains:
 - Research question or writing goal
 - Scope and constraints
 - Context (background, why this matters)
@@ -51,7 +51,7 @@ Using absolute paths ensures files always go to the correct location.
 
 ## Your Deliverable
 
-Create `Desktop/conversations/{conversation-id}/plan.md` containing:
+Create `$WORKSPACE/plan.md` containing:
 
 ### 1. Research Strategy
 For research tasks:

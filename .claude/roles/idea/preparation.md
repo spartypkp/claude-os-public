@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a spec in `Desktop/conversations/{conversation-id}/spec.md` requesting idea generation. It contains:
+Chief has written a spec, passed to you via `$SPEC_PATH`, requesting idea generation. It contains:
 - Problem or opportunity
 - Constraints (time, budget, technical, etc.)
 - Context (who it's for, why it matters)
@@ -42,7 +42,7 @@ Using absolute paths ensures files always go to the correct location.
 
 ## Your Deliverable
 
-Create `Desktop/conversations/{conversation-id}/plan.md` containing:
+Create `$WORKSPACE/plan.md` containing:
 
 ### 1. Ideation Approach
 How will you generate ideas? Techniques:

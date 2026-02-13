@@ -11,6 +11,8 @@ export const CLAUDE_SYSTEM_FILES = new Set([
 	'MEMORY.md',
 	'IDENTITY.md',
 	'SYSTEM-INDEX.md',
+	'SCHEDULE.md',
+	'HEARTBEAT.md',
 ]);
 
 // Claude system folders (orange + badge)
