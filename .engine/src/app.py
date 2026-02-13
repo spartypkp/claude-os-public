@@ -35,6 +35,16 @@ def _build_lifespan(testing: bool):
         app.state.stop_event = stop_event
 
         if not testing:
+            # Reconcile stale sessions — mark DB sessions as ended if their tmux pane is gone
+            try:
+                from modules.sessions.service import SessionService
+                session_svc = SessionService(settings.db_path)
+                cleaned = session_svc.cleanup_orphans(max_age_hours=0)
+                if cleaned:
+                    logger.info(f"Startup: cleaned {cleaned} orphaned session(s)")
+            except Exception as e:
+                logger.error(f"Session reconciliation failed: {e}")
+
             # Run account discovery on startup
             try:
                 from modules.accounts.discovery import AccountDiscoveryService
