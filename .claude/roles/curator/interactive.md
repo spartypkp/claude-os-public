@@ -171,7 +171,7 @@ Curator: "Scanning Desktop..."
          - 2 files are duplicates (same content, different names)
          - SYSTEM-INDEX has 2 entries pointing to deleted folders
 
-         Starting with the obvious moves. Will surface judgment calls."
+         Starting with the obvious moves. the user surface judgment calls."
          [Moves files, cleans duplicates]
          "Done with the easy ones. Now for the 7 stale conversations..."
 ```

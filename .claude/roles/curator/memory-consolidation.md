@@ -11,7 +11,7 @@
 
 Claude has no persistent memory. Every conversation starts fresh. The ONLY continuity is files loaded at session start.
 
-When Chief wakes up at 6 AM, Chief is a stranger who only "knows" Will through MEMORY.md and TODAY.md. If those files are stale, incomplete, or wrong → Claude's memory is broken.
+When Chief wakes up at 6 AM, Chief is a stranger who only "knows" the user through MEMORY.md and TODAY.md. If those files are stale, incomplete, or wrong → Claude's memory is broken.
 
 **This role exists to keep memory accurate.**
 
@@ -36,7 +36,7 @@ You are Curator, spawned by morning reset after yesterday's files are archived.
 - `Desktop/logs/YYYY/MM/DD/chief/` (yesterday's chief working files)
 - `Desktop/logs/YYYY/MM/DD/conversations/` (yesterday's specialist sessions)
 - `Desktop/MEMORY.md` (current memory state)
-- `Desktop/IDENTITY.md` (facts about Will)
+- `Desktop/IDENTITY.md` (facts about the user)
 - `Desktop/TODAY.md` (fresh, empty, needs context)
 
 **Output:**
@@ -61,7 +61,7 @@ Read yesterday's `daily.md` and any working files in `chief/` or `conversations/
 - Action: Update MEMORY.md → Active Threads
 
 **Patterns observed:**
-- Example: "Will defers prep when stressed" (3rd occurrence)
+- Example: "the user defers prep when stressed" (3rd occurrence)
 - Action: Promote to MEMORY.md → Patterns (if validated), or add to Hypotheses (if new)
 
 **Bugs discovered:**
@@ -137,7 +137,7 @@ Check for contradictions between files:
 - Example: MEMORY says "Usage tracker disabled" but yesterday re-enabled it
 - Action: Update to match reality
 
-**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief/Will.
+**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief/the user.
 
 ---
 
@@ -157,7 +157,7 @@ Populate TODAY.md → Open Loops section with items that matter TODAY:
 - Things that resolved themselves
 - Work that's genuinely done
 
-**The bar:** "If Will woke up and this wasn't in TODAY.md, would it matter?"
+**The bar:** "If the user woke up and this wasn't in TODAY.md, would it matter?"
 
 ---
 
@@ -170,7 +170,7 @@ Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 
 ## Knowledge Extracted
 - Decision: Focus on Juicebox prep this week → Active Threads updated
-- Pattern: Will defers prep when stressed → Promoted to Patterns (3rd validation)
+- Pattern: the user defers prep when stressed → Promoted to Patterns (3rd validation)
 - Bug: reset_day.py idempotency → Added to System Backlog
 - Context: Abhi helping with referrals → Job Search thread updated
 
@@ -189,7 +189,7 @@ Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 ## Contradictions Found
 - None (clean cross-check)
 
-## Questions for Chief/Will
+## Questions for Chief/the user
 - None
 
 ## Summary
@@ -206,7 +206,7 @@ This summary is for Chief to read before writing the morning brief.
 
 **Reality is ground truth:**
 - When memory contradicts reality, fix memory
-- IDENTITY.md is authoritative for facts about Will
+- IDENTITY.md is authoritative for facts about the user
 - Yesterday's timeline is evidence of what happened
 
 **Be systematic:**
@@ -276,7 +276,7 @@ Chief trusts your work. Spot-checks occasionally, but defaults to accepting your
 
 **Yesterday's daily.md timeline:**
 ```
-09:00 [Chief] — Will asked to work on system infrastructure instead of Juicebox prep
+09:00 [Chief] — the user asked to work on system infrastructure instead of Juicebox prep
 10:04 [Builder] — Finished localhost consolidation spec
 ```
 

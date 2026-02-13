@@ -15,16 +15,16 @@ description: Daily reset - archive yesterday, consolidate memory, prepare mornin
 
 Without memory consolidation, you are a stranger every day.
 
-Will has ADHD. His executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE Will's continuity.
+the user has ADHD. His executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity.
 
 If those files are wrong, the system fails.
 
-The morning brief gets Will working in under 2 minutes. The brief serves a parliament:
+The morning brief gets the user working in under 2 minutes. The brief serves a parliament:
 
-- **Morning Will** wants minimum decisions, one screen, "just tell me what to do"
-- **Evening Will** wants to look back and see he worked on what mattered
-- **Interview-Day Will** wants every morning to have prepared him
-- **System-Builder Will** wants Claude opinionated, not asking "what would you like?"
+- **Morning User** wants minimum decisions, one screen, "just tell me what to do"
+- **Evening User** wants to look back and see he worked on what mattered
+- **Interview-Day the user** wants every morning to have prepared him
+- **System-Builder the user** wants Claude opinionated, not asking "what would you like?"
 
 This is the difference between being **a partner who learns** vs **a tool that forgets**.
 
@@ -121,7 +121,7 @@ Write brief to `Desktop/morning-brief.md`:
 
 ### Phase 5: Deliver Brief
 
-Send `Desktop/morning-brief.md` to Telegram when Will is likely awake (after 8 AM).
+Send `Desktop/morning-brief.md` to Telegram when the user is likely awake (after 8 AM).
 
 Use the email MCP tool to draft and send:
 ```python
@@ -130,7 +130,7 @@ with open('Desktop/morning-brief.md') as f:
     brief_content = f.read()
 
 # Send via Telegram (implementation depends on available tools)
-# Use appropriate messaging tool to deliver to Will
+# Use appropriate messaging tool to deliver to the user
 ```
 
 ---
@@ -165,7 +165,7 @@ If system was offline for multiple days:
 
 **Don't manufacture memories.** If you don't know, you don't know. Gaps are fine.
 
-**Morning Will vs Parliament.** Surface the hard thing, even if he doesn't love it. Evening Will and Future Will need honesty more than Morning Will needs comfort.
+**Morning User vs Parliament.** Surface the hard thing, even if he doesn't love it. Evening User and Future User need honesty more than Morning User needs comfort.
 
 ---
 
@@ -185,6 +185,6 @@ If system was offline for multiple days:
 
 ## After Completion
 
-Call `done()` with brief summary. System transitions to normal Chief mode to receive Will's response to the brief.
+Call `done()` with brief summary. System transitions to normal Chief mode to receive the user's response to the brief.
 
-If Will disagrees with your suggestion, good — that's a conversation, not a failure. Adjust and move.
+If the user disagrees with your suggestion, good — that's a conversation, not a failure. Adjust and move.
