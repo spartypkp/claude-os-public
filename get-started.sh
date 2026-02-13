@@ -220,18 +220,12 @@ if [[ ! -f ".env" ]] && [[ -f ".env.example" ]]; then
     success "Created .env from template"
 fi
 
-if [[ ! -f ".mcp.json" ]] && [[ -f ".mcp.json.example" ]]; then
-    cp .mcp.json.example .mcp.json
-    success "Created .mcp.json from template"
-fi
-
 # Directories
 mkdir -p .engine/data/db .engine/data/logs Desktop/conversations Desktop/logs Desktop/projects
 
 # Database
 if [[ ! -f ".engine/data/db/system.db" ]]; then
     info "Initializing database..."
-    source venv/bin/activate
     $PYTHON_CMD -c "
 import sqlite3, os
 db_path = '.engine/data/db/system.db'
@@ -256,44 +250,36 @@ chmod +x .claude/tmux-status.sh 2>/dev/null || true
 echo ""
 info "Starting Claude OS services..."
 
-# Use restart.sh if it exists, otherwise start manually
-if [[ -f "./restart.sh" ]]; then
-    chmod +x ./restart.sh
-    ./restart.sh
-else
-    # Fallback: start services manually in tmux
-    if ! tmux has-session -t life 2>/dev/null; then
-        tmux new-session -d -s life -n backend -c "$INSTALL_DIR"
-        tmux send-keys -t life:backend "source venv/bin/activate && python .engine/src/main.py" C-m
-        tmux new-window -t life -n dashboard -c "$INSTALL_DIR"
-        tmux send-keys -t life:dashboard "cd Dashboard && npm run dev" C-m
-    fi
-fi
-
-# Wait for services (restart.sh already waits, but double-check for first install)
 BACKEND_PORT="${CLAUDE_OS_PORT:-5001}"
 DASH_PORT="${DASHBOARD_PORT:-3000}"
 
-info "Waiting for services..."
-for i in $(seq 1 15); do
+# Start backend and dashboard only (Chief starts separately for onboarding)
+chmod +x ./restart.sh
+./restart.sh --no-chief
+
+# Wait for backend
+info "Waiting for backend..."
+for i in $(seq 1 30); do
     if curl -s --max-time 2 "http://localhost:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
         success "Backend ready"
         break
     fi
-    [[ $i -eq 15 ]] && warn "Backend still starting (check tmux if issues)"
+    [[ $i -eq 30 ]] && warn "Backend still starting (check 'tmux a -t life' → backend window)"
     sleep 1
 done
 
-for i in $(seq 1 20); do
+# Wait for dashboard
+info "Waiting for dashboard..."
+for i in $(seq 1 30); do
     if curl -s --max-time 2 "http://localhost:${DASH_PORT}" >/dev/null 2>&1; then
         success "Dashboard ready"
         break
     fi
-    [[ $i -eq 20 ]] && warn "Dashboard still building (normal for first run)"
+    [[ $i -eq 30 ]] && warn "Dashboard still building (normal for first run)"
     sleep 1
 done
 
-# Open Dashboard
+# Open Dashboard in browser
 open "http://localhost:${DASH_PORT}" 2>/dev/null || true
 
 # ══════════════════════════════════════════════
@@ -304,19 +290,25 @@ echo ""
 echo "╔═══════════════════════════════════════╗"
 echo "║        Claude OS is running!          ║"
 echo "╠═══════════════════════════════════════╣"
-echo "║  Dashboard:  http://localhost:${DASH_PORT}    ║"
-echo "║  Backend:    http://localhost:${BACKEND_PORT}    ║"
+echo "║  Dashboard: http://localhost:${DASH_PORT}     ║"
+echo "║  Backend:   http://localhost:${BACKEND_PORT}     ║"
 echo "╚═══════════════════════════════════════╝"
 echo ""
-echo -e "${DIM}Launching Claude inside tmux...${NC}"
-echo ""
+info "Starting Claude..."
 
-# Wait for Claude to be ready in the chief pane
-# (spawn_chief.py was called by restart.sh, Claude is booting)
-info "Waiting for Claude to initialize..."
-sleep 5  # Give Claude time to start and load hooks
+# Start Chief in tmux (spawn_chief.py registers session, sets env vars, waits for ready)
+"${INSTALL_DIR}/venv/bin/python" "${INSTALL_DIR}/.engine/src/adapters/cli/spawn_chief.py" 2>&1 || {
+    warn "Could not auto-start Claude. You can start manually:"
+    echo "  tmux attach -t life"
+    echo "  # In the chief window, run: claude"
+    exit 0
+}
+
+# Give hooks a moment to load
+sleep 3
 
 # Inject /setup into the running Chief session
+info "Starting onboarding..."
 tmux send-keys -t life:chief "/setup" C-m
 
 # Attach user to tmux on the chief window
