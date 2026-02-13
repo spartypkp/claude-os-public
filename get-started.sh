@@ -257,28 +257,6 @@ DASH_PORT="${DASHBOARD_PORT:-3000}"
 chmod +x ./restart.sh
 ./restart.sh --no-chief
 
-# Wait for backend
-info "Waiting for backend..."
-for i in $(seq 1 30); do
-    if curl -s --max-time 2 "http://localhost:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
-        success "Backend ready"
-        break
-    fi
-    [[ $i -eq 30 ]] && warn "Backend still starting (check 'tmux a -t life' → backend window)"
-    sleep 1
-done
-
-# Wait for dashboard
-info "Waiting for dashboard..."
-for i in $(seq 1 30); do
-    if curl -s --max-time 2 "http://localhost:${DASH_PORT}" >/dev/null 2>&1; then
-        success "Dashboard ready"
-        break
-    fi
-    [[ $i -eq 30 ]] && warn "Dashboard still building (normal for first run)"
-    sleep 1
-done
-
 # Open Dashboard in browser
 open "http://localhost:${DASH_PORT}" 2>/dev/null || true
 
@@ -312,5 +290,6 @@ info "Starting onboarding..."
 tmux send-keys -t life:chief "/setup" C-m
 
 # Attach user to tmux on the chief window
+# When run via curl|bash, stdin is a pipe — reclaim the real terminal
 tmux select-window -t life:chief
-exec tmux attach-session -t life
+exec tmux attach-session -t life < /dev/tty
