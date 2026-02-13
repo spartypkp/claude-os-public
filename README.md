@@ -11,7 +11,7 @@ Claude OS is an open-source personal operating system where Claude manages your 
 ## Quickstart
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/spartypkp/claude-os/main/get-started.sh | bash
+curl -fsSL https://raw.githubusercontent.com/spartypkp/claude-os-public/main/get-started.sh | bash
 ```
 
 This clones the repo, installs dependencies, sets up the database, starts services, and launches Claude Code with the `/setup` onboarding conversation.

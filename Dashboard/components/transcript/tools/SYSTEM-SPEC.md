@@ -181,7 +181,6 @@ Reusable components for building expanded views.
 | calendar | `CalendarExpanded` |
 | messages | `MessagesExpanded` |
 | opportunity | `OpportunityExpanded` |
-| turbine | `TurbineExpanded` |
 | pet | `PetExpanded` |
 | reply_to_chief | `ReplyExpanded` |
 | Skill | `SkillExpanded` |

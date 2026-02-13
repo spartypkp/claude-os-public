@@ -612,9 +612,7 @@ export function ClaudeOS() {
 			data-testid="desktop"
 			className={`relative flex-1 overflow-hidden ${darkMode ? 'dark' : ''}`}
 			style={{
-				backgroundImage: 'url(/wallpaper.png)',
-				backgroundSize: 'cover',
-				backgroundPosition: 'center',
+				backgroundColor: 'white',
 			}}
 			onClick={handleDesktopClick}
 			onContextMenu={handleDesktopContextMenu}

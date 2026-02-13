@@ -9,7 +9,6 @@ import {
 	Mail,
 	MessageCircle,
 	Monitor,
-	Rocket,
 	Settings,
 	UserCog,
 	Users,
@@ -18,11 +17,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Import app manifests to trigger registration
-import '@/app/ember/manifest';
-import '@/app/job-search/manifest';
-import '@/app/speedrun/manifest';
-import '@/app/training-will/manifest';
-import '@/app/turbine/manifest';
+import '@/app/reading-list/manifest';
 
 // ==========================================
 // CONSTANTS

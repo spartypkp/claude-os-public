@@ -16,7 +16,6 @@ import {
   FolderGit2,
   GraduationCap,
   Lightbulb,
-  Search as SearchIcon,
   Telescope,
   LucideIcon,
 } from 'lucide-react';
@@ -115,14 +114,6 @@ export const ROLE_CONFIGS: Record<string, RoleConfig> = {
     label: 'Money',
     description: 'Trading strategies and analysis',
     icon: CircleDollarSign,
-    color: CLAUDE_COLOR,
-    bgColor: CLAUDE_BG,
-    ringColor: CLAUDE_RING,
-  },
-  'job-search': {
-    label: 'Job Search',
-    description: 'Pipeline, research, applications',
-    icon: SearchIcon,
     color: CLAUDE_COLOR,
     bgColor: CLAUDE_BG,
     ringColor: CLAUDE_RING,

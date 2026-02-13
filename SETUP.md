@@ -8,7 +8,7 @@
 
 ```bash
 # Clone
-git clone https://github.com/spartypkp/claude-os.git
+git clone https://github.com/spartypkp/claude-os-public.git
 cd claude-os
 
 # Install (handles all dependencies)
@@ -38,7 +38,7 @@ The install script will handle Python, Node, tmux, and Claude Code CLI if you do
 ### Step 1: Clone and Install
 
 ```bash
-git clone https://github.com/spartypkp/claude-os.git
+git clone https://github.com/spartypkp/claude-os-public.git
 cd claude-os
 ./install.sh
 ```

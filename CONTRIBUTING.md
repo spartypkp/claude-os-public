@@ -32,7 +32,7 @@ Thanks for your interest in contributing! This project is an experiment in using
 
 2. **Clone and install**
    ```bash
-   git clone https://github.com/spartypkp/claude-os.git
+   git clone https://github.com/spartypkp/claude-os-public.git
    cd claude-os
 
    # Backend

@@ -32,8 +32,6 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 | `/desktop/[...path]` | File viewer for Desktop/ files |
 | `/activity` | Today's sessions overview |
 | `/activity/session/[id]` | Session detail with chat UI |
-| `/job-search` | Custom App: Interview prep command center |
-| `/job-search/*` | Leetcode, DS&A, Pipeline, Opportunities |
 | `/system/health` | Backend status, database, scheduler |
 | `/system/metrics` | Worker statistics |
 | `/system/settings` | System configuration |

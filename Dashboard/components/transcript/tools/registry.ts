@@ -29,7 +29,6 @@ import {
 	Search,
 	Star,
 	Terminal,
-	TrendingUp,
 	Workflow,
 	Wrench,
 	Zap,
@@ -648,38 +647,19 @@ const toolConfigs: Record<string, ToolConfig> = {
 			return op || 'manage';
 		},
 	},
-	turbine: {
-		icon: TrendingUp,
-		color: '#f97316',
-		category: 'tool',
-		showToolName: true,
-		getOneLiner: (input) => {
-			const op = input.operation || '';
-			const name = input.raw?.name ? String(input.raw.name) : '';
-			if (name) return `${op} ${truncate(name, 35)}`;
-			if (op === 'scoreboard') return 'strategy scoreboard';
-			if (op === 'market') return 'market analysis';
-			if (op === 'current') return 'active positions';
-			if (op === 'signals') return 'pending signals';
-			if (op === 'stats') return 'performance stats';
-			if (op === 'portfolio') return 'portfolio overview';
-			if (op === 'calibration') return 'calibration check';
-			return op || 'manage';
-		},
-	},
 	pet: {
 		icon: PawPrint,
 		color: '#f59e0b',
 		category: 'tool',
 		showToolName: true,
-		chipLabel: 'EMBER',
+		chipLabel: 'PET',
 		getOneLiner: (input) => {
 			const op = input.operation || '';
 			if (op === 'note' && input.raw?.message) return `note: ${truncate(String(input.raw.message), 30)}`;
-			if (op === 'status') return 'check on Ember';
-			if (op === 'feed') return 'feed Ember';
-			if (op === 'play') return 'play with Ember';
-			if (op === 'history') return 'Ember history';
+			if (op === 'status') return 'check on companion';
+			if (op === 'feed') return 'feed companion';
+			if (op === 'play') return 'play with companion';
+			if (op === 'history') return 'companion history';
 			return op || 'check';
 		},
 	},

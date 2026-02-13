@@ -210,6 +210,8 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     # Add your custom app routers here:
     # from modules.my_app import api as my_app_api
     # app.include_router(my_app_api.router, prefix="/api/my-app")
+    from modules.reading_list import api as reading_list_api
+    app.include_router(reading_list_api.router, prefix="/api/reading-list")
 
     return app
 
