@@ -2,14 +2,17 @@
  * === CUSTOM APP PATTERN ===
  * page.tsx is the main page component for your app route.
  * It fetches data from the backend API and renders the UI.
- * All API calls go to http://localhost:5001/api/{app-name}/.
+ * All API calls go through the centralized API_BASE.
  */
 
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { API_BASE } from '@/lib/api';
 import { ReadingListView } from './components/ReadingListView';
 import { AddItemModal } from './components/AddItemModal';
+import { StatsBar } from './components/StatsBar';
+import { ExplainerBanner } from './components/ExplainerBanner';
 import { Plus } from 'lucide-react';
 
 // === Types ===
@@ -42,7 +45,7 @@ export interface ReadingStats {
 
 type StatusFilter = 'all' | 'want-to-read' | 'reading' | 'finished' | 'abandoned';
 
-const API_BASE = 'http://localhost:5001/api/reading-list';
+const READING_LIST_API = `${API_BASE}/api/reading-list`;
 
 // === Main Page Component ===
 
@@ -58,7 +61,7 @@ export default function ReadingListPage() {
 	const fetchItems = useCallback(async () => {
 		try {
 			const params = filter !== 'all' ? `?status=${filter}` : '';
-			const response = await fetch(`${API_BASE}${params}`);
+			const response = await fetch(`${READING_LIST_API}${params}`);
 			if (!response.ok) throw new Error('Failed to fetch items');
 			const data = await response.json();
 			setItems(data.items);
@@ -70,7 +73,7 @@ export default function ReadingListPage() {
 	// Fetch stats
 	const fetchStats = useCallback(async () => {
 		try {
-			const response = await fetch(`${API_BASE}/stats`);
+			const response = await fetch(`${READING_LIST_API}/stats`);
 			if (!response.ok) throw new Error('Failed to fetch stats');
 			const data = await response.json();
 			setStats(data);
@@ -98,7 +101,7 @@ export default function ReadingListPage() {
 		tags?: string[];
 	}) => {
 		try {
-			const response = await fetch(API_BASE, {
+			const response = await fetch(READING_LIST_API, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(item),
@@ -114,7 +117,7 @@ export default function ReadingListPage() {
 	// Update item handler
 	const handleUpdate = async (id: string, updates: Partial<ReadingItem>) => {
 		try {
-			const response = await fetch(`${API_BASE}/${id}`, {
+			const response = await fetch(`${READING_LIST_API}/${id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(updates),
@@ -129,7 +132,7 @@ export default function ReadingListPage() {
 	// Remove item handler
 	const handleRemove = async (id: string) => {
 		try {
-			const response = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+			const response = await fetch(`${READING_LIST_API}/${id}`, { method: 'DELETE' });
 			if (!response.ok) throw new Error('Failed to remove item');
 			await refresh();
 		} catch (err) {
@@ -155,22 +158,9 @@ export default function ReadingListPage() {
 
 	return (
 		<div className="flex flex-col h-full p-6 gap-4">
-			{/* Header with stats and add button */}
+			{/* Header */}
 			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-4">
-					<h2 className="text-lg font-medium text-white">Reading List</h2>
-					{stats && (
-						<div className="flex items-center gap-3 text-xs text-[#888]">
-							<span>{stats.total} items</span>
-							{stats.by_status.reading > 0 && (
-								<span className="text-emerald-400">{stats.by_status.reading} reading</span>
-							)}
-							{stats.average_rating && (
-								<span className="text-amber-400">avg {stats.average_rating}/5</span>
-							)}
-						</div>
-					)}
-				</div>
+				<h2 className="text-lg font-medium text-white">Reading List</h2>
 				<button
 					onClick={() => setShowAddModal(true)}
 					className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs
@@ -180,6 +170,12 @@ export default function ReadingListPage() {
 					Add Item
 				</button>
 			</div>
+
+			{/* Explainer banner */}
+			<ExplainerBanner />
+
+			{/* Stats bar */}
+			{stats && stats.total > 0 && <StatsBar stats={stats} />}
 
 			{/* Status filter tabs */}
 			<div className="flex items-center gap-1">
@@ -211,6 +207,7 @@ export default function ReadingListPage() {
 			<div className="flex-1 min-h-0 overflow-y-auto">
 				<ReadingListView
 					items={items}
+					filter={filter}
 					onUpdate={handleUpdate}
 					onRemove={handleRemove}
 				/>

@@ -693,6 +693,24 @@ CREATE TABLE IF NOT EXISTS reading_list_items (
     finished_date TEXT
 );
 
+-- Seed data for Reading List example app
+INSERT OR IGNORE INTO reading_list_items (id, title, author, type, status, rating, notes, tags, added_date, started_date, finished_date) VALUES
+    -- Currently reading (3)
+    ('seed-01', 'Thinking, Fast and Slow', 'Daniel Kahneman', 'book', 'reading', NULL, NULL, '["psychology","decision-making"]', '2025-12-15', '2026-01-10', NULL),
+    ('seed-02', 'The Pragmatic Programmer', 'David Thomas & Andrew Hunt', 'book', 'reading', NULL, NULL, '["engineering","craft"]', '2026-01-05', '2026-01-20', NULL),
+    ('seed-03', 'Designing Data-Intensive Applications', 'Martin Kleppmann', 'book', 'reading', NULL, NULL, '["systems","databases"]', '2025-11-20', '2026-02-01', NULL),
+    -- Want to read (4)
+    ('seed-04', 'The Design of Everyday Things', 'Don Norman', 'book', 'want-to-read', NULL, NULL, '["design","ux"]', '2026-02-01', NULL, NULL),
+    ('seed-05', 'Structure and Interpretation of Computer Programs', 'Harold Abelson & Gerald Jay Sussman', 'book', 'want-to-read', NULL, NULL, '["cs","fundamentals"]', '2026-01-28', NULL, NULL),
+    ('seed-06', 'Meditations on First Philosophy', 'Rene Descartes', 'book', 'want-to-read', NULL, NULL, '["philosophy"]', '2026-02-05', NULL, NULL),
+    ('seed-07', 'How to Build a Car', 'Adrian Newey', 'book', 'want-to-read', NULL, NULL, '["engineering","design"]', '2026-02-10', NULL, NULL),
+    -- Finished (3)
+    ('seed-08', 'Attention Is All You Need', 'Vaswani et al.', 'paper', 'finished', 5, 'The transformer paper that changed everything. Dense but essential reading for anyone in ML.', '["ml","transformers"]', '2025-09-01', '2025-09-05', '2025-09-15'),
+    ('seed-09', 'The Mythical Man-Month', 'Frederick P. Brooks Jr.', 'book', 'finished', 4, 'Timeless insights on software project management. "Adding manpower to a late project makes it later" still holds.', '["engineering","management"]', '2025-10-10', '2025-10-15', '2025-11-20'),
+    ('seed-10', 'A Few Useful Things to Know About Machine Learning', 'Pedro Domingos', 'article', 'finished', 4, 'Great overview of practical ML wisdom. Good for building intuition.', '["ml","overview"]', '2025-11-01', '2025-11-01', '2025-11-03'),
+    -- Abandoned (1)
+    ('seed-11', 'Godel, Escher, Bach', 'Douglas Hofstadter', 'book', 'abandoned', NULL, 'Fascinating but too dense for right now. Will revisit when I have more bandwidth.', '["math","philosophy"]', '2025-08-15', '2025-08-20', NULL);
+
 -- =============================================================================
 -- Ember - Claude's Pet
 -- =============================================================================
