@@ -43,7 +43,7 @@ When invoked, you receive what changed (e.g., "Alex submitted application, no lo
      - Desktop/TODAY.md (timeline, open loops)
      - Domain LIFE-SPECs (Desktop/*/LIFE-SPEC.md)
      - Opportunity folders (Desktop/job-search/opportunities/)
-     - Working files (Desktop/working/)
+     - Working files (Desktop/conversations/)
    - Use flexible patterns: if searching for "follow up Thursday", also search "Thursday follow", "follow-up", etc.
 
 3. **Filter results (Read)**
@@ -115,12 +115,12 @@ Return update log:
 ```markdown
 **Updated files:**
 - Desktop/MEMORY.md (line 20, 27, 36) - "Follow up Thursday" → "Application submitted, waiting to hear back"
-- Desktop/job-search/opportunities/anthropic-fde/LIFE-SPEC.md (line 19, 113) - Added status update, removed stale follow-up note
+- Desktop/job-search/opportunities/target-role/LIFE-SPEC.md (line 19, 113) - Added status update, removed stale follow-up note
 - Desktop/TODAY.md - Already updated by Chief (verified)
 
 **Preserved:**
 - Desktop/logs/2026/01/12/daily.md - Historical record, left unchanged
-- Desktop/working/memory-helper-spec.md - Meta-reference to this task
+- Desktop/conversations/memory-helper-spec.md - Meta-reference to this task
 
 **Verification:**
 Grep for "follow up Thursday" now returns:
@@ -170,7 +170,7 @@ What NOT to do:
 
 ### Example 1: Contact status update (Alex application)
 
-**Input:** "Alex submitted the Anthropic application, now waiting. No follow-up needed Thursday."
+**Input:** "Alex submitted the the application, now waiting. No follow-up needed Thursday."
 
 **Process:**
 1. Parse: Alex's status changed from "need to follow up Thursday" to "application submitted, waiting"
@@ -178,19 +178,19 @@ What NOT to do:
 3. Found matches in:
    - Desktop/MEMORY.md (3 locations)
    - Desktop/TODAY.md (1 location - already updated)
-   - Desktop/job-search/opportunities/anthropic-fde/LIFE-SPEC.md (2 locations)
+   - Desktop/job-search/opportunities/target-role/LIFE-SPEC.md (2 locations)
    - Desktop/logs/ (historical - preserve)
-   - Desktop/working/ (meta - ignore)
+   - Desktop/conversations/ (meta - ignore)
 4. Read files to verify context
 5. Edit MEMORY.md: Replace 3 references to follow-up with "application submitted, waiting to hear back"
-6. Edit anthropic-fde/LIFE-SPEC.md: Update status line, remove follow-up note
+6. Edit target-role/LIFE-SPEC.md: Update status line, remove follow-up note
 7. Grep again: Confirm no production files have stale references
 
 **Output:**
 ```
 Updated files:
 - Desktop/MEMORY.md (3 locations) - Removed "follow up Thursday", added "application submitted, waiting"
-- Desktop/job-search/opportunities/anthropic-fde/LIFE-SPEC.md (2 locations) - Status updated
+- Desktop/job-search/opportunities/target-role/LIFE-SPEC.md (2 locations) - Status updated
 
 Preserved:
 - Desktop/logs/ - Historical records unchanged
@@ -208,7 +208,7 @@ Verification: No stale references remain in production files ✓
 3. Found in:
    - Desktop/MEMORY.md (Current State → Active Threads)
    - Desktop/career/LIFE-SPEC.md (mentions as recent work)
-   - Desktop/working/api-refactor/ (project folder - can archive)
+   - Desktop/conversations/api-refactor/ (project folder - can archive)
 4. Edit MEMORY.md: Move from "active projects" to completed (or remove if not notable long-term)
 5. Edit career/LIFE-SPEC.md: Change "working on" to "completed" with date
 6. Note: Working folder can be cleaned up by file-organize agent
@@ -219,7 +219,7 @@ Updated files:
 - Desktop/MEMORY.md - Removed from active projects
 - Desktop/career/LIFE-SPEC.md - Changed "working on API refactor" to "completed API refactor (Jan 2026)"
 
-Note: Desktop/working/api-refactor/ exists - suggest file-organize cleanup
+Note: Desktop/conversations/api-refactor/ exists - suggest file-organize cleanup
 
 Verification: Status now reflects completion across all files ✓
 ```
@@ -251,14 +251,14 @@ Verification: Priorities now reflect current reality ✓
 
 ### Example 4: Priority status cascade
 
-**Input:** "Anthropic demo shipped Jan 13. Update all references from 'working on demo' to 'demo shipped'."
+**Input:** "the demo shipped Jan 13. Update all references from 'working on demo' to 'demo shipped'."
 
 **Process:**
 1. Parse: Demo status changed from in-progress to shipped
 2. Grep for: "demo.*working|building.*demo|creating.*demo|demo.*progress"
 3. Found in:
    - Desktop/MEMORY.md (multiple mentions)
-   - Desktop/job-search/anthropic-fde/LIFE-SPEC.md (demo strategy section)
+   - Desktop/job-search/target-role/LIFE-SPEC.md (demo strategy section)
    - Desktop/career/LIFE-SPEC.md (portfolio mentions)
    - Desktop/TODAY.md (timeline - already updated)
 4. Edit all files: "working on demo" → "demo shipped Jan 13"
@@ -268,7 +268,7 @@ Verification: Priorities now reflect current reality ✓
 ```
 Updated files:
 - Desktop/MEMORY.md (4 locations) - Status updated to "demo shipped Jan 13"
-- Desktop/job-search/anthropic-fde/LIFE-SPEC.md - Demo strategy reflects shipped status
+- Desktop/job-search/target-role/LIFE-SPEC.md - Demo strategy reflects shipped status
 - Desktop/career/LIFE-SPEC.md - Portfolio section updated
 
 Context added:

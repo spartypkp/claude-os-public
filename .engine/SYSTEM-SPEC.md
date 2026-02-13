@@ -537,7 +537,7 @@ The hook system blocks these commands.
 
 **Cold start (computer restart):**
 ```bash
-cd ~/Projects/Active-Work/specifications-suite/life-specifications
+cd /path/to/claude-os
 
 # Create session with backend
 tmux new -s life -n backend -d

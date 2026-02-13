@@ -1,36 +1,37 @@
 /**
  * Transcript Tools - Public API
- * 
- * This module provides components for rendering tool calls in the transcript viewer.
- * 
+ *
+ * Renders tool calls in the ClaudePanel transcript viewer.
+ *
  * Structure:
- * - ToolChip: Collapsed view with one-liner description
- * - getExpandedView: Returns the appropriate expanded view component for a tool
- * - Registry functions: parseToolInput, parseToolResult, getToolOneLiner
- * - LiveWorkerEmbed: Real-time worker viewer (uses SSE events)
- * 
+ * - ToolChip: Inline tool chip (collapsed one-liner, expandable)
+ * - SystemEventChip: Full-width system event (lifecycle, meta)
+ * - Registry: Single source of truth for tool config (icon, color, category, one-liner)
+ *
  * Domain folders:
- * - shared/      → Shared UI primitives (CodeBlock, InfoBox, etc.)
- * - core/        → Claude Code native tools
- * - mcp-core/    → Life system MCP tools
- * - misc/        → Voice, DefaultExpanded
+ * - shared/       → Shared UI primitives (CodeBlock, InfoBox, etc.)
+ * - core/         → Claude Code native tools (Edit, Bash, Search, Web)
+ * - claude-code/  → Claude Code meta tools (Task, AskUserQuestion, PlanMode)
+ * - mcp-core/     → Life system MCP tools (team, priority, contact)
+ * - misc/         → DefaultExpanded fallback
  */
 
 // Main components
 export { ToolChip } from './ToolChip';
+export { SystemEventChip } from './SystemEventChip';
 export { getExpandedView, DefaultExpanded } from './ExpandedViews';
-export { LiveWorkerEmbed } from './LiveSessionEmbed';
 
 // Registry functions
-export { getToolOneLiner, getToolRenderer, parseToolInput, parseToolResult } from './registry';
+export { getToolConfig, getToolOneLiner, parseToolInput, parseToolResult } from './registry';
 
 // Types
-export type { 
-	ParsedToolInput, 
-	ParsedToolResult, 
-	ToolChipProps, 
-	ToolExpandedProps, 
-	ToolRendererConfig 
+export type {
+	ParsedToolInput,
+	ParsedToolResult,
+	ToolCategory,
+	ToolChipProps,
+	ToolConfig,
+	ToolExpandedProps,
 } from './types';
 
 // Shared UI components (for use in custom app tools)

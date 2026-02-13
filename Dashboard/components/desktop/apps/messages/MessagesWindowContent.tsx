@@ -6,8 +6,6 @@ import {
   MessageCircle,
   Loader2,
   Send,
-  Maximize2,
-  User,
   Phone,
   Clock,
 } from 'lucide-react';
@@ -129,13 +127,19 @@ export function MessagesWindowContent() {
     }
   }, [newMessage, selectedChat, loadMessages]);
 
-  // Search conversations
-  const searchConversations = useCallback(async (query: string) => {
+  // Search messages and display as flat results
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const searchMessages = useCallback(async (query: string) => {
     if (!query.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
       loadConversations();
       return;
     }
 
+    setIsSearching(true);
     setLoading(true);
     try {
       const response = await fetch(
@@ -143,28 +147,9 @@ export function MessagesWindowContent() {
       );
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
-
-      // Group search results by conversation
-      const chatMap = new Map<string, Message[]>();
-      (data.messages || []).forEach((msg: Message) => {
-        const existing = chatMap.get(msg.id) || [];
-        chatMap.set(msg.id, [...existing, msg]);
-      });
-
-      // Convert to conversations (simplified)
-      const searchResults: Conversation[] = Array.from(chatMap.entries()).map(
-        ([id, msgs]) => ({
-          id,
-          display_name: 'Search Result',
-          last_message_text: msgs[0].text,
-          last_message_date: msgs[0].date,
-          unread_count: 0,
-          is_group: false,
-          participants: [],
-        })
-      );
-
-      setConversations(searchResults);
+      setSearchResults(data.messages || []);
+      // Keep conversations empty during search — show results inline instead
+      setConversations([]);
     } catch (err) {
       console.error('Search error:', err);
     } finally {
@@ -180,12 +165,14 @@ export function MessagesWindowContent() {
   // Handle search
   useEffect(() => {
     if (searchQuery.trim()) {
-      const timer = setTimeout(() => searchConversations(searchQuery), 300);
+      const timer = setTimeout(() => searchMessages(searchQuery), 300);
       return () => clearTimeout(timer);
     } else {
+      setIsSearching(false);
+      setSearchResults([]);
       loadConversations();
     }
-  }, [searchQuery, searchConversations, loadConversations]);
+  }, [searchQuery, searchMessages, loadConversations]);
 
   // Auto-scroll to bottom when messages load or change
   useEffect(() => {
@@ -220,7 +207,7 @@ export function MessagesWindowContent() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--surface-base)] select-none">
+    <div className="flex flex-col h-full bg-[var(--surface-base)] select-none" data-testid="messages-app">
       {/* Toolbar - macOS style (matching Finder) */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-b from-[#E8E8E8] to-[#D4D4D4] dark:from-[#3d3d3d] dark:to-[#323232] border-b border-[#B8B8B8] dark:border-[#2a2a2a]">
         {/* Claude branding */}
@@ -243,16 +230,8 @@ export function MessagesWindowContent() {
           </div>
         </div>
 
-        {/* Fullscreen button */}
-        <button
-          onClick={() => {
-            console.log('Fullscreen not yet implemented');
-          }}
-          className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-          title="Open fullscreen"
-        >
-          <Maximize2 className="w-4 h-4 text-[var(--text-secondary)]" />
-        </button>
+        {/* Spacer */}
+        <div className="flex-shrink-0" />
       </div>
 
       {/* Main content area */}
@@ -260,18 +239,48 @@ export function MessagesWindowContent() {
         {/* Left: Conversations List */}
         <div className="w-72 flex flex-col bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl border-r border-[#D1D1D1] dark:border-[#3a3a3a]">
 
-        {/* Conversations List */}
-        <div className="flex-1 overflow-auto">
+        {/* Conversations list with inline search */}
+        <div className="flex-1 overflow-auto" data-testid="messages-conversation-list">
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
             </div>
+          ) : isSearching ? (
+            // Search results — show flat message list
+            searchResults.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-[#8E8E93]">
+                <Search className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No messages found</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#E5E5E5] dark:divide-[#3a3a3a]">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider bg-[#E8E8E8]/90 dark:bg-[#2a2a2a]/90">
+                  {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                </div>
+                {searchResults.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/5"
+                  >
+                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                      <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                        {msg.is_from_me ? 'You' : (msg.sender_handle || 'Unknown')}
+                      </span>
+                      <span className="text-[10px] text-[#8E8E93] flex-shrink-0">
+                        {formatDate(msg.date)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-[var(--text-secondary)] line-clamp-2">
+                      {msg.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-[#8E8E93]">
               <MessageCircle className="w-8 h-8 mb-2 opacity-30" style={{ color: CLAUDE_CORAL }} />
-              <p className="text-sm">
-                {searchQuery ? 'No messages found' : 'No conversations'}
-              </p>
+              <p className="text-sm">No conversations</p>
             </div>
           ) : (
             <div className="divide-y divide-[#E5E5E5] dark:divide-[#3a3a3a]">
@@ -308,7 +317,7 @@ export function MessagesWindowContent() {
                     </p>
                     {conv.unread_count > 0 && (
                       <div className="mt-1">
-                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-blue-500 text-white rounded-full">
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-[#DA7756] text-white rounded-full">
                           {conv.unread_count}
                         </span>
                       </div>

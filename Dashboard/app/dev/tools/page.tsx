@@ -31,7 +31,7 @@ const TOOL_CATEGORIES = {
       icon: FilePlus,
       color: 'var(--color-warning)',
       mockInput: {
-        file_path: '/path/to/claude-os/Desktop/working/new-feature.md',
+        file_path: '/path/to/claude-os/Desktop/conversations/new-feature.md',
         content: '# New Feature\n\nBuilding a preview page for all tool types...'
       },
       mockResult: 'File written successfully',
@@ -120,7 +120,7 @@ const TOOL_CATEGORIES = {
       color: '#14b8a6',
       mockInput: {
         operation: 'create',
-        instructions: 'Research Anthropic FDE interview process and compile key insights'
+        instructions: 'Research company interview process and compile key insights'
       },
       mockResult: JSON.stringify({ success: true, worker_id: 'abc12345-def6' }),
     },
@@ -132,7 +132,7 @@ const TOOL_CATEGORIES = {
         operation: 'search',
         query: 'Alex'
       },
-      mockResult: JSON.stringify({ success: true, contacts: [{ name: 'Alex Bricken', company: 'Anthropic' }] }),
+      mockResult: JSON.stringify({ success: true, contacts: [{ name: 'Jane Smith', company: 'Acme Corp' }] }),
     },
     {
       name: 'priority',
@@ -227,7 +227,7 @@ const TOOL_CATEGORIES = {
       color: '#a855f7',
       mockInput: {
         operation: 'add',
-        partner: 'Ethan',
+        partner: 'Alex',
         type: 'technical'
       },
       mockResult: JSON.stringify({ success: true, mock_id: 'mock-123' }),
@@ -376,7 +376,7 @@ const SYSTEM_MESSAGES = [
   {
     icon: '📋',
     summary: 'System reminder',
-    content: '<system-reminder>\nThis is a reminder about file discipline in Desktop/working/...',
+    content: '<system-reminder>\nThis is a reminder about file discipline in Desktop/conversations/...',
   },
   {
     icon: '⚡',

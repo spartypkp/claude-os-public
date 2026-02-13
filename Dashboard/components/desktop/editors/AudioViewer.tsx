@@ -24,7 +24,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 
 	const fileName = filePath.split('/').pop() || filePath;
 	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const audioUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(apiPath)}`;
+	const audioUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
 
 	useEffect(() => {
 		setLoading(true);

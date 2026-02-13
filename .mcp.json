@@ -1,22 +1,19 @@
 {
   "_comment": "MCP Server Configuration for Claude OS",
   "_instructions": [
-    "Copy this file to .mcp.json",
     "The 'life' server is required - it provides all core Claude OS tools",
-    "The 'apple' server provides Calendar/Contacts/Mail integration (macOS only)"
+    "Paths use ./venv which works from the project root"
   ],
   "mcpServers": {
     "life": {
       "_comment": "Core Claude OS MCP server - provides all life management tools",
       "type": "stdio",
       "command": "./venv/bin/python",
-      "args": [".engine/src/life_mcp/server.py"]
-    },
-    "apple": {
-      "_comment": "Apple integration (Calendar, Contacts, Mail) - macOS only",
-      "type": "stdio",
-      "command": "./venv/bin/python",
-      "args": [".engine/src/life_mcp/apple_filtered.py"]
+      "args": [".engine/src/adapters/life_mcp/server.py"],
+      "env": {
+        "PYTHONPATH": ".engine/src",
+        "CLAUDE_OS_ROOT": "."
+      }
     }
   }
 }

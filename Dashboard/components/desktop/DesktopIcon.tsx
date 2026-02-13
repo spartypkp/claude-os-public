@@ -1,6 +1,6 @@
 'use client';
 
-import { finderRename } from '@/lib/api';
+import { finderMove, finderRename } from '@/lib/api';
 import { CLAUDE_SYSTEM_FILES } from '@/lib/systemFiles';
 import { getFolderCategory, getFolderColorClass } from '@/lib/folderCategories';
 import { FileTreeNode } from '@/lib/types';
@@ -58,6 +58,41 @@ export function DesktopIcon({
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [editName, setEditName] = useState(node.name);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isNativeDragOver, setIsNativeDragOver] = useState(false);
+
+	// Native drag handlers for cross-view drops (Finder → Desktop folder)
+	const handleNativeDragOver = useCallback((e: React.DragEvent) => {
+		if (node.type !== 'directory') return;
+		if (e.dataTransfer.types.includes('application/claude-file') || e.dataTransfer.types.includes('text/plain')) {
+			e.preventDefault();
+			e.stopPropagation();
+			e.dataTransfer.dropEffect = 'move';
+			setIsNativeDragOver(true);
+		}
+	}, [node.type]);
+
+	const handleNativeDragLeave = useCallback(() => {
+		setIsNativeDragOver(false);
+	}, []);
+
+	const handleNativeDrop = useCallback(async (e: React.DragEvent) => {
+		if (node.type !== 'directory') return;
+		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+		if (!sourcePath || sourcePath === node.path) {
+			setIsNativeDragOver(false);
+			return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
+		setIsNativeDragOver(false);
+		try {
+			await finderMove(sourcePath, node.path);
+			window.dispatchEvent(new CustomEvent('refresh-desktop'));
+			toast.success(`Moved to ${node.name}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Failed to move');
+		}
+	}, [node.path, node.name, node.type]);
 
 	// Merge drag and drop refs
 	const setNodeRef = useCallback((node: HTMLElement | null) => {
@@ -169,6 +204,7 @@ export function DesktopIcon({
 	return (
 		<div
 			ref={setNodeRef}
+			data-testid={`desktop-icon-${node.name.toLowerCase().replace(/\s+/g, '-')}`}
 			style={style}
 			className={`
         flex flex-col items-center justify-start gap-1
@@ -176,9 +212,9 @@ export function DesktopIcon({
         ${!isDragging && 'transition-colors duration-150'}
 		${isSelected
 					? 'bg-[#DA7756]/30 ring-1 ring-[#DA7756]'
-					: isOver && !isDragging
+					: (isOver || isNativeDragOver) && !isDragging && node.type === 'directory'
 					? 'bg-[#DA7756]/20 ring-2 ring-[#DA7756]/50 ring-dashed'
-					: 'hover:bg-gray-200/30 dark:hover:bg-white/5'
+					: 'hover:bg-white/15'
 				}
       `}
 			onClick={onSelect}
@@ -187,6 +223,9 @@ export function DesktopIcon({
 				onOpen();
 			}}
 			onContextMenu={onContextMenu}
+			onDragOver={handleNativeDragOver}
+			onDragLeave={handleNativeDragLeave}
+			onDrop={handleNativeDrop}
 			{...listeners}
 			{...attributes}
 		>
@@ -216,7 +255,8 @@ export function DesktopIcon({
 				/>
 			) : (
 				<span
-				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-black font-medium"
+				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-white font-medium"
+				style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0px 1px rgba(0,0,0,0.5)' }}
 			>
 				{capitalizedName}
 			</span>

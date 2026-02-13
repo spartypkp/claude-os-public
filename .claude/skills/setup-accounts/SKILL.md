@@ -1,252 +1,121 @@
 ---
 name: setup-accounts
-description: Connect email, calendar, and messaging accounts
+description: Connect email, calendar, and messaging accounts to Claude OS. Discovers available accounts, configures access, and tests connections. Use when user says "connect my email", "set up Gmail", "add my calendar", "configure accounts", or wants Claude to read/send email and manage calendar.
 ---
 
-# Setup Accounts Skill
+# Setup Accounts
 
-Connect email, calendar, and messaging accounts to Claude OS. Most accounts auto-discover from Apple's Mail, Calendar, and Contacts apps. This skill guides through discovery, verification, and manual setup when needed.
+Guide the user through connecting their accounts to Claude OS.
 
-## When to Use
+## What This Does
 
-User wants to connect accounts:
-- "I want Claude to access my email"
-- "Set up my Gmail account"
-- "Connect my work calendar"
-- `/setup-accounts`
+Claude OS can read/write email, calendar, and iMessage through the MCP server. Each provider needs different setup:
+- **Apple Mail/Calendar** — Reads directly from macOS databases. No OAuth needed, just permissions.
+- **Gmail** — Needs OAuth credentials for sending. Reading works through Apple Mail if synced.
+- **iMessage** — Reads from local macOS Messages database. Sends via AppleScript.
 
-## The Flow
+## The Conversation
 
-Guide the user through checking current accounts, discovering new ones, and configuring capabilities.
+### Step 1: Discover What's Available
 
-### Phase 1: Check Current Accounts
-
-Start by seeing what's already connected:
-
-```python
+Run account discovery:
+```
+email("discover")
 email("accounts")
+calendar("calendars")
+messages("test")
 ```
 
-This shows:
-- All configured accounts
-- What each can do (read email, send email, calendar access)
-- Which account is primary
+Show the user what's already connected and what's available.
 
-**Show user the output.**
+### Step 2: What Do They Want?
 
-**Ask: What else do you want to connect?**
-- More email accounts
-- Calendar access
-- Contacts sync
-- Or configure capabilities for existing accounts
+Ask: **"Which accounts do you want Claude to have access to?"**
 
-### Phase 2: Understand the System
+Common setups:
+- "Read my Gmail but don't send anything" — Just ensure Gmail is in Apple Mail
+- "Draft emails for me to review" — Draft mode (opens compose window, user reviews before sending)
+- "Send emails on my behalf" — Requires OAuth setup + explicit sending permission
+- "Manage my calendar" — Calendar read/write access
+- "Read my messages" — iMessage access (privacy-sensitive, discuss implications)
 
-**Explain auto-discovery:**
+### Step 3: Configure Each Account
 
-> "The system automatically finds accounts from your Mac's Mail, Calendar, and Contacts apps. If an account is in Mail.app, Claude can usually read it without any setup."
+**For Apple Mail/Calendar (easiest):**
+1. Verify the account appears in `email("discover")`
+2. Test with `email("unread", account="...", limit=5)`
+3. If it works, done. Apple handles auth via macOS keychain.
 
-**What discovery finds:**
-- Mail.app accounts (Gmail, iCloud, Exchange, IMAP)
-- Calendar owners from Calendar.app
-- Contact sources from Contacts.app
+**For Gmail sending:**
+1. Need Google Cloud OAuth credentials (client_id, client_secret)
+2. Walk through: Google Cloud Console → Create Project → Enable Gmail API → Create OAuth credentials
+3. Configure in Claude OS: save credentials, run OAuth flow
+4. Test with `email("draft", to="themselves", subject="Test", content="Testing Claude OS email")`
 
-**What needs manual setup:**
-- Gmail accounts for *sending* email (requires OAuth)
-- Custom capabilities (enabling send, disabling read)
+**For Calendar:**
+1. Check `calendar("calendars")` — lists all available calendars
+2. Test read: `calendar("list", from_date="today", to_date="tomorrow")`
+3. Test write: Create a test event, then delete it
 
-### Phase 3: Adding Accounts
+**For iMessage:**
+1. Test connection: `messages("test")`
+2. If working, test read: `messages("conversations", limit=5)`
+3. Discuss privacy: Claude can read all local messages. User should understand the scope.
+4. Sending is permission-gated — user approves each send.
 
-#### For Apple-based accounts (Mail.app, iCloud, Exchange)
+### Step 4: macOS Permissions
 
-**Step 1:** "Add the account in System Settings → Internet Accounts"
-- Guide them to open System Settings
-- Click Internet Accounts
-- Add the account (Gmail, iCloud, Exchange, etc.)
-- Enable Mail, Calendar, and Contacts
+If any integration fails with a permission error, guide the user to grant access:
 
-**Step 2:** Restart backend to re-run discovery
-```python
-service("restart", name="backend")
+**Full Disk Access** (needed for email reading and iMessage):
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click the **+** button
+3. Add the terminal app they're using (Terminal, iTerm2, VS Code, Cursor, etc.)
+4. Also add `/usr/bin/python3` if running from a script
+5. Restart the terminal after granting
+
+**Calendar access:**
+1. Open **System Settings** → **Privacy & Security** → **Calendars**
+2. Enable access for the terminal app
+3. If Calendar.app hasn't been opened yet, open it once to create the database
+
+**Contacts access:**
+1. Open **System Settings** → **Privacy & Security** → **Contacts**
+2. Enable access for the terminal app
+
+**Automation** (needed for drafts, sends via AppleScript):
+1. Open **System Settings** → **Privacy & Security** → **Automation**
+2. Allow the terminal app to control **Mail.app** and **Messages.app**
+
+**Common gotcha:** Claude Code runs as a child of whatever terminal app it's in. So granting Full Disk Access to "Terminal" covers all processes launched from Terminal, including Claude Code and the Python backend.
+
+### Step 5: Set Permissions
+
+Help the user decide what Claude can do autonomously vs. what needs approval:
+- **Draft freely, ask before sending** (recommended default for email)
+- **Read freely, ask before writing** (recommended for calendar)
+- **Read only** (recommended for messages initially)
+
+### Step 6: Verify Everything
+
+Test each configured account:
+```
+email("unread", account="...", limit=3)
+calendar("list", from_date="today", to_date="tomorrow")
+messages("test")
 ```
 
-**Step 3:** Verify the account appears
-```python
-email("accounts")
-```
+Confirm with user: "Here's what I can see. Does this look right? Anything I shouldn't have access to?"
 
-**Confirm:** "Account should appear now. Can you see it in the list?"
+### Troubleshooting
 
-#### For Gmail with send capability
+| Problem | Fix |
+|---------|-----|
+| `email("discover")` returns empty | Open Mail.app, add account via System Settings → Internet Accounts |
+| `calendar("calendars")` returns empty | Open Calendar.app once, check macOS Privacy & Security → Calendars |
+| `messages("test")` fails | Grant Full Disk Access to terminal app, restart terminal |
+| Draft opens wrong app | Check which Mail client is default in System Settings → Default Apps |
+| Gmail sending fails | OAuth credentials needed — set up via Google Cloud Console |
+| "Database locked" errors | Close other apps reading the same database, or restart backend |
 
-Gmail needs OAuth for sending. Read-only works via Mail.app, but sending requires API access.
-
-**Step 1:** Run OAuth setup
-```bash
-cd .engine && ./venv/bin/python src/cli/gmail_oauth_setup.py
-```
-
-This opens a browser for Google login and permission grant.
-
-**Step 2:** Add to accounts.yaml
-```bash
-open .engine/config/accounts.yaml
-```
-
-Guide them to add:
-```yaml
-accounts:
-  user@gmail.com:
-    display_name: "User - Personal"
-    can_send_email: true
-    provider_config:
-      client_id: "${GMAIL_CLIENT_ID}"
-      client_secret: "${GMAIL_CLIENT_SECRET}"
-      refresh_token: "${GMAIL_REFRESH_TOKEN}"
-```
-
-**Step 3:** Restart backend
-```python
-service("restart", name="backend")
-```
-
-**Step 4:** Verify
-```python
-email("accounts")
-```
-
-Should show `can_send_email: true` for that account.
-
-### Phase 4: Configure Capabilities
-
-Accounts can be configured in `.engine/config/accounts.yaml`:
-
-**Common configurations:**
-```yaml
-accounts:
-  user@example.com:
-    can_send_email: false      # Draft only, don't send
-    can_delete_calendar: false # Read and create, don't delete
-    is_primary: true           # Default account for new events
-```
-
-**Ask: What capabilities do you want?**
-- Read-only email (no sending)
-- Draft email (manual send)
-- Autonomous sending (Claude can send without asking)
-- Calendar read/write/delete
-- Primary account (default for new events)
-
-**Guide them to edit accounts.yaml**, then:
-```python
-service("restart", name="backend")
-```
-
-### Phase 5: Verify Everything Works
-
-**Test email read:**
-```python
-email("unread", limit=5)
-```
-
-**Test calendar:**
-```python
-calendar("list", from_date="2026-01-14", to_date="2026-01-15")
-```
-
-**Test contacts:**
-```python
-contact("list", limit=5)
-```
-
-**Confirm with user:** "Everything working? You should see your emails, events, and contacts."
-
-## Verify Completion
-
-Success means:
-1. `email("accounts")` shows desired accounts
-2. Each account has correct capabilities
-3. Test reads succeed (email, calendar, contacts)
-4. User understands what Claude can/cannot do with each account
-
-## Common Issues
-
-**Account not appearing:**
-- Is it in Mail.app? Discovery only finds Mail.app accounts
-- Restart backend: `service("restart", name="backend")`
-- Check System Settings → Internet Accounts (is Mail enabled?)
-
-**Can't send email:**
-- Check `can_send_email` in accounts.yaml
-- Gmail needs OAuth setup (see Phase 3)
-- Only `is_claude_account: true` accounts can send autonomously
-- Regular accounts can draft (manual send)
-
-**Calendar not syncing:**
-- Calendar discovery uses owner_identity_email from Calendar.app
-- Verify calendar is enabled in System Settings → Internet Accounts
-- Check calendar permissions
-
-**Backend won't restart:**
-- Check logs: `service("logs", name="backend", lines=50)`
-- Syntax error in accounts.yaml (YAML is picky about indentation)
-- Missing required fields
-
-**OAuth flow fails:**
-- Gmail API must be enabled in Google Cloud Console
-- Client ID and secret must be valid
-- Refresh token must be saved correctly
-
-## Examples
-
-### Example 1: Connect Gmail Read-Only
-
-**User:** "I want Claude to read my Gmail"
-
-**Claude:**
-1. Check current: `email("accounts")` → Gmail not listed
-2. "Is your Gmail account in Mail.app?" → User says yes
-3. "Great! Restart the backend and it'll auto-discover:"
-4. `service("restart", name="backend")`
-5. Wait 10 seconds, then: `email("accounts")` → Gmail appears
-6. "Gmail connected! Testing..." `email("unread", limit=5)`
-7. "Working! You have 5 unread emails. Claude can read and search, but not send (that requires OAuth setup)."
-
-### Example 2: Enable Gmail Sending
-
-**User:** "I want Claude to draft emails from my Gmail"
-
-**Claude:**
-1. Check current: `email("accounts")` → Gmail exists, `can_send_email: false`
-2. "Gmail sending requires OAuth. I'll walk you through it."
-3. "First, run this command:" `cd .engine && ./venv/bin/python src/cli/gmail_oauth_setup.py`
-4. Wait for browser flow
-5. "Now open accounts.yaml and add this config..." (provide template)
-6. "Save and close, then I'll restart the backend"
-7. `service("restart", name="backend")`
-8. Verify: `email("accounts")` → `can_send_email: true`
-9. "Gmail sending enabled! I can now draft emails for your review."
-
-### Example 3: Add Work Calendar
-
-**User:** "Connect my work Exchange calendar"
-
-**Claude:**
-1. "Is your work account in System Settings → Internet Accounts?" → User says no
-2. "Add it there first: System Settings → Internet Accounts → Add Account → Exchange"
-3. Wait for user
-4. "Done? I'll restart the backend to pick it up"
-5. `service("restart", name="backend")`
-6. Test: `calendar("calendars")` → Work calendar appears
-7. "Work calendar connected! Testing..." `calendar("list", from_date="2026-01-14")`
-8. "Working! I can see your work events now."
-
-## Technical Notes
-
-- Config file: `.engine/config/accounts.yaml`
-- Discovery service: `.engine/src/services/account_discovery.py`
-- Database table: `accounts`
-- Restart backend after any accounts.yaml changes
-- Discovery runs automatically on backend startup
-- Capabilities are per-account (not global)
-- `is_claude_account: true` enables autonomous sending (with safeguards)
+For a deeper walkthrough of any integration, ask: "Help me set up [email/calendar/messages]"

@@ -79,25 +79,28 @@ interface HistoryResponse {
 
 // Fetchers
 async function fetchMissions(): Promise<MissionsResponse> {
-	const response = await fetch(`${API_BASE}/api/missions`);
+	// Missions renamed to Duties - endpoint updated
+	const response = await fetch(`${API_BASE}/api/duties`);
 	if (!response.ok) {
-		throw new Error(`Failed to fetch missions: ${response.statusText}`);
+		throw new Error(`Failed to fetch duties: ${response.statusText}`);
 	}
 	return response.json();
 }
 
 async function fetchRunningMissions(): Promise<RunningResponse> {
-	const response = await fetch(`${API_BASE}/api/missions/running`);
+	// Missions renamed to Duties - endpoint updated
+	const response = await fetch(`${API_BASE}/api/duties/running`);
 	if (!response.ok) {
-		throw new Error(`Failed to fetch running missions: ${response.statusText}`);
+		throw new Error(`Failed to fetch running duties: ${response.statusText}`);
 	}
 	return response.json();
 }
 
 async function fetchMissionHistory(slug: string): Promise<HistoryResponse> {
-	const response = await fetch(`${API_BASE}/api/missions/${slug}/history?limit=5`);
+	// Missions renamed to Duties - endpoint updated
+	const response = await fetch(`${API_BASE}/api/duties/${slug}/history?limit=5`);
 	if (!response.ok) {
-		throw new Error(`Failed to fetch mission history: ${response.statusText}`);
+		throw new Error(`Failed to fetch duty history: ${response.statusText}`);
 	}
 	return response.json();
 }

@@ -1,110 +1,40 @@
 'use client';
 
-import { WorkerInlineCard } from '@/components/shared/WorkerInlineCard';
-import { ToolChip } from '@/components/transcript/tools';
-import type { TranscriptEvent } from '@/hooks/useTranscriptStream';
+import { ToolChip, SystemEventChip, getToolConfig } from '@/components/transcript/tools';
+import type { TranscriptEvent } from '@/hooks/useConversation';
 import { getRoleConfig } from '@/lib/sessionUtils';
-import { isSystemMessage, summarizeSystemMessage } from '@/lib/systemMessages';
-import type { LucideIcon } from 'lucide-react';
 import {
-	ArrowDown, // mail
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	// MCP Voice
-	AudioLines, // done
-	Bell, // leetcode
-	BookOpen,
-	Brain, // dsa
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	// MCP Apple
-	Calendar,
-	Check, // reset
-	CheckCircle,
+	isSystemMessage,
+	isSpecialistNotification,
+	isSpecialistReply,
+	isTeamMessage,
+	isTeamRequest,
+	isTaskNotification,
+	parseSpecialistNotification,
+	parseSpecialistReply,
+	parseTeamMessage,
+	parseTeamRequest,
+	parseTaskNotification,
+	summarizeSystemMessage,
+	normalizeMessageContent,
+} from '@/lib/systemMessages';
+import type { LucideIcon } from 'lucide-react';
+import type { HandoffPhase } from '@/hooks/useHandoffState';
+import {
+	ArrowDown,
+	ArrowRight,
+	Brain,
+	Check,
 	ChevronDown,
-	ChevronRight, // mock
-	Code, // worker
-	Contact,
+	ChevronRight,
 	Copy,
-	Download, // converse
 	ExternalLink,
-	FileEdit,
-	FilePlus,
-	FileText,
-	Folder,
-	GitBranch,
-	Globe,
-	// MCP Life System
-	HardHat,
-	ListChecks,
-	Loader2, // messages
-	Mail, // calendar
-	MessageSquare, // log
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	// MCP Job Search
-	Mic, // ping, remind
-	Moon, // priority
-	Network, // context_check
-	PenLine, // night_mode_start
-	PieChart, // status
-	Radio,
+	Loader2,
+	Monitor,
 	RefreshCw,
-	Search, // team
-	Server, // contact
-	Star,
-	Terminal, // service
-	Timer,
-	Wrench,
-	X
+	Send,
+	X,
+	Zap,
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -128,11 +58,8 @@ interface TranscriptViewerProps {
 	};
 	/** Callback to load earlier history */
 	onLoadEarlier?: () => void;
-}
-
-interface ToolWithResult {
-	use: TranscriptEvent;
-	result?: TranscriptEvent;
+	/** Current handoff phase for this conversation */
+	handoffPhase?: HandoffPhase;
 }
 
 interface ToolBatch {
@@ -144,97 +71,15 @@ interface ToolBatch {
 
 interface Turn {
 	id: string;
-	type?: 'normal' | 'session_boundary';  // Jan 2026: support session boundaries
+	type?: 'normal' | 'session_boundary' | 'conversation_ended';
 	userMessage?: TranscriptEvent;
 	responseEvents: TranscriptEvent[];
 	toolsWithResults: Map<string, TranscriptEvent>; // toolUseId -> tool_result
 	// Session boundary metadata (when type === 'session_boundary')
 	boundaryEvent?: TranscriptEvent;
+	// Which mode this turn belongs to (tracked from boundary events)
+	sessionMode?: string;
 }
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string; }>> = {
-	// Claude Code native tools
-	Read: FileText,
-	Write: FilePlus,
-	Edit: FileEdit,
-	Bash: Terminal,
-	Grep: Search,
-	Glob: Folder,
-	WebSearch: Globe,
-	WebFetch: Download,
-	Task: GitBranch,
-	TodoWrite: ListChecks,
-	// MCP Life System - consolidated
-	worker: HardHat,
-	contact: Contact,
-	priority: Star,
-	team: Network,
-	service: Server,
-	timer: Timer,
-	// MCP Life System - standalone
-	status: Radio,
-	reset: RefreshCw,
-	done: CheckCircle,
-	ping: Bell,
-	night_mode_start: Moon,
-	context_check: PieChart,
-	log: PenLine,
-	remind: Bell,
-	// MCP Job Search
-	mock: Mic,
-	dsa: BookOpen,
-	leetcode: Code,
-	// MCP Apple
-	calendar: Calendar,
-	messages: MessageSquare,
-	mail: Mail,
-	// MCP Voice
-	converse: AudioLines,
-};
-
-const TOOL_COLORS: Record<string, string> = {
-	// Claude Code native tools
-	Read: 'var(--color-cyan)',
-	Glob: 'var(--color-cyan)',
-	Grep: 'var(--color-info)',
-	Write: 'var(--color-warning)',
-	Edit: 'var(--color-warning)',
-	Bash: 'var(--color-primary)',
-	WebSearch: 'var(--color-success)',
-	WebFetch: 'var(--color-success)',
-	Task: 'var(--color-primary)',
-	TodoWrite: 'var(--color-primary)',
-	// MCP Life System - consolidated (teal/cyan family)
-	worker: '#14b8a6',      // teal-500
-	contact: '#06b6d4',     // cyan-500
-	priority: '#f59e0b',    // amber-500
-	team: '#8b5cf6',        // violet-500
-	service: '#64748b',     // slate-500
-	timer: '#ec4899',       // pink-500
-	// MCP Life System - standalone
-	status: 'var(--color-claude)',  // claude orange
-	reset: '#f97316',       // orange-500
-	done: '#22c55e',        // green-500
-	ping: '#eab308',        // yellow-500
-	night_mode_start: '#6366f1', // indigo-500
-	context_check: '#3b82f6', // blue-500
-	log: '#64748b',         // slate-500
-	remind: '#eab308',      // yellow-500
-	// MCP Job Search (purple family)
-	mock: '#a855f7',        // purple-500
-	dsa: '#8b5cf6',         // violet-500
-	leetcode: '#7c3aed',    // violet-600
-	// MCP Apple (blue family)
-	calendar: '#3b82f6',    // blue-500
-	messages: '#22c55e',    // green-500
-	mail: '#ef4444',        // red-500
-	// MCP Voice
-	converse: '#f97316',    // orange-500
-};
 
 /**
  * Small inline Claude logo for chat labels
@@ -275,95 +120,12 @@ const MARKDOWN_COMPONENTS = {
 // UTILITIES
 // =============================================================================
 
-function formatTime(timestamp?: string): string {
-	if (!timestamp) return '';
-	try {
-		const date = new Date(timestamp);
-		return date.toLocaleTimeString('en-US', {
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-			hour12: false,
-		});
-	} catch {
-		return '';
-	}
-}
-
-/**
- * Detect if a tool call is a worker create operation and extract worker info.
- * Returns null if not a worker create, otherwise returns worker details.
- */
-function getWorkerCreateInfo(
-	toolName?: string,
-	toolInput?: Record<string, unknown>,
-	resultContent?: string
-): { workerId: string; shortId: string; instructionsPreview?: string; } | null {
-	// Check if this is a worker tool with create operation
-	const formattedName = toolName ? formatToolName(toolName) : '';
-	if (formattedName !== 'worker') return null;
-	if (toolInput?.operation !== 'create') return null;
-	if (!resultContent) return null;
-
-	// Parse the result to get worker_id
-	try {
-		const result = JSON.parse(resultContent);
-		if (result.success && result.worker_id) {
-			return {
-				workerId: result.worker_id,
-				shortId: result.short_id || result.worker_id.slice(0, 8),
-				instructionsPreview: toolInput.instructions
-					? String(toolInput.instructions).slice(0, 100)
-					: undefined,
-			};
-		}
-	} catch {
-		// Not JSON or parse error - try to extract worker_id from text
-		const match = resultContent.match(/worker_id['":\s]+([a-f0-9-]+)/i);
-		if (match) {
-			return {
-				workerId: match[1],
-				shortId: match[1].slice(0, 8),
-				instructionsPreview: toolInput?.instructions
-					? String(toolInput.instructions).slice(0, 100)
-					: undefined,
-			};
-		}
-	}
-
-	return null;
-}
-
 /**
  * Extract just the filename from a path for display
  */
 function getFileName(path: string): string {
 	const parts = path.split('/');
 	return parts[parts.length - 1] || path;
-}
-
-/**
- * Smart path truncation: show filename, optionally with parent context
- * e.g., "CLAUDE.md" or "components/TranscriptViewer.tsx"
- */
-function smartTruncatePath(path: string, maxLen: number = 40): string {
-	const parts = path.split('/');
-	const fileName = parts[parts.length - 1] || path;
-
-	// If just filename fits, return it
-	if (fileName.length <= maxLen) {
-		// Try to include parent folder if it fits
-		if (parts.length >= 2) {
-			const withParent = parts.slice(-2).join('/');
-			if (withParent.length <= maxLen) {
-				return withParent;
-			}
-		}
-		return fileName;
-	}
-
-	// Truncate filename if too long
-	return fileName.slice(0, maxLen - 3) + '...';
 }
 
 /**
@@ -388,16 +150,39 @@ function formatToolName(toolName: string): string {
 function groupEventsIntoTurns(events: TranscriptEvent[]): Turn[] {
 	const turns: Turn[] = [];
 	let currentTurn: Turn | null = null;
-	let lastBoundaryTurn: Turn | null = null; // Track last boundary to merge handoff into
+	let lastBoundaryTurn: Turn | null = null; // Track last boundary to absorb system injections
+	let seenRealContent = false; // Track if we've seen any real (non-system) content
+	let currentMode: string | undefined; // Track session mode from boundary events
 
 	for (const event of events) {
-		// Handle session boundaries (Jan 2026 - conversation history across resets)
+		// Handle conversation ended
+		if (event.type === 'conversation_ended') {
+			if (currentTurn) {
+				turns.push(currentTurn);
+				currentTurn = null;
+			}
+			turns.push({
+				id: event.uuid || `ended-${turns.length}`,
+				type: 'conversation_ended',
+				responseEvents: [],
+				toolsWithResults: new Map(),
+				boundaryEvent: event,
+			});
+			lastBoundaryTurn = null;
+			continue;
+		}
+
+		// Handle session boundaries (conversation history across resets)
 		if (event.type === 'session_boundary') {
 			// Save current turn if exists
 			if (currentTurn) {
 				turns.push(currentTurn);
 				currentTurn = null;
 			}
+
+			// Update current mode from boundary
+			currentMode = event.mode || (event as any).mode;
+
 			// Add boundary as a special turn
 			const boundaryTurn: Turn = {
 				id: event.uuid || `boundary-${turns.length}`,
@@ -407,36 +192,67 @@ function groupEventsIntoTurns(events: TranscriptEvent[]): Turn[] {
 				boundaryEvent: event,
 			};
 			turns.push(boundaryTurn);
-			lastBoundaryTurn = boundaryTurn; // Track it for potential handoff merge
+			lastBoundaryTurn = boundaryTurn; // Track for absorbing post-boundary system messages
 		} else if (event.type === 'user_message') {
-			const content = event.content || '';
-			const isHandoff = isSystemMessage(content);
+			const content = normalizeMessageContent(event.content || '');
+			const isSysMsg = isSystemMessage(content);
 
-			// If this is a handoff/system message right after a boundary, merge it
-			if (isHandoff && lastBoundaryTurn && !lastBoundaryTurn.userMessage) {
-				// Attach the handoff content to the boundary
+			// First system message after a boundary → merge as handoff content
+			if (isSysMsg && lastBoundaryTurn && !lastBoundaryTurn.userMessage) {
 				lastBoundaryTurn.userMessage = event;
-				lastBoundaryTurn = null; // Don't merge multiple
-				// Don't start a new turn - skip this user message
+				continue; // Keep lastBoundaryTurn — absorb more system messages
+			}
+
+			// Additional system messages after a boundary → absorb silently
+			// (SessionStart, session-role injections are plumbing, not content)
+			if (isSysMsg && lastBoundaryTurn) {
 				continue;
 			}
 
-			lastBoundaryTurn = null; // Clear - no longer right after boundary
+			// First message in conversation is a system injection (no boundary before it)
+			// → create a synthetic "session_start" boundary
+			if (isSysMsg && !seenRealContent && turns.length === 0 && !currentTurn) {
+				const startBoundary: Turn = {
+					id: event.uuid || `start-${turns.length}`,
+					type: 'session_boundary',
+					responseEvents: [],
+					toolsWithResults: new Map(),
+					boundaryEvent: {
+						...event,
+						type: 'session_boundary',
+						boundary_type: 'session_start',
+					} as TranscriptEvent,
+					userMessage: event,
+				};
+				turns.push(startBoundary);
+				lastBoundaryTurn = startBoundary; // Absorb subsequent system injections
+				continue;
+			}
+
+			// Additional system messages at conversation start (after synthetic boundary)
+			if (isSysMsg && lastBoundaryTurn) {
+				continue;
+			}
+
+			lastBoundaryTurn = null; // Real user message — stop absorbing
+			seenRealContent = true;
 
 			// Save current turn if exists
 			if (currentTurn) {
 				turns.push(currentTurn);
 			}
-			// Start new turn
+			// Start new turn — stamp with current session mode
 			currentTurn = {
 				id: event.uuid || `turn-${turns.length}`,
 				type: 'normal',
 				userMessage: event,
 				responseEvents: [],
 				toolsWithResults: new Map(),
+				sessionMode: currentMode,
 			};
 		} else if (event.type === 'tool_result') {
-			lastBoundaryTurn = null; // Clear on any other event
+			lastBoundaryTurn = null; // Real content — stop absorbing
+			seenRealContent = true;
 			// Attach result to its tool_use via toolUseId
 			if (currentTurn && event.toolUseId) {
 				currentTurn.toolsWithResults.set(event.toolUseId, event);
@@ -447,13 +263,16 @@ function groupEventsIntoTurns(events: TranscriptEvent[]): Turn[] {
 					type: 'normal',
 					responseEvents: [],
 					toolsWithResults: new Map(),
+					sessionMode: currentMode,
 				};
 				if (event.toolUseId) {
 					currentTurn.toolsWithResults.set(event.toolUseId, event);
 				}
 			}
 		} else if (event.type === 'text' || event.type === 'thinking' || event.type === 'tool_use') {
-			lastBoundaryTurn = null; // Clear on any other event
+			lastBoundaryTurn = null; // Real content — stop absorbing
+			seenRealContent = true;
+
 			if (!currentTurn) {
 				// Events before first user message - use unique ID
 				currentTurn = {
@@ -461,6 +280,7 @@ function groupEventsIntoTurns(events: TranscriptEvent[]): Turn[] {
 					type: 'normal',
 					responseEvents: [],
 					toolsWithResults: new Map(),
+					sessionMode: currentMode,
 				};
 			}
 			currentTurn.responseEvents.push(event);
@@ -525,7 +345,7 @@ function groupToolsIntoBatches(
 			// Start new batch or add single tool
 			if (targetFile) {
 				currentBatch = {
-					id: event.uuid || `batch-${result.length}`,
+					id: event.toolUseId || event.uuid || `batch-${result.length}`,
 					toolName,
 					targetFile,
 					tools: [{ event, result: toolResult }],
@@ -652,14 +472,29 @@ function parseContentWithCodeBlocks(content: string): React.ReactNode[] {
 }
 
 /**
+ * Parse and strip source prefix from user messages.
+ * Matches "[Dashboard HH:MM] " or "[Telegram HH:MM] " at the START of the message only.
+ * Returns the source type and the clean message content.
+ */
+function parseMessageSource(content: string): { source: 'dashboard' | 'telegram' | null; displayContent: string } {
+	const match = content.match(/^\[(Dashboard|Telegram) \d{1,2}:\d{2}\] /);
+	if (!match) return { source: null, displayContent: content };
+	return {
+		source: match[1].toLowerCase() as 'dashboard' | 'telegram',
+		displayContent: content.slice(match[0].length),
+	};
+}
+
+/**
  * User message bubble - right aligned with accent color
  */
 const UserMessage = memo(function UserMessage({ content, timestamp }: { content: string; timestamp?: string; }) {
 	const [copied, setCopied] = useState(false);
+	const { source, displayContent } = parseMessageSource(content);
 
 	const handleCopy = (e: React.MouseEvent) => {
 		e.stopPropagation();
-		navigator.clipboard.writeText(content);
+		navigator.clipboard.writeText(displayContent);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};
@@ -677,6 +512,8 @@ const UserMessage = memo(function UserMessage({ content, timestamp }: { content:
 			return '';
 		}
 	})() : '';
+
+	const SourceIcon = source === 'telegram' ? Send : source === 'dashboard' ? Monitor : null;
 
 	return (
 		<div className="flex justify-end mb-4 group/user">
@@ -696,12 +533,17 @@ const UserMessage = memo(function UserMessage({ content, timestamp }: { content:
 				</button>
 				{/* Message bubble */}
 				<div className="bg-[var(--color-primary)] text-white px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words rounded-2xl rounded-br-md shadow-sm">
-					{content}
+					{displayContent}
 				</div>
-				{/* Timestamp */}
-				{formattedTime && (
-					<div className="flex justify-end mt-1 mr-1">
-						<span className="text-[10px] text-[var(--text-muted)]">{formattedTime}</span>
+				{/* Timestamp + source icon */}
+				{(formattedTime || SourceIcon) && (
+					<div className="flex items-center justify-end gap-1 mt-1 mr-1">
+						{SourceIcon && (
+							<SourceIcon className="w-2.5 h-2.5 text-[var(--text-muted)] opacity-60" />
+						)}
+						{formattedTime && (
+							<span className="text-[10px] text-[var(--text-muted)]">{formattedTime}</span>
+						)}
 					</div>
 				)}
 			</div>
@@ -759,7 +601,376 @@ function SystemMessage({
 }
 
 /**
- * Tool display wrapper - uses new modular ToolChip system
+ * Specialist Report — renders specialist completion/failure notifications
+ * as a report card rather than a generic system pill.
+ *
+ * Shows role icon, pass/fail status, summary text, and workspace path.
+ * Left-aligned like assistant messages but in a distinct card.
+ */
+function SpecialistReport({ content, timestamp }: { content: string; timestamp?: string }) {
+	const notification = parseSpecialistNotification(content);
+	if (!notification) return <SystemMessage content={content} />;
+
+	const { role, sessionId, passed, summary, workspace } = notification;
+	const roleConfig = getRoleConfig(role);
+	const RoleIcon = roleConfig.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
+		} catch {
+			return '';
+		}
+	})() : '';
+
+	// Truncate session ID for display
+	const shortId = sessionId.length > 20 ? sessionId.slice(0, 20) + '...' : sessionId;
+
+	return (
+		<div className="my-4">
+			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3 max-w-[90%]">
+				{/* Header: role icon + name + status + time */}
+				<div className="flex items-center gap-2 mb-2">
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
+					>
+						<RoleIcon className="w-3.5 h-3.5 text-[#da7756]" />
+					</div>
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+						{roleConfig.label}
+					</span>
+					{passed ? (
+						<span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+							<Check className="w-3 h-3" />
+							Passed
+						</span>
+					) : (
+						<span className="flex items-center gap-0.5 text-[10px] font-medium text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded-full">
+							<X className="w-3 h-3" />
+							Failed
+						</span>
+					)}
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+
+				{/* Summary body */}
+				{summary && (
+					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+						{summary}
+					</p>
+				)}
+
+				{/* Workspace footer */}
+				{workspace && (
+					<div className="mt-2 pt-2 border-t border-[var(--border-subtle)] flex items-center gap-1.5">
+						<span className="text-[10px] text-[var(--text-muted)] font-mono truncate">
+							{workspace}
+						</span>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Specialist Reply — renders injected "Reply from {role}" messages
+ * as a chat-style card from the specialist.
+ */
+function SpecialistReplyCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const reply = parseSpecialistReply(content);
+	if (!reply) return <SystemMessage content={content} />;
+
+	const { role, sessionId, message } = reply;
+	const roleConfig = getRoleConfig(role);
+	const RoleIcon = roleConfig.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
+		} catch {
+			return '';
+		}
+	})() : '';
+
+	return (
+		<div className="my-4">
+			<div className="max-w-[90%]">
+				{/* Header: role icon + name + session ID */}
+				<div className="flex items-center gap-2 mb-1.5">
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
+					>
+						<RoleIcon className="w-3.5 h-3.5 text-[#da7756]" />
+					</div>
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+						{roleConfig.label}
+					</span>
+					<span className="text-[10px] font-mono text-[var(--text-muted)]">
+						{sessionId.slice(0, 8)}
+					</span>
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+
+				{/* Message bubble */}
+				<div className="ml-7 rounded-lg border border-[#da7756]/15 bg-[#da7756]/5 px-3 py-2">
+					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+						{message}
+					</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Team Message Card — renders direct team communication between sessions.
+ * Shows from→to header with role icons and direction arrow.
+ * Format: [TEAM → Target] from Source: message
+ */
+function TeamMessageCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const parsed = parseTeamMessage(content);
+	if (!parsed) return <SystemMessage content={content} />;
+
+	const { sourceRole, targetRole, message } = parsed;
+	const sourceConfig = getRoleConfig(sourceRole);
+	const targetConfig = getRoleConfig(targetRole);
+	const SourceIcon = sourceConfig.icon;
+	const TargetIcon = targetConfig.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
+		} catch {
+			return '';
+		}
+	})() : '';
+
+	return (
+		<div className="my-4">
+			<div className="max-w-[90%]">
+				{/* Header: source → target with role icons */}
+				<div className="flex items-center gap-2 mb-1.5">
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
+					>
+						<SourceIcon className="w-3.5 h-3.5 text-[#da7756]" />
+					</div>
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+						{sourceConfig.label}
+					</span>
+					<ArrowRight className="w-3 h-3 text-[var(--text-muted)]" />
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
+					>
+						<TargetIcon className="w-3.5 h-3.5 text-[#da7756]" />
+					</div>
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+						{targetConfig.label}
+					</span>
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+
+				{/* Message bubble */}
+				<div className="ml-7 rounded-lg border border-[#8b5cf6]/15 bg-[#8b5cf6]/5 px-3 py-2">
+					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+						{message}
+					</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Team Request Card — renders spawn requests from non-Chief specialists.
+ * Shows requesting role and what they want spawned.
+ * Format: [TEAM REQUEST: Role wants OtherRole for "purpose"]
+ */
+function TeamRequestCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const parsed = parseTeamRequest(content);
+	if (!parsed) return <SystemMessage content={content} />;
+
+	const { requestingRole, requestedRole, purpose } = parsed;
+	const reqConfig = getRoleConfig(requestingRole);
+	const ReqIcon = reqConfig.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
+		} catch {
+			return '';
+		}
+	})() : '';
+
+	return (
+		<div className="my-4">
+			<div className="rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/5 p-3 max-w-[90%]">
+				{/* Header: requesting role + badge */}
+				<div className="flex items-center gap-2 mb-2">
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
+					>
+						<ReqIcon className="w-3.5 h-3.5 text-[#da7756]" />
+					</div>
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+						{reqConfig.label}
+					</span>
+					<span className="flex items-center gap-0.5 text-[10px] font-medium text-[#8b5cf6] bg-[#8b5cf6]/10 px-1.5 py-0.5 rounded-full">
+						Spawn Request
+					</span>
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+
+				{/* Request details */}
+				<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+					Wants <span className="font-semibold capitalize">{requestedRole}</span> for &ldquo;{purpose}&rdquo;
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Task Notification Card — renders subagent completion results.
+ * Collapsible: shows summary + stats in header, expands to full markdown result.
+ */
+function TaskNotificationCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const notification = parseTaskNotification(content);
+	const [isExpanded, setIsExpanded] = useState(false);
+
+	if (!notification) return <SystemMessage content={content} />;
+
+	const { status, summary, result, totalTokens, toolUses, durationMs } = notification;
+	const isSuccess = status === 'completed';
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
+		} catch {
+			return '';
+		}
+	})() : '';
+
+	// Format duration
+	const duration = durationMs ? (
+		durationMs > 60000
+			? `${Math.round(durationMs / 60000)}m`
+			: `${Math.round(durationMs / 1000)}s`
+	) : null;
+
+	// Strip "Agent " prefix from summary for cleaner display
+	const cleanSummary = summary.replace(/^Agent "/, '"');
+
+	return (
+		<div className="my-4">
+			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] max-w-[90%] overflow-hidden">
+				{/* Header — always visible */}
+				<button
+					onClick={() => setIsExpanded(!isExpanded)}
+					className="w-full flex items-center gap-2 p-3 text-left hover:bg-[var(--surface-accent)] transition-colors"
+				>
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: 'color-mix(in srgb, #3b82f6 12%, transparent)' }}
+					>
+						<Zap className="w-3.5 h-3.5 text-[#3b82f6]" />
+					</div>
+
+					<span className="text-[12px] font-semibold text-[var(--text-secondary)] flex-1 truncate">
+						{cleanSummary}
+					</span>
+
+					{/* Status badge */}
+					{isSuccess ? (
+						<span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
+							<Check className="w-3 h-3" />
+						</span>
+					) : (
+						<span className="flex items-center gap-0.5 text-[10px] font-medium text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
+							<X className="w-3 h-3" />
+						</span>
+					)}
+
+					{/* Stats */}
+					<div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] flex-shrink-0">
+						{duration && <span>{duration}</span>}
+						{toolUses !== undefined && <span>{toolUses} tools</span>}
+						{formattedTime && (
+							<>
+								<span className="w-0.5 h-0.5 rounded-full bg-[var(--text-muted)]" />
+								<span>{formattedTime}</span>
+							</>
+						)}
+					</div>
+
+					<ChevronRight
+						className={`w-3.5 h-3.5 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+					/>
+				</button>
+
+				{/* Expanded result */}
+				{isExpanded && result && (
+					<div className="border-t border-[var(--border-subtle)] px-4 py-3 max-h-96 overflow-y-auto">
+						<div className="text-[12px] text-[var(--text-secondary)] leading-relaxed prose prose-sm prose-invert max-w-none
+							[&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2
+							[&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
+							[&_p]:my-1.5 [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1
+							[&_table]:text-[11px] [&_th]:px-2 [&_th]:py-1 [&_td]:px-2 [&_td]:py-1
+							[&_code]:text-[11px] [&_code]:bg-[var(--surface-muted)] [&_code]:px-1 [&_code]:rounded
+							[&_hr]:my-3 [&_hr]:border-[var(--border-subtle)]
+							[&_a]:text-[var(--color-primary)] [&_a]:underline">
+							<ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+								{result}
+							</ReactMarkdown>
+						</div>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Tool display wrapper — routes to ToolChip or SystemEventChip based on registry category.
  */
 function ToolOneLiner({
 	event,
@@ -774,26 +985,27 @@ function ToolOneLiner({
 }) {
 	const toolName = event.toolName || 'Unknown';
 	const formattedName = formatToolName(toolName);
-	const Icon = TOOL_ICONS[formattedName] || TOOL_ICONS[toolName] || Wrench;
-	const color = TOOL_COLORS[formattedName] || TOOL_COLORS[toolName] || 'var(--text-tertiary)';
+	const config = getToolConfig(formattedName);
+	const Icon = config.icon;
+	const color = config.color;
 
-	// Check if this is a worker create - show inline card instead
-	const workerInfo = getWorkerCreateInfo(
-		toolName,
-		event.toolInput as Record<string, unknown>,
-		result?.content
-	);
-
-	if (workerInfo) {
+	// System events render as full-width muted bars
+	if (config.category === 'system') {
 		return (
-			<WorkerInlineCard
-				workerId={workerInfo.workerId}
-				shortId={workerInfo.shortId}
-				instructionsPreview={workerInfo.instructionsPreview}
+			<SystemEventChip
+				toolName={toolName}
+				formattedName={formattedName}
+				icon={Icon}
+				color={color}
+				toolInput={event.toolInput as Record<string, unknown> | undefined}
+				resultContent={result?.content}
+				isExpanded={isExpanded}
+				onToggle={onToggle}
 			/>
 		);
 	}
 
+	// Regular tools render as inline colored chips
 	return (
 		<ToolChip
 			toolName={toolName}
@@ -825,8 +1037,9 @@ function ToolBatchDisplay({
 	onToggleTool: (id: string) => void;
 }) {
 	const formattedName = formatToolName(batch.toolName);
-	const Icon = TOOL_ICONS[formattedName] || TOOL_ICONS[batch.toolName] || Wrench;
-	const color = TOOL_COLORS[formattedName] || TOOL_COLORS[batch.toolName] || 'var(--text-tertiary)';
+	const config = getToolConfig(formattedName);
+	const Icon = config.icon;
+	const color = config.color;
 	const hasErrors = batch.tools.some(
 		t => t.result?.content?.includes('error') || t.result?.content?.includes('Error')
 	);
@@ -1014,117 +1227,262 @@ const TextBlock = memo(function TextBlock({ content }: { content: string; }) {
 });
 
 /**
- * Session boundary marker - shown between sessions in a conversation (Jan 2026)
- * Shows context reset with handoff message if available.
+ * Format mode names for display
  */
-function SessionBoundary({ event, handoffMessage }: { event: TranscriptEvent; handoffMessage?: string; }) {
-	const [isExpanded, setIsExpanded] = useState(false);
-
-	// Format the timestamp nicely
-	const formatBoundaryTime = (ts: string) => {
-		try {
-			const date = new Date(ts);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
+function formatModeName(mode: string): string {
+	const modeMap: Record<string, string> = {
+		'preparation': 'Preparation',
+		'implementation': 'Implementation',
+		'verification': 'Verification',
+		'interactive': 'Interactive',
 	};
+	return modeMap[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
+}
 
-	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-	// Use handoff message if provided, fall back to event content
-	const content = handoffMessage || event.content || '';
-
-	// Extract handoff reason/summary from content
-	const getHandoffSummary = (text: string): string => {
-		// Try to extract reason from AUTO-HANDOFF format
-		const reasonMatch = text.match(/Reason:\s*([^\n]+)/);
-		if (reasonMatch) return reasonMatch[1].trim();
-
-		// Try to extract from "Handoff:" prefix  
-		const handoffMatch = text.match(/Handoff:\s*(\w+)/);
-		if (handoffMatch) return handoffMatch[1].trim();
-
-		// Try to extract session type (chief_cycle, etc)
-		const sessionMatch = text.match(/SessionStart:\s*(\w+)/);
-		if (sessionMatch) return sessionMatch[1].replace(/_/g, ' ');
-
-		// Default: first meaningful line (skip brackets)
-		const firstLine = text.split('\n').find(l => {
-			const trimmed = l.trim();
-			return trimmed && !trimmed.startsWith('[') && !trimmed.startsWith('<');
+/**
+ * Format the timestamp nicely for boundaries
+ */
+function formatBoundaryTime(ts: string): string {
+	try {
+		const date = new Date(ts);
+		return date.toLocaleTimeString('en-US', {
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
 		});
-		if (firstLine && firstLine.length < 60) return firstLine.trim();
-
+	} catch {
 		return '';
-	};
+	}
+}
 
-	const summary = getHandoffSummary(content);
-	const hasFullContent = content.length > 50; // Only expandable if substantial content
+/** Specialist phase ordering */
+const PHASE_ORDER = ['preparation', 'implementation', 'verification'] as const;
+type Phase = typeof PHASE_ORDER[number];
+
+/**
+ * Mode Transition Boundary — shows phase progression bar for autonomous specialist flows.
+ * e.g. Preparation ✓ → Implementation ● → Verification ○
+ */
+function ModeTransitionBoundary({ event }: { event: TranscriptEvent }) {
+	const prevMode = (event as any).prev_mode as string | undefined;
+	const currMode = (event as any).mode as string | undefined;
+	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
+
+	// Determine which phase we're entering
+	const currPhaseIdx = PHASE_ORDER.indexOf(currMode as Phase);
 
 	return (
 		<div className="py-4 my-2">
-			{/* Main boundary indicator */}
 			<div className="flex items-center gap-3">
-				{/* Left gradient line */}
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--border-default)]/50 to-[var(--border-default)]" />
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
 
-				{/* Center badge - clickable if has content */}
-				<button
-					onClick={() => hasFullContent && setIsExpanded(!isExpanded)}
-					disabled={!hasFullContent}
-					className={`
-						flex items-center gap-2 px-4 py-2 rounded-lg 
-						bg-[var(--surface-muted)] border border-[var(--border-subtle)]
-						${hasFullContent ? 'hover:bg-[var(--surface-accent)] hover:border-[var(--border-default)] cursor-pointer' : 'cursor-default'}
-						transition-all duration-150
-					`}
-				>
-					<RefreshCw className="w-3.5 h-3.5 text-[var(--color-warning)]" />
-					<div className="flex flex-col items-start">
-						<span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-							Context Reset
-						</span>
-						{summary && (
-							<span className="text-[11px] text-[var(--text-secondary)] max-w-[250px] truncate">
-								{summary}
-							</span>
-						)}
+				<div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
+					{/* Phase progression bar */}
+					<div className="flex items-center gap-1">
+						{PHASE_ORDER.map((phase, idx) => {
+							const isCompleted = idx < currPhaseIdx;
+							const isCurrent = idx === currPhaseIdx;
+							const isFuture = idx > currPhaseIdx;
+
+							// Phase colors
+							const phaseColors: Record<string, string> = {
+								preparation: '#60a5fa',    // blue
+								implementation: '#f59e0b', // amber
+								verification: '#34d399',   // green
+							};
+							const color = phaseColors[phase] || 'var(--text-muted)';
+
+							return (
+								<div key={phase} className="flex items-center gap-1">
+									{/* Connector line (not before first) */}
+									{idx > 0 && (
+										<div
+											className="w-4 h-px"
+											style={{
+												backgroundColor: isCompleted || isCurrent
+													? color
+													: 'var(--border-subtle)',
+												opacity: isCompleted || isCurrent ? 0.6 : 0.3,
+											}}
+										/>
+									)}
+
+									{/* Phase indicator */}
+									<div className="flex items-center gap-1">
+										{isCompleted ? (
+											<Check className="w-3 h-3" style={{ color }} />
+										) : isCurrent ? (
+											<div
+												className="w-2 h-2 rounded-full"
+												style={{ backgroundColor: color }}
+											/>
+										) : (
+											<div
+												className="w-2 h-2 rounded-full border"
+												style={{ borderColor: 'var(--text-muted)', opacity: 0.3 }}
+											/>
+										)}
+										<span
+											className="text-[10px] font-medium"
+											style={{
+												color: isFuture ? 'var(--text-muted)' : color,
+												opacity: isFuture ? 0.4 : 1,
+											}}
+										>
+											{formatModeName(phase).slice(0, 4)}
+										</span>
+									</div>
+								</div>
+							);
+						})}
 					</div>
+
+					{/* Timestamp */}
 					{time && (
 						<>
-							<span className="w-1 h-1 rounded-full bg-[var(--text-muted)]/40" />
-							<span className="text-[10px] text-[var(--text-muted)]">
-								{time}
-							</span>
+							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
+							<span className="text-[10px] text-[#da7756]/50">{time}</span>
 						</>
 					)}
-					{hasFullContent && (
-						<ChevronDown
-							className={`w-3 h-3 text-[var(--text-muted)] transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`}
-						/>
-					)}
-				</button>
-
-				{/* Right gradient line */}
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[var(--border-default)]/50 to-[var(--border-default)]" />
-			</div>
-
-			{/* Expanded handoff content */}
-			{isExpanded && content && (
-				<div className="mt-3 mx-auto max-w-[500px]">
-					<div className="bg-[var(--surface-base)] rounded-lg border border-[var(--border-subtle)] p-3">
-						<pre className="text-[11px] text-[var(--text-tertiary)] whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
-							{content}
-						</pre>
-					</div>
 				</div>
-			)}
+
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+			</div>
 		</div>
 	);
+}
+
+/**
+ * Reset Boundary — shown when a session calls reset() for context handoff.
+ * Simple inline marker — no expand/collapse.
+ */
+function ResetBoundary({ event }: { event: TranscriptEvent }) {
+	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
+
+	return (
+		<div className="py-4 my-2">
+			<div className="flex items-center gap-3">
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+
+				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
+					<RefreshCw className="w-3.5 h-3.5 text-[#da7756]" />
+					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
+						Context reset
+					</span>
+					{time && (
+						<>
+							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
+							<span className="text-[10px] text-[#da7756]/50">{time}</span>
+						</>
+					)}
+				</div>
+
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Session Start Boundary — first session in a conversation.
+ * Clean marker showing when the session began.
+ */
+function SessionStartBoundary({ event }: { event: TranscriptEvent }) {
+	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
+	return (
+		<div className="py-4 my-2">
+			<div className="flex items-center gap-3">
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
+					<ClaudeLogo className="w-3.5 h-3.5 text-[#da7756]" />
+					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
+						Session started
+					</span>
+					{time && (
+						<>
+							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
+							<span className="text-[10px] text-[#da7756]/50">{time}</span>
+						</>
+					)}
+				</div>
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Conversation Ended — final bar when a conversation closes (done() with no next mode).
+ */
+function ConversationEnded({ event }: { event: TranscriptEvent }) {
+	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
+	return (
+		<div className="py-4 my-2">
+			<div className="flex items-center gap-3">
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
+					<Check className="w-3.5 h-3.5 text-[#da7756]" />
+					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
+						Session complete
+					</span>
+					{time && (
+						<>
+							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
+							<span className="text-[10px] text-[#da7756]/50">{time}</span>
+						</>
+					)}
+				</div>
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Session boundary marker - dispatches to the right boundary component
+ * based on boundary_type from the event metadata.
+ *
+ * All boundaries share the same visual structure: horizontal line + chip.
+ * Variations: session_start (claude logo), mode_transition (phase bar),
+ * summarizer (brain icon), reset (simple marker).
+ */
+function SessionBoundary({ event }: { event: TranscriptEvent }) {
+	const boundaryType = (event as any).boundary_type || (event as any).boundaryType;
+
+	if (boundaryType === 'session_start') {
+		return <SessionStartBoundary event={event} />;
+	}
+
+	if (boundaryType === 'mode_transition') {
+		return <ModeTransitionBoundary event={event} />;
+	}
+
+	if (boundaryType === 'summarizer') {
+		// Memory Agent is a mode — use same structure as other boundaries
+		const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
+		return (
+			<div className="py-4 my-2">
+				<div className="flex items-center gap-3">
+					<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+					<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
+						<Brain className="w-3.5 h-3.5 text-[#da7756]" />
+						<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
+							Memory Agent
+						</span>
+						{time && (
+							<>
+								<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
+								<span className="text-[10px] text-[#da7756]/50">{time}</span>
+							</>
+						)}
+					</div>
+					<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
+				</div>
+			</div>
+		);
+	}
+
+	return <ResetBoundary event={event} />;
 }
 
 /**
@@ -1132,8 +1490,8 @@ function SessionBoundary({ event, handoffMessage }: { event: TranscriptEvent; ha
  */
 function TurnBlock({
 	turn,
-	roleIcon: RoleIcon,
-	roleLabel,
+	roleIcon: DefaultRoleIcon,
+	roleLabel: defaultRoleLabel,
 	isFocused,
 	onFocus,
 }: {
@@ -1143,6 +1501,10 @@ function TurnBlock({
 	isFocused: boolean;
 	onFocus: () => void;
 }) {
+	// Override icon/label for summarizer sessions (Memory Agent mode)
+	const isSummarizer = turn.sessionMode === 'summarizer';
+	const RoleIcon = isSummarizer ? Brain : DefaultRoleIcon;
+	const roleLabel = isSummarizer ? 'Memory Agent' : defaultRoleLabel;
 	// Track which tools, batches, and thinking blocks are expanded
 	const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 	const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
@@ -1176,6 +1538,26 @@ function TurnBlock({
 		});
 	};
 
+	// Auto-expand AskUserQuestion when it's waiting for input
+	useEffect(() => {
+		for (const event of turn.responseEvents) {
+			if (event.type === 'tool_use') {
+				const name = formatToolName(event.toolName || '');
+				if (name === 'AskUserQuestion' && event.toolUseId) {
+					const hasResult = turn.toolsWithResults.has(event.toolUseId);
+					if (!hasResult) {
+						setExpandedTools(prev => {
+							if (prev.has(event.toolUseId!)) return prev;
+							const next = new Set(prev);
+							next.add(event.toolUseId!);
+							return next;
+						});
+					}
+				}
+			}
+		}
+	}, [turn.responseEvents, turn.toolsWithResults]);
+
 	// Check if this turn has any assistant response
 	const hasResponse = turn.responseEvents.length > 0;
 
@@ -1186,14 +1568,29 @@ function TurnBlock({
 	);
 
 	// Check if user message is actually a system injection
-	const userContent = turn.userMessage?.content || '';
+	const userContent = normalizeMessageContent(turn.userMessage?.content || '');
 	const isSystem = turn.userMessage && isSystemMessage(userContent);
+	const isSpecialistComplete = isSystem && isSpecialistNotification(userContent);
+	const isReply = isSystem && !isSpecialistComplete && isSpecialistReply(userContent);
+	const isTeamMsg = isSystem && !isSpecialistComplete && !isReply && isTeamMessage(userContent);
+	const isTeamReq = isSystem && !isSpecialistComplete && !isReply && !isTeamMsg && isTeamRequest(userContent);
+	const isTaskNotif = isSystem && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && isTaskNotification(userContent);
 
 	return (
 		<div className="mb-5" onClick={onFocus}>
-			{/* User message or System message */}
+			{/* User message, Specialist report, Specialist reply, Team message, Team request, Task notification, or System message */}
 			{turn.userMessage && (
-				isSystem ? (
+				isSpecialistComplete ? (
+					<SpecialistReport content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isReply ? (
+					<SpecialistReplyCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isTeamMsg ? (
+					<TeamMessageCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isTeamReq ? (
+					<TeamRequestCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isTaskNotif ? (
+					<TaskNotificationCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isSystem ? (
 					<SystemMessage content={userContent} />
 				) : (
 					<UserMessage content={userContent} timestamp={turn.userMessage.timestamp} />
@@ -1235,7 +1632,9 @@ function TurnBlock({
 
 							// Handle regular events
 							const event = item;
-							const key = event.uuid || `${turn.id}-${idx}`;
+							const key = (event.type === 'tool_use' && event.toolUseId)
+							? event.toolUseId
+							: (event.uuid ? `${event.uuid}-${idx}` : `${turn.id}-${idx}`);
 
 							if (event.type === 'text' && event.content) {
 								return <TextBlock key={key} content={event.content} />;
@@ -1278,11 +1677,50 @@ function TurnBlock({
 	);
 }
 
+/**
+ * HandoffProgress - Inline indicator during session handoff
+ * Shows at the bottom of the transcript during reset/handoff process
+ */
+function HandoffProgress({ phase }: { phase: HandoffPhase }) {
+	if (!phase) return null;
+
+	const phaseConfig = {
+		resetting: { text: 'Resetting session...', subtext: 'Preparing context for handoff' },
+		generating: { text: 'Generating memory handoff...', subtext: 'Summarizing conversation for successor' },
+		complete: { text: 'Handoff complete', subtext: 'Spawning fresh session...' },
+	};
+
+	const { text, subtext } = phaseConfig[phase];
+	const isComplete = phase === 'complete';
+
+	return (
+		<div className="py-4 my-2">
+			<div className="flex items-center gap-3">
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/20 to-[#da7756]/40" />
+
+				<div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[var(--surface-base)] border border-[#da7756]/20">
+					{isComplete ? (
+						<Check className="w-4 h-4 text-[#da7756] flex-shrink-0" />
+					) : (
+						<RefreshCw className="w-4 h-4 text-[#da7756] animate-spin flex-shrink-0" />
+					)}
+					<div className="flex flex-col">
+						<span className="text-[12px] font-medium text-[var(--text-secondary)]">{text}</span>
+						<span className="text-[10px] text-[var(--text-muted)]">{subtext}</span>
+					</div>
+				</div>
+
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/20 to-[#da7756]/40" />
+			</div>
+		</div>
+	);
+}
+
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
-export function TranscriptViewer({ events, isConnected = false, role, activityIndicator, pagination, onLoadEarlier }: TranscriptViewerProps) {
+export function TranscriptViewer({ events, isConnected = false, role, activityIndicator, pagination, onLoadEarlier, handoffPhase }: TranscriptViewerProps) {
 	const roleConfig = getRoleConfig(role);
 	const RoleIcon = roleConfig.icon;
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -1451,10 +1889,9 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 				{turns.map((turn, idx) => (
 					<div key={turn.id} data-turn-index={idx}>
 						{turn.type === 'session_boundary' ? (
-							<SessionBoundary
-								event={turn.boundaryEvent!}
-								handoffMessage={turn.userMessage?.content}
-							/>
+							<SessionBoundary event={turn.boundaryEvent!} />
+						) : turn.type === 'conversation_ended' ? (
+							<ConversationEnded event={turn.boundaryEvent!} />
 						) : (
 							<TurnBlock
 								turn={turn}
@@ -1466,6 +1903,9 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 						)}
 					</div>
 				))}
+
+				{/* Handoff progress indicator */}
+				{handoffPhase && <HandoffProgress phase={handoffPhase} />}
 
 				{/* Activity indicator - shows thinking/tool execution inline with chat */}
 				{activityIndicator && (

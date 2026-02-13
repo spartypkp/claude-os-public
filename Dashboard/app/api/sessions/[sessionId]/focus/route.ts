@@ -9,7 +9,7 @@ export async function POST(
   const { sessionId } = await params;
 
   try {
-    const response = await fetch(`${BACKEND_URL}/api/system/sessions/${sessionId}/focus`, {
+    const response = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/focus`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

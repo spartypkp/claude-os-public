@@ -226,7 +226,7 @@ export function QuickLook() {
 						style={{ background: 'var(--surface-sunken)' }}
 					>
 						<img
-							src={`${API_BASE}/api/finder/raw/${encodeURIComponent(quickLookPath)}`}
+							src={`${API_BASE}/api/files/raw/${encodeURIComponent(quickLookPath)}`}
 							alt={filename}
 							className="max-w-full max-h-full object-contain rounded shadow-lg"
 						/>

@@ -102,7 +102,7 @@ export function CalendarWidgetContent() {
 			const data = await fetchCalendarEvents({
 				fromDate: todayStart.toISOString(),
 				toDate: todayEnd.toISOString(),
-				usePreferred: false,
+				usePreferred: true,
 				limit: 200,
 			});
 

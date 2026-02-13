@@ -22,7 +22,7 @@ interface ChiefStatus {
 }
 
 async function fetchChiefStatus(): Promise<ChiefStatus> {
-  const response = await fetch(`${API_BASE}/api/chief/status`);
+  const response = await fetch(`${API_BASE}/api/sessions/chief/status`);
   if (!response.ok) {
     throw new Error(`Failed to fetch chief status: ${response.statusText}`);
   }

@@ -26,6 +26,7 @@ export interface Role {
   is_protected: boolean;
   modes: string[];
   display: RoleDisplay;
+  description: string;
 }
 
 interface RolesResponse {

@@ -93,6 +93,7 @@ def register_session(input_data: dict, session_id: str):
         # Conversation tracking (Jan 2026)
         conversation_id = os.environ.get('CLAUDE_CONVERSATION_ID')
         parent_session_id = os.environ.get('CLAUDE_PARENT_SESSION_ID')
+        spec_path = os.environ.get('SPEC_PATH')
 
         # Legacy env vars (backward compat)
         session_type = os.environ.get('CLAUDE_SESSION_TYPE', 'interactive')
@@ -127,11 +128,11 @@ def register_session(input_data: dict, session_id: str):
             INSERT INTO sessions (
                 session_id, role, mode, session_type, session_subtype,
                 mission_execution_id, description,
-                conversation_id, parent_session_id,
+                conversation_id, parent_session_id, spec_path,
                 started_at, last_seen_at, transcript_path, claude_session_id, cwd, current_state,
                 tmux_pane, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 last_seen_at = excluded.last_seen_at,
                 ended_at = NULL,
@@ -149,10 +150,11 @@ def register_session(input_data: dict, session_id: str):
                 description = COALESCE(excluded.description, sessions.description),
                 conversation_id = COALESCE(excluded.conversation_id, sessions.conversation_id),
                 parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+                spec_path = COALESCE(excluded.spec_path, sessions.spec_path),
                 updated_at = excluded.updated_at
         """, (
             session_id, role, mode, session_type, session_subtype,
-            mission_execution_id, description, conversation_id, parent_session_id,
+            mission_execution_id, description, conversation_id, parent_session_id, spec_path,
             now, now, transcript_path, claude_session_id, cwd, tmux_pane, now, now
         ))
 
@@ -246,8 +248,7 @@ def load_role_extras(role: str, input_data: dict, cwd: Path) -> list:
     try:
         import yaml
 
-        # Role structure: .claude/roles/{role}/role.md
-        role_file = repo_root / ".claude" / "roles" / role / "role.md"
+        role_file = repo_root / ".claude" / "roles" / f"{role}.md"
         if not role_file.exists():
             return []
 

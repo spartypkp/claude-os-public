@@ -8,8 +8,8 @@
 ## Why You're Fresh
 
 You didn't implement the changes. You have no memory of what was tried or what was hard. You see only:
-- `Desktop/working/{conversation-id}/spec.md` — Requirements
-- `Desktop/working/{conversation-id}/plan.md` — Verification criteria
+- `Desktop/conversations/{conversation-id}/spec.md` — Requirements
+- `Desktop/conversations/{conversation-id}/plan.md` — Verification criteria
 - The current state of the external codebase
 
 Unbiased judgment.
@@ -19,14 +19,14 @@ Unbiased judgment.
 ## Path Rules
 
 **Environment Variables:**
-- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/Users/s/Projects/.../life-specifications`)
-- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/working/project-xxx`)
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/project-xxx`)
 
 **Always use absolute paths for workspace files:**
 - ✅ `$WORKSPACE/progress.md`
 - ✅ `$WORKSPACE/spec.md`
 - ✅ `$WORKSPACE/plan.md`
-- ❌ `Desktop/working/{conversation-id}/progress.md` (breaks after `cd`)
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
 
 **For external project work, use absolute paths or subshells:**
 ```bash
@@ -40,7 +40,7 @@ cd Desktop/projects/client-site
 ```
 
 **Why this matters:**
-When you `cd` into a project directory and then write to `Desktop/working/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+When you `cd` into a project directory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
 
 Using absolute paths for workspace files ensures they always go to the correct location.
 
@@ -61,23 +61,21 @@ Check each one. Document results.
 ## Making Judgment
 
 ### PASS — All criteria met
-```python
-done(
-    summary="All criteria passed. Changes complete.",
-    passed=True
-)
-```
+
+**Call the `mcp__life__done` tool** with:
+- summary: "All criteria passed. Changes complete."
+- passed: true
+
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 System notifies Chief. Session ends.
 
 ### FAIL — Issues found
-```python
-done(
-    summary="Tests pass but linter fails",
-    passed=False,
-    feedback="ESLint reports 3 errors in components/Button.tsx: missing semicolons on lines 24, 31, 45. Their style guide requires semicolons. Fix to match project style."
-)
-```
+
+**Call the `mcp__life__done` tool** with:
+- summary: "Tests pass but linter fails"
+- passed: false
+- feedback: "ESLint reports 3 errors in components/Button.tsx: missing semicolons on lines 24, 31, 45. Their style guide requires semicolons. Fix to match project style."
 
 System spawns Implementation mode to address feedback.
 

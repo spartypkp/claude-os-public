@@ -3,13 +3,43 @@
  */
 import type { LucideIcon } from 'lucide-react';
 
+// =============================================================================
+// CORE TYPES
+// =============================================================================
+
+/**
+ * Tool category determines rendering style:
+ * - 'tool': Inline chip (Read, Edit, Bash, search, MCP data tools)
+ * - 'system': Full-width system event (lifecycle, meta, orchestration)
+ */
+export type ToolCategory = 'tool' | 'system';
+
+/**
+ * Unified tool configuration — single source of truth for how a tool renders.
+ * Lives in registry.ts. Replaces the old fragmented icon/color/oneLiner split.
+ */
+export interface ToolConfig {
+	/** Lucide icon component */
+	icon: LucideIcon;
+	/** CSS color value */
+	color: string;
+	/** Rendering category */
+	category: ToolCategory;
+	/** Get one-liner text for collapsed view */
+	getOneLiner: (input: ParsedToolInput, result?: ParsedToolResult) => string;
+	/** Whether to show the tool name as an inline prefix (e.g., "STATUS: text") */
+	showToolName?: boolean;
+	/** Override label for the prefix (defaults to formattedName). Use for ugly names like reply_to_chief → "REPLY" */
+	chipLabel?: string;
+}
+
 /**
  * Parsed tool input with semantic meaning
  */
 export interface ParsedToolInput {
 	// File operations
 	filePath?: string;
-	path?: string;  // Alternative to filePath
+	path?: string;
 	fileName?: string;
 	parentDir?: string;
 	content?: string;
@@ -24,10 +54,6 @@ export interface ParsedToolInput {
 
 	// MCP operations
 	operation?: string;
-
-	// Worker
-	workerId?: string;
-	instructions?: string;
 
 	// Contact
 	contactName?: string;
@@ -80,21 +106,3 @@ export interface ToolExpandedProps {
 	rawInput?: Record<string, unknown>;
 	rawResult?: string;
 }
-
-/**
- * Tool renderer configuration
- */
-export interface ToolRendererConfig {
-	/** Get one-liner text for collapsed view */
-	getOneLiner: (input: ParsedToolInput, result?: ParsedToolResult) => string;
-
-	/** Optional: custom chip component */
-	ChipComponent?: React.ComponentType<ToolChipProps>;
-
-	/** Optional: custom expanded component */
-	ExpandedComponent?: React.ComponentType<ToolExpandedProps>;
-
-	/** Whether to show the tool name badge */
-	showToolName?: boolean;
-}
-

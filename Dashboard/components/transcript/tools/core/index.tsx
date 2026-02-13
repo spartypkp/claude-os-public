@@ -2,112 +2,18 @@
 
 /**
  * Core Tool Expanded Views
- * 
- * Claude Code native tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, TodoWrite
- * These are the fundamental tools built into Claude Code.
+ *
+ * Claude Code native tools: Edit, Bash, Grep, Glob, WebSearch, WebFetch, TodoWrite
+ * Read/Write don't expand — they click-to-open in Desktop.
  */
 
 import { AlertCircle, Check, Clock, FolderOpen, Play, Search, Square, Terminal } from 'lucide-react';
 import { useOpenInDesktop } from '../ClickableRef';
-import { CodeBlock, FilePathHeader, InfoBox, SectionHeader } from '../shared';
+import { CodeBlock, FilePathHeader, InfoBox, SectionHeader, isErrorResult } from '../shared';
 import type { ToolExpandedProps } from '../types';
 
 // =============================================================================
-// READ TOOL
-// =============================================================================
-
-export function ReadExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
-	const path = input.filePath || 'unknown';
-	const offset = rawInput?.offset ? Number(rawInput.offset) : undefined;
-	const limit = rawInput?.limit ? Number(rawInput.limit) : undefined;
-	const hasError = rawResult?.toLowerCase().includes('error');
-
-	const lineCount = rawResult ? rawResult.split('\n').length : 0;
-
-	return (
-		<div className="space-y-2">
-			<FilePathHeader path={path} variant="default" />
-
-			{(offset || limit) && (
-				<div className="text-[10px] text-[var(--text-muted)] flex items-center gap-2">
-					{offset && <span>from line {offset}</span>}
-					{limit && <span>• {limit} lines</span>}
-				</div>
-			)}
-
-			{rawResult && !hasError && (
-				<div>
-					<div className="flex items-center justify-between mb-1">
-						<span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">Content</span>
-						<span className="text-[9px] text-[var(--text-muted)]">{lineCount} lines</span>
-					</div>
-					<CodeBlock code={rawResult} maxHeight="250px" showLineNumbers />
-				</div>
-			)}
-
-			{hasError && rawResult && (
-				<div className="bg-[var(--color-error)]/10 rounded-md p-2 border border-[var(--color-error)]/20">
-					<div className="flex items-center gap-1.5 text-[10px] text-[var(--color-error)] font-medium mb-1">
-						<AlertCircle className="w-3 h-3" />
-						Error
-					</div>
-					<code className="text-[11px] text-[var(--text-secondary)] font-mono">{rawResult}</code>
-				</div>
-			)}
-		</div>
-	);
-}
-
-// =============================================================================
-// WRITE TOOL
-// =============================================================================
-
-export function WriteExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
-	const path = input.filePath || 'unknown';
-	const fileName = path.split('/').pop() || path;
-	const content = rawInput?.content ? String(rawInput.content) : input.content || '';
-	const hasError = rawResult?.toLowerCase().includes('error');
-
-	const ext = fileName.split('.').pop()?.toLowerCase();
-	const langMap: Record<string, string> = {
-		ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-		py: 'python', rs: 'rust', go: 'go', md: 'markdown', json: 'json',
-		css: 'css', html: 'html', sql: 'sql', sh: 'bash', yml: 'yaml', yaml: 'yaml'
-	};
-	const language = ext ? langMap[ext] : undefined;
-	const lineCount = content ? content.split('\n').length : 0;
-
-	return (
-		<div className="space-y-2">
-			<FilePathHeader path={path} variant="success" />
-
-			{content && (
-				<div>
-					<div className="flex items-center justify-between mb-1">
-						<span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">Content</span>
-						<span className="text-[9px] text-[var(--text-muted)]">{lineCount} lines</span>
-					</div>
-					<CodeBlock
-						code={content.slice(0, 3000) + (content.length > 3000 ? '\n...' : '')}
-						language={language}
-						maxHeight="250px"
-						showLineNumbers
-					/>
-				</div>
-			)}
-
-			{rawResult && (
-				<div className={`text-[10px] flex items-center gap-1.5 ${hasError ? 'text-[var(--color-error)]' : 'text-[var(--color-success)]'}`}>
-					{hasError ? <AlertCircle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-					{hasError ? rawResult : '✓ Written'}
-				</div>
-			)}
-		</div>
-	);
-}
-
-// =============================================================================
-// EDIT TOOL (search_replace)
+// EDIT TOOL (diff view — the one file op worth expanding)
 // =============================================================================
 
 export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
@@ -115,7 +21,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 	const oldString = rawInput?.old_string ? String(rawInput.old_string) : '';
 	const newString = rawInput?.new_string ? String(rawInput.new_string) : '';
 	const replaceAll = Boolean(rawInput?.replace_all);
-	const hasError = rawResult?.toLowerCase().includes('error');
+	const hasError = isErrorResult(rawResult);
 
 	const oldLines = oldString.split('\n').length;
 	const newLines = newString.split('\n').length;
@@ -135,7 +41,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 			{oldString && newString && (
 				<div className="space-y-1.5">
 					<div className="text-[10px] text-[var(--text-muted)] flex items-center gap-2">
-						<span className="text-[var(--color-error)]">−{oldLines} lines</span>
+						<span className="text-[var(--color-error)]">-{oldLines} lines</span>
 						<span>→</span>
 						<span className="text-[var(--color-success)]">+{newLines} lines</span>
 						{lineDiff !== 0 && (
@@ -172,7 +78,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 			{rawResult && (
 				<div className={`text-[10px] flex items-center gap-1.5 ${hasError ? 'text-[var(--color-error)]' : 'text-[var(--color-success)]'}`}>
 					{hasError ? <AlertCircle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-					{hasError ? rawResult : '✓ Edited'}
+					{hasError ? rawResult : 'Edited'}
 				</div>
 			)}
 		</div>
@@ -186,7 +92,6 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 export function BashExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
 	const command = String(input.command || rawInput?.command || '');
 	const description = rawInput?.description ? String(rawInput.description) : '';
-	const hasError = rawResult?.toLowerCase().includes('error');
 
 	return (
 		<div className="space-y-3">
@@ -218,7 +123,7 @@ export function SearchExpanded({ input, rawInput, rawResult }: ToolExpandedProps
 	const { openInFinder } = useOpenInDesktop();
 	const pattern = input.pattern || input.query || '';
 	const path = rawInput?.path ? String(rawInput.path) : '';
-	const hasError = rawResult?.toLowerCase().includes('error');
+	const hasError = isErrorResult(rawResult);
 
 	let matchInfo = '';
 	if (rawResult && !hasError) {
@@ -245,7 +150,7 @@ export function SearchExpanded({ input, rawInput, rawResult }: ToolExpandedProps
 
 			{matchInfo && (
 				<div className="text-[10px] text-[var(--color-success)]">
-					✓ Found {matchInfo}
+					Found {matchInfo}
 				</div>
 			)}
 
@@ -264,13 +169,13 @@ export function WebExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
 	const query = rawInput?.query ? String(rawInput.query) : input.query || '';
 	const url = rawInput?.url ? String(rawInput.url) : '';
 	const prompt = rawInput?.prompt ? String(rawInput.prompt) : '';
-	const hasError = rawResult?.toLowerCase().includes('error');
+	const hasError = isErrorResult(rawResult);
 
 	return (
 		<div className="space-y-3">
 			{query && (
 				<InfoBox icon={Search} color="var(--color-info)">
-					"{query}"
+					&quot;{query}&quot;
 				</InfoBox>
 			)}
 			{url && (
@@ -306,31 +211,29 @@ export function WebExpanded({ input, rawInput, rawResult }: ToolExpandedProps) {
 
 export function TodoWriteExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 	const todos = rawInput?.todos;
-	const hasError = rawResult?.toLowerCase().includes('error');
+	const hasError = isErrorResult(rawResult);
 
-	if (!Array.isArray(todos)) {
-		return null; // Will fall back to default
-	}
+	if (!Array.isArray(todos)) return null;
 
 	const statusColors: Record<string, string> = {
-		'in_progress': 'var(--color-primary)',
-		'pending': 'var(--text-muted)',
-		'completed': 'var(--color-success)',
-		'cancelled': 'var(--color-error)',
+		in_progress: 'var(--color-primary)',
+		pending: 'var(--text-muted)',
+		completed: 'var(--color-success)',
+		cancelled: 'var(--color-error)',
 	};
 
-	const statusIcons: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties; }>> = {
-		'in_progress': Play,
-		'pending': Clock,
-		'completed': Check,
-		'cancelled': Square,
+	const statusIcons: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+		in_progress: Play,
+		pending: Clock,
+		completed: Check,
+		cancelled: Square,
 	};
 
 	return (
 		<div className="space-y-3">
 			<SectionHeader>Tasks</SectionHeader>
 			<div className="space-y-1">
-				{(todos as Array<{ content?: string; status?: string; }>).map((todo, i) => {
+				{(todos as Array<{ content?: string; status?: string }>).map((todo, i) => {
 					const status = todo.status || 'pending';
 					const StatusIcon = statusIcons[status] || Clock;
 					const color = statusColors[status] || 'var(--text-muted)';
@@ -356,7 +259,7 @@ export function TodoWriteExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 						<CodeBlock code={rawResult} maxHeight="80px" />
 					</div>
 				) : (
-					<span className="text-[10px] text-[var(--color-success)]">✓ Updated</span>
+					<span className="text-[10px] text-[var(--color-success)]">Updated</span>
 				)
 			)}
 		</div>
@@ -368,9 +271,7 @@ export function TodoWriteExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 // =============================================================================
 
 export const coreExpandedViews = {
-	// File operations
-	Read: ReadExpanded,
-	Write: WriteExpanded,
+	// Edit (diff view — the only file op that expands)
 	Edit: EditExpanded,
 
 	// Terminal
@@ -388,4 +289,3 @@ export const coreExpandedViews = {
 	// Tasks
 	TodoWrite: TodoWriteExpanded,
 };
-

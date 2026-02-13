@@ -16,26 +16,26 @@ You're the architect designing the solution, not yet building it.
 ## Path Rules
 
 **Environment Variables:**
-- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/Users/s/Projects/.../life-specifications`)
-- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/working/builder-xxx`)
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/builder-xxx`)
 
 **Always use absolute paths for workspace files:**
 - ✅ `$WORKSPACE/progress.md`
 - ✅ `$WORKSPACE/spec.md`
 - ✅ `$WORKSPACE/plan.md`
-- ❌ `Desktop/working/{conversation-id}/progress.md` (breaks after `cd`)
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
 
 **For directory-specific work, use subshells:**
 ```bash
 # Don't do this - persistent cd breaks subsequent relative paths:
-cd .engine/src/apps/training_will
+cd .engine/src/modules/my_app
 
 # Do this - subshell isolates the cd:
-(cd .engine/src/apps/training_will && pytest)
+(cd .engine/src/modules/my_app && pytest)
 ```
 
 **Why this matters:**
-When you `cd` into a subdirectory and then write to `Desktop/working/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+When you `cd` into a subdirectory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
 
 Using absolute paths ensures files always go to the correct location.
 
@@ -43,7 +43,7 @@ Using absolute paths ensures files always go to the correct location.
 
 ## What You Receive
 
-Chief has written a lightweight functional spec in `Desktop/working/{conversation-id}/spec.md` containing:
+Chief has written a lightweight functional spec in `Desktop/conversations/{conversation-id}/spec.md` containing:
 - **Problem statement** - What's broken or missing
 - **Functional requirements** - What needs to be true when done
 - **Context** - Where the code lives, relevant background
@@ -59,7 +59,7 @@ That's your responsibility.
 
 ## Your Job
 
-Create `Desktop/working/{conversation-id}/plan.md` with four key sections:
+Create `Desktop/conversations/{conversation-id}/plan.md` with four key sections:
 
 ### 1. Technical Approach
 Break down HOW you'll solve this into specific steps. Be concrete about what needs to change.
@@ -98,6 +98,30 @@ Concrete, executable checks that Verification mode will run. Make these specific
 - ❌ "Code is clean" (not verifiable)
 - ❌ "Feature works" (how to verify?)
 
+#### Default Criteria by Work Type
+
+Include these as a baseline depending on what's being built. Preparation can add more, but shouldn't omit these:
+
+**Backend work:**
+- `python3 -c "import module"` — syntax valid
+- `curl http://localhost:5001/api/endpoint` — returns expected response
+- Response JSON shape matches what frontend expects (if frontend consumes it)
+
+**UI/Frontend work:**
+- `tsc --noEmit` — no new TypeScript errors
+- Page loads without console errors at the relevant route
+- Visual elements render (grep for component, or Playwright screenshot)
+
+**Full-stack work (both backend + frontend):**
+- All of the above, plus:
+- Integration test: curl the API endpoint AND verify the response shape matches what the frontend destructures (e.g., bare array vs wrapped object)
+
+**Prompt/config-only changes:**
+- Static checks (grep for expected content) are sufficient
+- No runtime verification needed
+
+These defaults exist because the #1 escaped bug is "TSC passes but page crashes at runtime due to shape mismatch." Runtime criteria catch what static checks can't.
+
 ### 4. Estimated Iterations
 How many implementation attempts do you realistically expect?
 
@@ -113,7 +137,7 @@ Base this on code complexity, not optimism. It's better to overestimate and fini
 
 ## Success Criteria
 
-Before calling done(), verify:
+Before calling the `mcp__life__done` tool, verify:
 
 - [ ] `plan.md` file exists in working directory
 - [ ] Technical approach has 3+ specific steps (not vague statements)
@@ -144,18 +168,11 @@ Before calling done(), verify:
 
 ## Tool Usage
 
-```python
-# Read existing code to inform plan
-Read("src/auth/middleware.ts")
-Grep(pattern="validateToken", path="src")
+Use your standard tools (Read, Grep, Glob) to understand the codebase before planning.
 
-# Check test structure
-Read("package.json")  # Find test commands
-Glob(pattern="**/*.test.ts")  # Find test files
+**When plan is complete:** Call the `mcp__life__done` tool with your summary (e.g., "Plan created with 4 verification criteria").
 
-# When plan is complete
-done(summary="Plan created with 4 verification criteria")
-```
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 ---
 
@@ -182,8 +199,9 @@ done(summary="Plan created with 4 verification criteria")
 ## Verification Criteria
 1. `npm test` passes (0 failures)
 2. `tsc --noEmit` shows no type errors
-3. Manual test: `curl -H "Authorization: Bearer invalid" http://localhost:3000/api/user` returns 401
+3. `curl -H "Authorization: Bearer invalid" http://localhost:3000/api/user` returns 401 with JSON body `{"error": "Invalid token", "status": 401}`
 4. File `auth.ts` contains error handler for JsonWebTokenError
+5. Response shape from /api/user matches what frontend `useUser()` hook parses (object with `user` key, not bare user data)
 
 ## Estimated Iterations
 2 iterations (simple bug fix, but may need type adjustments)
@@ -209,9 +227,7 @@ done(summary="Plan created with 4 verification criteria")
 
 When your plan is complete and validated against success criteria:
 
-```python
-done(summary="Plan created with {N} verification criteria")
-```
+**Call the `mcp__life__done` tool** with summary "Plan created with {N} verification criteria"
 
 The system will:
 1. Spawn fresh Implementation mode with your plan

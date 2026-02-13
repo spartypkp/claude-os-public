@@ -15,7 +15,7 @@ interface PptxViewerProps {
 export function PptxViewer({ filePath }: PptxViewerProps) {
 	const fileName = filePath.split('/').pop() || filePath;
 	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/finder/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
 
 	const handleDownload = useCallback(() => {
 		const link = document.createElement('a');

@@ -8,11 +8,30 @@
 ## Why You're Fresh
 
 You didn't generate these ideas. You have no attachment to them. You see only:
-- `Desktop/working/{conversation-id}/spec.md` — The problem/request
-- `Desktop/working/{conversation-id}/plan.md` — Evaluation criteria
-- `Desktop/working/{conversation-id}/ideas.md` — The generated ideas
+- `Desktop/conversations/{conversation-id}/spec.md` — The problem/request
+- `Desktop/conversations/{conversation-id}/plan.md` — Evaluation criteria
+- `Desktop/conversations/{conversation-id}/ideas.md` — The generated ideas
 
 Objective evaluation.
+
+---
+
+## Path Rules
+
+**Environment Variables:**
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/idea-xxx`)
+
+**Always use absolute paths for workspace files:**
+- ✅ `$WORKSPACE/progress.md`
+- ✅ `$WORKSPACE/spec.md`
+- ✅ `$WORKSPACE/plan.md`
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
+
+**Why this matters:**
+When you `cd` into a subdirectory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+
+Using absolute paths ensures files always go to the correct location.
 
 ---
 
@@ -34,23 +53,21 @@ Verify each criterion. Count, categorize, assess.
 ## Making Judgment
 
 ### PASS — Criteria met
-```python
-done(
-    summary="15 ideas generated spanning 4 approaches, all criteria met",
-    passed=True
-)
-```
+
+**Call the `mcp__life__done` tool** with:
+- summary: "15 ideas generated spanning 4 approaches, all criteria met"
+- passed: true
+
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 System notifies Chief. Session ends.
 
 ### FAIL — Gaps or quality issues
-```python
-done(
-    summary="12 ideas generated but only 2 approaches",
-    passed=False,
-    feedback="Criteria 2 FAIL: Ideas are mostly variations on 'caching' and 'rate limiting'. Need approaches from different angles — e.g., architectural changes, UX solutions, business model changes. Generate 5-10 more ideas exploring non-technical solutions."
-)
-```
+
+**Call the `mcp__life__done` tool** with:
+- summary: "12 ideas generated but only 2 approaches"
+- passed: false
+- feedback: "Criteria 2 FAIL: Ideas are mostly variations on 'caching' and 'rate limiting'. Need approaches from different angles — e.g., architectural changes, UX solutions, business model changes. Generate 5-10 more ideas exploring non-technical solutions."
 
 System spawns Implementation mode to generate more.
 

@@ -706,7 +706,7 @@ function CreateMissionModal({ isOpen, onClose, onSubmit }: CreateMissionModalPro
 		name: '',
 		slug: '',
 		description: '',
-		prompt_file: 'Desktop/working/',
+		prompt_file: 'Desktop/conversations/',
 		schedule_type: 'time',
 		schedule_time: '09:00',
 		schedule_cron: '0 9 * * *',
@@ -739,7 +739,7 @@ function CreateMissionModal({ isOpen, onClose, onSubmit }: CreateMissionModalPro
 				name: '',
 				slug: '',
 				description: '',
-				prompt_file: 'Desktop/working/',
+				prompt_file: 'Desktop/conversations/',
 				schedule_type: 'time',
 				schedule_time: '09:00',
 				schedule_cron: '0 9 * * *',
@@ -832,7 +832,7 @@ function CreateMissionModal({ isOpen, onClose, onSubmit }: CreateMissionModalPro
 								type="text"
 								value={form.prompt_file}
 								onChange={(e) => setForm({ ...form, prompt_file: e.target.value })}
-								placeholder="Desktop/working/weekly-review.md"
+								placeholder="Desktop/conversations/weekly-review.md"
 								className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-mono text-sm focus:outline-none focus:ring-2"
 								style={{ '--tw-ring-color': CLAUDE_CORAL } as React.CSSProperties}
 								required

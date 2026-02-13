@@ -1,261 +1,205 @@
 ---
 name: evening-checkin
-description: Generate an evening check-in summary with day accomplishments, incomplete items, and tomorrow's first event
+description: Interactive evening conversation at 8 PM to close the day properly. Recaps what happened, syncs TODAY.md and MEMORY.md with reality, reviews open items, and sets up tomorrow. Use when triggered at 8 PM daily, user says "evening check-in", "let's close out the day", or wants to review the day and plan tomorrow.
 ---
 
 # Evening Check-in
 
 **Skill Name:** `evening-checkin`
-**Role:** Chief (autonomous via trigger)
-**Purpose:** Generate a concise evening check-in that Chief sends to the user via Telegram at a configured time each evening to close out the day.
+**Role:** Chief
+**Trigger:** 8 PM daily
+**Purpose:** Have an interactive conversation with the user to close out the day properly.
 
 ---
 
-## When to Use This Skill
+## What This Is
 
-This skill is invoked by the evening check-in trigger (typically 9pm). Chief receives a system message:
+The evening check-in is a **conversation**, not a notification. At 8 PM, Chief kicks off an interactive session to:
 
-```
-[EVENING-CHECKIN] Time for evening check-in. Use /evening-checkin skill, then message the user via Telegram.
-```
+1. Recap what actually happened today
+2. Sync TODAY.md and memory with reality
+3. Review what's still open (with context)
+4. Note what changed
+5. Talk naturally about the day
+6. Ask about overnight work
+7. Set up tomorrow
 
-Chief then:
-1. Invokes this skill
-2. Receives formatted check-in text
-3. Sends it to the user via Telegram using existing telegram service
-
----
-
-## What to Include
-
-### 1. Day Recap (What Got Done)
-
-Read TODAY.md → Timeline section. Summarize key accomplishments from the day:
-
-```
-✅ Today's Wins
-• PT-07 Language & Runtime complete (125 questions)
-• Telegram rich media shipped (photo, URL, location)
-• OS baseline benchmark completed (26.5%)
-```
-
-Focus on:
-- Completed work (specialists that finished)
-- Features shipped
-- Benchmarks taken
-- Significant progress made
-
-If nothing notable:
-```
-✅ Quiet day - mostly planning and exploration
-```
-
-### 2. Incomplete Priorities
-
-Read TODAY.md Context → Priorities section. Show unchecked items:
-
-```
-📌 Still Open
-CRITICAL
-• [ ] Run baselines across remaining pre-training parts
-
-MEDIUM
-• [ ] Review overnight researcher outputs
-```
-
-If all priorities complete:
-```
-📌 All priorities complete for today!
-```
-
-If no priorities were set:
-```
-📌 No priorities were set today
-```
-
-### 3. Tomorrow's First Event
-
-Use calendar() tool to fetch tomorrow's events. Show the first scheduled event:
-
-```
-🌅 Tomorrow
-First event: 1:00 PM - Bland AI Round 1 (behavioral)
-```
-
-If no events tomorrow:
-```
-🌅 Tomorrow
-No scheduled events - open day
-```
-
-### 4. Gentle Closure
-
-End with a simple sign-off:
-```
-Sleep well!
-```
+This is closure + planning + memory hygiene in one conversation.
 
 ---
 
-## Output Format
+## How It Works
 
-Return a single formatted text message, ready for Telegram. Keep it concise and mobile-friendly.
+### Phase 1: Kick Off
 
-**Example output:**
+Start with a brief recap to anchor the conversation:
 
 ```
-Evening check-in:
+Evening check-in time.
 
-✅ Today's Wins
-• Training the user dashboard improvements complete
-• Telegram integration live with rich media support
-• show() MCP tool implemented (calendar/priorities/contacts)
-• 3 specialists verified and shipped
+Today was [brief characterization]. Big wins: [1-3 items].
 
-📌 Still Open
-CRITICAL
-• [ ] Run baselines across all pre-training parts
+[Most important incomplete priority] didn't happen — was that intentional, blocked, or just ran out of time?
+```
 
-🌅 Tomorrow
-First event: 4:00 PM - [Meeting Name]
+Wait for the user's response before continuing.
 
-Sleep well!
+### Phase 2: Reality Check (Critical)
+
+**This is non-negotiable.** The evening check-in is when memory files get aligned with what actually happened. Without this, drift accumulates and Claude starts operating on stale/wrong information.
+
+Based on the user's response, sync the files:
+
+**TODAY.md updates:**
+- Add timeline entries for significant events not yet logged
+- Correct any mischaracterized entries
+- Mark priorities as complete if they got done
+- Add context to incomplete items (blocked? deprioritized? forgot?)
+- Update Notes section if anything changed
+- Update Open Loops to reflect tomorrow
+
+**MEMORY.md updates:**
+- Update "Where Things Are" if the landscape shifted
+- Update "This Week's Shape" with what actually happened today
+- Update "Waiting On" — remove completed items, add new blockers
+- Add to Long-Term Memory if a new pattern emerged
+
+**Actually make the edits.** Don't just talk about what should change — use Edit tool and update the files during the conversation. The user shouldn't have to ask "did you actually update the files?"
+
+### Phase 3: Open Items Review
+
+Go through incomplete priorities with context:
+
+- **Blocked:** "X is waiting on Y" — note the blocker
+- **Deprioritized:** "You decided Z wasn't worth it today" — that's fine
+- **Forgot:** "W was on the list but never came up" — should it carry forward?
+- **Partially done:** "V is in progress" — what's left?
+
+Ask about each category as needed. Don't lecture.
+
+### Phase 4: What Changed
+
+Note anything new that emerged today:
+
+- New priorities that came up
+- Learnings or observations
+- Things that should go in MEMORY.md
+- Patterns noticed
+
+### Phase 5: Natural Conversation
+
+This is where the check-in becomes a conversation. Topics might include:
+
+- How the day felt (energy, focus, drift)
+- What worked or didn't
+- Anything on the user's mind
+- Quick questions or loose ends
+
+Keep it light. This isn't therapy — it's a work partner checking in.
+
+### Phase 6: Tomorrow Setup
+
+Before closing:
+
+1. **Overnight work:** "Want me to run anything overnight? Researchers, cleanup, etc."
+2. **Tomorrow's anchor:** "First event tomorrow is [X] at [time]" or "Tomorrow's open"
+3. **Tomorrow's focus:** "What's the one thing for tomorrow?"
+
+Update priorities based on this conversation.
+
+### Phase 7: Close
+
+Simple sign-off:
+
+```
+Got it. [Summary of what we decided].
+
+Sleep well.
 ```
 
 ---
 
-## Tone & Style
+## Tone
 
-- **Reflective:** Look back at what was accomplished
-- **Closure-oriented:** Help the user wind down the day
-- **Forward-looking:** Tomorrow's first event sets context for morning
-- **Warm:** End on a positive, restful note
-
-**DON'T:**
-- Guilt trip about incomplete items ("you still haven't...")
-- Overload with details (full timeline dump)
-- Ask questions or create new tasks
-- Nag about tomorrow's work
-
-**DO:**
-- Celebrate wins, even small ones
-- Present incomplete items factually (not judgmentally)
-- Give tomorrow's anchor point (first event)
-- End warmly
+- **Partner, not parent:** Check in, don't lecture
+- **Curious, not judgmental:** "What happened with X?" not "You didn't do X"
+- **Warm but efficient:** Care about the user, but don't drag it out
+- **Context-aware:** Know what happened today from the timeline
 
 ---
 
-## Implementation Notes
+## What NOT To Do
 
-This skill is designed to be invoked autonomously. Chief doesn't need to ask permission - the trigger already decided it's time for check-in.
-
-**Critical files to read:**
-- `Desktop/TODAY.md` (timeline, priorities)
-
-**Tools you'll use:**
-- Read() for TODAY.md
-- calendar() to fetch tomorrow's first event
-
-**After generating the check-in:**
-Return the text to Chief. Chief will send it via Telegram using existing telegram service integration.
+- Don't dump a wall of text at the start
+- Don't guilt trip about incomplete items
+- Don't be overly cheerful or use excessive emojis
+- Don't ask permission to do obvious things (updating files, etc.)
+- Don't turn it into a productivity sermon
+- Don't make the user feel bad about a slow day
 
 ---
 
-## Edge Cases
+## Files to Read and Update
 
-### No timeline entries (nothing happened today)
+**Read at start:**
+- `Desktop/TODAY.md` — timeline, priorities, notes, open loops
+- `Desktop/MEMORY.md` — current state, this week's shape, waiting on
 
-```
-✅ Quiet day - no major timeline entries
-```
+**Update during conversation (not optional):**
+- `Desktop/TODAY.md` — timeline entries, priority completions, notes, open loops for tomorrow
+- `Desktop/MEMORY.md` — current state, this week's shape, waiting on
 
-Still show priorities and tomorrow's first event.
-
-### All priorities complete
-
-Celebrate it:
-```
-📌 All priorities complete for today! 🎉
-```
-
-### No events tomorrow
-
-```
-🌅 Tomorrow
-No scheduled events - open day
-```
-
-This is useful info - the user knows he has flexibility.
-
-### Weekend evening
-
-Same format. If tomorrow is Sunday with no events, that's fine - the check-in still provides closure.
+The evening check-in is the primary mechanism for keeping these files accurate. If you don't update them, they drift. If they drift, tomorrow's Claude operates on wrong information.
 
 ---
 
-## Success Criteria
+## Example Flow
 
-✅ Check-in summarizes day's accomplishments from timeline
-✅ Incomplete priorities are shown (if any exist)
-✅ Tomorrow's first event is included (or "no events" message)
-✅ Tone is warm and closure-oriented
-✅ Output is concise (fits on one mobile screen)
-✅ No guilt-tripping or nagging about incomplete work
-✅ Output is valid text (no markdown rendering issues)
+**Chief:** Evening check-in time.
 
----
+Big day — shipped the new feature, Telegram integration working, mock interview done. The baseline speedrun didn't happen though. Was that intentional given everything else going on?
 
-## Example Variations
+**User:** Yeah, I spent 5 hours on benchmark methodology. Had to get the testing infrastructure right first.
 
-**Busy day with mixed results:**
-```
-Evening check-in:
+**Chief:** That's foundational work, not distraction. Baselines need correct methodology or the data is useless.
 
-✅ Today's Wins
-• 8 researchers built 722+ benchmark questions
-• First OS baseline complete (26.5%)
-• Identified gaps: Memory Management, Sync Implementation
+*[Chief updates MEMORY.md: "Saturday was release day + benchmark methodology work, not baseline speedrun"]*
+*[Chief updates TODAY.md timeline: adds entry for evening check-in and reality check]*
 
-📌 Still Open
-CRITICAL
-• [ ] Run baselines across remaining parts (PT-02 through PT-10)
+The behavioral review also didn't happen — still want that before Monday's interview?
 
-🌅 Tomorrow
-First event: No scheduled events - baseline speedrun day
+**User:** I'm feeling solid on behavioral. Low priority.
 
-Sleep well!
-```
+**Chief:** Got it — deprioritizing behavioral prep.
 
-**Quiet day, all done:**
-```
-Evening check-in:
+*[Chief updates MEMORY.md: "Behavioral review Monday (low priority — user feels solid)"]*
 
-✅ Today's Wins
-• Code cleanup and documentation updates
-• All priorities complete
+Anything you want run overnight?
 
-📌 All priorities complete for today! 🎉
+**User:** Nothing autonomous tonight.
 
-🌅 Tomorrow
-First event: 1:00 PM - Bland AI Round 1
+**Chief:** Cool. Tomorrow's open (no calendar events). What's the one focus?
 
-Sleep well!
-```
+**User:** Baselines + maybe onboard more friends to Claude OS.
 
-**Weekend chill:**
-```
-Evening check-in:
+**Chief:**
+*[Chief updates TODAY.md Open Loops for Sunday: Baselines, Claude OS onboarding]*
+*[Chief sets critical priority: Run baselines]*
 
-✅ Quiet day - mostly planning and exploration
-
-📌 No priorities were set today
-
-🌅 Tomorrow
-No scheduled events - enjoy Sunday!
-
-Sleep well!
-```
+Got it. Files updated. Sleep well.
 
 ---
 
-*This skill is invoked by the evening check-in trigger. Chief uses it to generate the check-in, then sends via Telegram.*
+## Trigger Configuration
+
+The evening check-in triggers at 8 PM daily. The trigger sends:
+
+```
+[EVENING-CHECKIN] Time for evening check-in.
+```
+
+Chief then invokes `/evening-checkin` to start the conversation.
+
+---
+
+*This is an interactive skill. It's a conversation, not a report.*

@@ -4,25 +4,13 @@ type: memory
 
 # Today
 
-*[Day of Week], [Month Day, Year]*
+*[Day], [Date]*
 
 ---
 
-<!-- BEGIN CONTEXT -->
 ## Context
 
-<!-- BEGIN CALENDAR -->
-### Today's Schedule
-*Run ./start.sh to begin*
-
-<!-- END CALENDAR -->
-
-<!-- BEGIN PRIORITIES -->
-### Priorities
-*No priorities yet - use priority("create", ...) to add*
-
-<!-- END PRIORITIES -->
-<!-- END CONTEXT -->
+<!-- Auto-populated by morning reset. Contains schedule, priorities, and current state. -->
 
 ---
 
@@ -32,34 +20,9 @@ type: memory
 ---
 
 ## Notes
-*Passive observations, learnings, patterns noticed. Not actionable.*
+*Passive observations, learnings, patterns noticed.*
 
 ---
 
 ## Open Loops
-*Things that need to be closed/processed. Not memory — action queues.*
-
-### Today
--
-
-### This Week
--
-
-### Someday/Maybe
--
-
-### Noticed
-*Might belong in MEMORY.md, IDENTITY.md, or LIFE-SPECs. Memory consolidation evaluates.*
-
-### UX Friction
-*Interaction friction. Not broken, just clunky.*
-
-### System
-**Bugs:**
--
-
-**Tech Debt:**
--
-
-**Feature Ideas:**
--
+*Things that need to be closed/processed.*

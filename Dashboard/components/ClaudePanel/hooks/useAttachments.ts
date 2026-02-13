@@ -52,6 +52,41 @@ function ensureDesktopPath(path: string): string {
 }
 
 // =============================================================================
+// SHARED UPLOAD UTILITIES (also used by useDragDrop)
+// =============================================================================
+
+export async function ensureInboxFolder() {
+	try {
+		await finderCreateFolder(INBOX_PATH);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : '';
+		if (!message.toLowerCase().includes('exists')) throw err;
+	}
+}
+
+export async function uploadWithRename(file: File): Promise<{ path: string } | undefined> {
+	let attempt = 0;
+	let currentName = file.name;
+
+	while (attempt < 10) {
+		const uploadFile = attempt === 0 ? file : new File([file], currentName, { type: file.type });
+		try {
+			return await finderUpload(uploadFile, INBOX_PATH);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : '';
+			if (!message.toLowerCase().includes('exists')) throw err;
+			attempt += 1;
+			const dotIndex = file.name.lastIndexOf('.');
+			const base = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
+			const ext = dotIndex > 0 ? file.name.slice(dotIndex) : '';
+			currentName = `${base} (${attempt})${ext}`;
+		}
+	}
+
+	throw new Error('Failed to upload after multiple attempts');
+}
+
+// =============================================================================
 // HOOK
 // =============================================================================
 
@@ -175,50 +210,13 @@ export function useAttachments({ sessionId }: UseAttachmentsOptions): UseAttachm
 		setAttachedFiles([]);
 	}, []);
 
-	// Ensure Inbox folder exists
-	const ensureInboxFolder = useCallback(async () => {
-		try {
-			await finderCreateFolder(INBOX_PATH);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : '';
-			if (!message.toLowerCase().includes('exists')) {
-				throw err;
-			}
-		}
-	}, []);
-
-	// Upload with auto-rename on conflict
-	const uploadWithRename = useCallback(async (file: File): Promise<{ path: string; } | undefined> => {
-		let attempt = 0;
-		let currentName = file.name;
-
-		while (attempt < 10) {
-			const uploadFile = attempt === 0 ? file : new File([file], currentName, { type: file.type });
-			try {
-				return await finderUpload(uploadFile, INBOX_PATH);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : '';
-				if (!message.toLowerCase().includes('exists')) {
-					throw err;
-				}
-				attempt += 1;
-				const dotIndex = file.name.lastIndexOf('.');
-				const base = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
-				const ext = dotIndex > 0 ? file.name.slice(dotIndex) : '';
-				currentName = `${base} (${attempt})${ext}`;
-			}
-		}
-
-		throw new Error('Failed to upload after multiple attempts');
-	}, []);
-
 	const uploadAndAttach = useCallback(async (file: File) => {
 		await ensureInboxFolder();
 		const uploaded = await uploadWithRename(file);
 		const uploadPath = uploaded?.path || `${INBOX_PATH}/${file.name}`;
 		await addAttachment(uploadPath, true);
 		toast.success('Imported file to Desktop/Inbox');
-	}, [ensureInboxFolder, uploadWithRename, addAttachment]);
+	}, [addAttachment]);
 
 	return {
 		attachedFiles,

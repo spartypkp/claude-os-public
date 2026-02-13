@@ -1,19 +1,19 @@
 # Transcript Tools System Specification
 
-**Location:** `Dashboard/components/transcript/tools/`  
-**Purpose:** Render tool calls in the Claude Panel transcript viewer  
-**Last Updated:** Jan 2026
+**Location:** `Dashboard/components/transcript/tools/`
+**Purpose:** Render tool calls in the Claude Panel transcript viewer
+**Last Updated:** Feb 2026
 
 ---
 
 ## Overview
 
-This module renders tool calls (file operations, MCP tools, custom app tools) in the transcript. Each tool call has two views:
+This module renders tool calls (file operations, MCP tools, Claude Code meta-tools) in the transcript. Each tool call has two views:
 
-1. **Collapsed (ToolChip)** — One-liner showing what the tool did
+1. **Collapsed (ToolChip)** — Icon + one-liner showing what the tool did
 2. **Expanded** — Full details when user clicks to expand
 
-The system is modular: core infrastructure lives at the root, domain-specific tool views live in folders.
+The system is modular: core infrastructure lives at the root, domain-specific expanded views live in folders.
 
 ---
 
@@ -23,48 +23,42 @@ The system is modular: core infrastructure lives at the root, domain-specific to
 tools/
 ├── SYSTEM-SPEC.md        # This file
 ├── index.ts              # Public API exports
-├── types.ts              # TypeScript interfaces
-├── registry.ts           # Collapsed view one-liners (getOneLiner)
-├── ToolChip.tsx          # Collapsed chip component
+├── types.ts              # TypeScript interfaces (ToolConfig, ParsedToolInput, etc.)
+├── registry.ts           # Single source of truth: icon, color, category, one-liner, chipLabel
+├── ToolChip.tsx          # Collapsed chip component (standard + subagent layouts)
+├── SystemEventChip.tsx   # Full-width muted bars for system/lifecycle events
 ├── ExpandedViews.tsx     # Expanded view registry (getExpandedView)
-├── ClickableRef.tsx      # Utility: hooks for opening files/apps
-├── LiveSessionEmbed.tsx  # Utility: real-time worker viewer (SSE-driven)
+├── ClickableRef.tsx      # Utility: hooks for opening files/apps in desktop
 │
 ├── shared/               # Shared UI primitives
-│   └── index.tsx         # CodeBlock, InfoBox, StatusBadge, etc.
+│   └── index.tsx         # CodeBlock, InfoBox, StatusBadge, KeyValue, etc.
 │
-├── core/                 # Claude Code native tools
-│   └── index.tsx         # Read, Write, Edit, Bash, Search, Web, TodoWrite
+├── core/                 # Claude Code native tools (Read, Write, Edit, Bash, Search, Web)
+│   └── index.tsx
 │
-├── mcp-core/             # Life system MCP tools
-│   └── index.tsx         # worker, team, session, priority, contact, log
+├── claude-code/          # Claude Code meta-tools (Task, AskUserQuestion, TaskList)
+│   └── index.tsx
 │
-├── job-search/           # Job Search custom app
-│   └── index.tsx         # mock, dsa, leetcode, calendar, messages, mail
+├── mcp-core/             # Life system MCP tools (team, priority, contact, email, calendar, etc.)
+│   └── index.tsx
 │
-├── misc/                 # Miscellaneous + fallback
-│   └── index.tsx         # VoiceExpanded, DefaultExpanded
-│
-└── _template/            # Template for new custom apps
-    └── index.tsx         # Copy this to create new app tools
+└── misc/                 # Fallback
+    └── index.tsx         # DefaultExpanded (raw JSON viewer)
 ```
 
 ---
 
 ## Root Files (Public API)
 
-These files form the module's public interface. **Don't move them.**
-
 | File | Purpose | Consumers |
 |------|---------|-----------|
 | `index.ts` | Re-exports public API | TranscriptViewer, ClaudePanel |
 | `types.ts` | TypeScript interfaces | All files |
-| `registry.ts` | One-liner text for collapsed view | ToolChip |
+| `registry.ts` | Tool configs — icon, color, one-liner, chipLabel | ToolChip, SystemEventChip |
 | `ToolChip.tsx` | Collapsed chip component | TranscriptViewer |
+| `SystemEventChip.tsx` | Full-width system event bars | TranscriptViewer |
 | `ExpandedViews.tsx` | Maps tool names → expanded components | ToolChip |
-| `ClickableRef.tsx` | Hooks for opening files/apps in desktop | shared/, domain tools |
-| `LiveSessionEmbed.tsx` | Real-time worker embed (SSE-driven) | mcp-core/WorkerExpanded |
-| `tool-schema.json` | Reference: tool schemas and usage counts | (docs only) |
+| `ClickableRef.tsx` | Hooks for opening files/apps in desktop | ToolChip, domain tools |
 
 ---
 
@@ -73,18 +67,69 @@ These files form the module's public interface. **Don't move them.**
 ```
 TranscriptViewer
     │
-    ▼
-ToolChip.tsx
+    ├─► registry.ts::getToolConfig(formattedName)
+    │       → { icon, color, category, showToolName, chipLabel }
     │
-    ├─► registry.ts::getToolOneLiner()  → collapsed text
+    ├─► category === 'system'?
+    │       YES → SystemEventChip (full-width muted bar, non-expandable)
+    │       NO  → ToolChip (inline chip, expandable)
     │
-    └─► ExpandedViews.tsx::getExpandedView(toolName)
+    └─► ToolChip
             │
-            ▼
-        Domain Component (e.g., core/ReadExpanded)
+            ├─► registry.ts::getToolOneLiner()  → { text, showToolName, chipLabel }
+            │       showToolName: true  → renders "LABEL: text" inline prefix
+            │       showToolName: false → renders just "text"
             │
-            └─► shared/ components (CodeBlock, InfoBox, etc.)
+            └─► ExpandedViews.tsx::getExpandedView(toolName)
+                    │
+                    └─► Domain Component (e.g., core/BashExpanded)
+                            │
+                            └─► shared/ components (CodeBlock, InfoBox, etc.)
 ```
+
+---
+
+## ToolConfig — The Registry
+
+Every tool is defined in `registry.ts` with a `ToolConfig`:
+
+```ts
+interface ToolConfig {
+  icon: LucideIcon;              // Lucide icon component
+  color: string;                 // CSS color value
+  category: 'tool' | 'system';  // 'system' → SystemEventChip, 'tool' → ToolChip
+  getOneLiner: (input, result?) => string;  // Collapsed text
+  showToolName?: boolean;        // Show tool name as inline prefix (default: true)
+  chipLabel?: string;            // Override prefix label (e.g., reply_to_chief → "REPLY")
+}
+```
+
+### Chip Rendering Format
+
+When `showToolName` is true, the chip renders as:
+```
+[icon] LABEL: one-liner-text [chevron]
+```
+Where LABEL is `chipLabel || formattedName`, displayed uppercase.
+
+When `showToolName` is false:
+```
+[icon] one-liner-text [chevron]
+```
+
+### Tool Categories
+
+**`category: 'tool'`** — Standard inline chips. Most tools.
+- File ops: Read, Write, Edit (showToolName: false — verb in one-liner)
+- Search: Grep, Glob (showToolName: false — pattern is clear)
+- Web: WebSearch, WebFetch (showToolName: false)
+- MCP data: contact, calendar, email, priority, etc. (showToolName: true)
+- Subagent: Task (special rendering — agent-type pill + badges)
+
+**`category: 'system'`** — Full-width system event bars (non-expandable).
+- Lifecycle: status, timeline, reset, done, reply_to_chief, show
+- Orchestration: team
+- Interactive: AskUserQuestion, EnterPlanMode, ExitPlanMode, Skill
 
 ---
 
@@ -92,150 +137,118 @@ ToolChip.tsx
 
 ### `/shared` — UI Primitives
 
-Reusable components for building expanded views. **Use these, don't reinvent.**
+Reusable components for building expanded views.
 
 | Component | Purpose |
 |-----------|---------|
 | `CodeBlock` | Code/output display with copy button |
 | `SectionHeader` | Labeled section (variant: default/error/success) |
-| `InfoBox` | Icon + text box with optional copy |
+| `InfoBox` | Icon + text box |
 | `FilePathHeader` | Clickable file path with open/finder buttons |
 | `StatusBadge` | Colored pill for status/type/level |
-| `OperationHeader` | Operation name + optional ID |
 | `KeyValue` | Label: value display |
-| `ResultSection` | Standardized result/error output |
 | `ResultIndicator` | Inline success/error indicator |
 | `ErrorBox` | Error message display |
 | `isErrorResult()` | Utility to detect errors in raw result |
 
 ### `/core` — Claude Code Native Tools
 
-Built-in Claude Code tools. Highest priority in registry.
-
 | Tool | Component |
 |------|-----------|
 | Read | `ReadExpanded` |
-| Write | `WriteExpanded` |
 | Edit | `EditExpanded` |
 | Bash | `BashExpanded` |
 | Grep, Glob | `SearchExpanded` |
 | WebSearch, WebFetch | `WebExpanded` |
-| TodoWrite | `TodoWriteExpanded` |
+
+### `/claude-code` — Claude Code Meta Tools
+
+| Tool | Component |
+|------|-----------|
+| Task, TaskOutput, TaskStop | `TaskExpanded` |
+| AskUserQuestion | `AskUserQuestionExpanded` |
+| TaskCreate, TaskUpdate, TaskGet | `TaskManagementExpanded` |
+| TaskList | `TaskListExpanded` |
 
 ### `/mcp-core` — Life System MCP Tools
 
-Infrastructure tools for the Claude team system.
-
 | Tool | Component |
 |------|-----------|
-| worker, worker_* | `WorkerExpanded` |
 | team | `TeamExpanded` |
-| session_* | `SessionExpanded` |
-| priority, priority_* | `PriorityExpanded` |
-| contact, contact_* | `ContactExpanded` |
-| log, ping, status | `LogExpanded` |
+| priority | `PriorityExpanded` |
+| contact | `ContactExpanded` |
+| email | `EmailExpanded` |
+| calendar | `CalendarExpanded` |
+| messages | `MessagesExpanded` |
+| opportunity | `OpportunityExpanded` |
+| turbine | `TurbineExpanded` |
+| pet | `PetExpanded` |
+| reply_to_chief | `ReplyExpanded` |
 | Skill | `SkillExpanded` |
 
-### `/job-search` — Job Search Custom App
-
-Example custom app. Tools for interview preparation.
+### `/misc` — Fallback
 
 | Tool | Component |
 |------|-----------|
-| mock, mock_interview | `MockExpanded` |
-| dsa | `DsaExpanded` |
-| leetcode | `LeetcodeExpanded` |
-| calendar, calendar_* | `CalendarExpanded` |
-| messages | `MessagesExpanded` |
-| mail | `MailExpanded` |
-
-### `/misc` — Miscellaneous
-
-Catch-all and fallback.
-
-| Tool | Component |
-|------|-----------|
-| converse | `VoiceExpanded` |
-| (unknown) | `DefaultExpanded` |
-
-### `/_template` — New App Template
-
-**Copy this folder** when creating tools for a new custom app.
+| (unknown) | `DefaultExpanded` (raw JSON viewer) |
 
 ---
 
-## Adding a New Custom App
+## Adding a New Tool
 
-### Step 1: Copy the Template
+### 1. Register in registry.ts
 
-```bash
-cp -r Dashboard/components/transcript/tools/_template \
-      Dashboard/components/transcript/tools/[your-app]
+```ts
+your_tool: {
+  icon: SomeIcon,
+  color: '#3b82f6',
+  category: 'tool',
+  showToolName: true,
+  getOneLiner: (input) => {
+    const op = input.operation || '';
+    return op || 'manage';
+  },
+},
 ```
 
-### Step 2: Create Your Components
+### 2. Create expanded view (optional)
 
-Edit `[your-app]/index.tsx`:
+Add to the appropriate domain folder (mcp-core, claude-code, etc.):
 
 ```tsx
-'use client';
-
-import { SomeIcon } from 'lucide-react';
-import { CodeBlock, InfoBox, ResultSection, StatusBadge } from '../shared';
-import type { ToolExpandedProps } from '../types';
-
 export function YourToolExpanded({ rawInput, rawResult }: ToolExpandedProps) {
-  // Extract fields
-  const operation = rawInput?.operation ? String(rawInput.operation) : '';
-  const hasError = rawResult?.toLowerCase().includes('error');
-  
+  const hasError = isErrorResult(rawResult);
   return (
-    <div className="space-y-3">
-      {/* Your UI here - use shared components */}
-      {rawResult && <ResultSection result={rawResult} />}
+    <div className="space-y-2">
+      {rawResult && (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} />)}
     </div>
   );
 }
-
-// Export map: tool name → component
-export const yourAppExpandedViews = {
-  your_tool: YourToolExpanded,
-  another_tool: AnotherToolExpanded,
-};
 ```
 
-### Step 3: Register in ExpandedViews.tsx
+### 3. Register expanded view in ExpandedViews.tsx
 
-```tsx
-// Add import
-import { yourAppExpandedViews } from './your-app';
+Add to the domain's export map, then import in ExpandedViews.tsx.
 
-// Add to expandedViewMap (before mcpCoreExpandedViews)
-const expandedViewMap = {
-  ...miscExpandedViews,
-  ...yourAppExpandedViews,  // ← Add here
-  ...jobSearchExpandedViews,
-  ...mcpCoreExpandedViews,
-  ...coreExpandedViews,
-};
-```
+---
 
-### Step 4: (Optional) Add One-Liners to registry.ts
+## Special Chip Layouts
 
-If you want custom collapsed text, add a renderer to `registry.ts`:
+### Subagent Chips (Task tool)
 
-```ts
-const yourToolRenderer: ToolRendererConfig = {
-  getOneLiner: (input) => {
-    const name = input.raw?.name ? String(input.raw.name) : '';
-    return name || 'your tool';
-  },
-  showToolName: true,
-};
+When `formattedName` is Task/TaskOutput/TaskStop, ToolChip renders a special layout:
+- Agent-type pill (colored by agent type)
+- Model badge (haiku/sonnet/opus)
+- Background badge (if run_in_background)
+- Description text
+- Agent colors exported as `AGENT_COLORS` from ToolChip.tsx
 
-// Add to toolRenderers map
-your_tool: yourToolRenderer,
-```
+### System Event Chips (SystemEventChip)
+
+Category 'system' tools render as full-width muted bars:
+- No expand/collapse
+- Icon + one-liner text only
+- Used for lifecycle events (status, timeline, reset, done, team, show, reply)
 
 ---
 
@@ -243,17 +256,11 @@ your_tool: yourToolRenderer,
 
 ### Find the Tool Name
 
-The tool name comes from the MCP server. To see what name arrives:
-
 ```tsx
-// In ToolChip.tsx, add temporarily:
-console.log('Tool:', toolName, 'Formatted:', formattedName);
+// In TranscriptViewer, tool names arrive as:
+// - Claude Code: "Read", "Write", "Edit", "Bash", "Task", etc.
+// - MCP: "mcp__life__status" → formatToolName → "status"
 ```
-
-Common transformations:
-- `mcp__life__worker` → `worker`
-- `mcp__apple__calendar` → `calendar`
-- `Read` stays `Read`
 
 ### Test Your Component
 
@@ -264,72 +271,12 @@ Common transformations:
 
 ---
 
-## Best Practices
+## Registry Priority
 
-### DO
-
-- Use shared components (`CodeBlock`, `StatusBadge`, etc.)
-- Extract fields with type coercion: `String(rawInput?.field || '')`
-- Use `isErrorResult(rawResult)` for consistent error detection
-- Handle missing data gracefully (show nothing, not errors)
-- Keep components focused (one tool per component)
-
-### DON'T
-
-- Create new styling patterns (use shared/)
-- Parse JSON without try/catch
-- Assume rawInput fields exist
-- Add heavy logic (parsing belongs in registry.ts)
-
----
-
-## Type Reference
-
-```ts
-interface ToolExpandedProps {
-  toolName: string;           // Raw MCP tool name
-  formattedName: string;      // Cleaned name (e.g., 'worker')
-  input: ParsedToolInput;     // Semantic input (filePath, operation, etc.)
-  result?: ParsedToolResult;  // Parsed result (success, error, data)
-  rawInput?: Record<string, unknown>;  // Original tool input
-  rawResult?: string;         // Original result string
-}
-
-interface ParsedToolInput {
-  filePath?: string;
-  operation?: string;
-  workerId?: string;
-  // ... see types.ts for full list
-  raw?: Record<string, unknown>;
-}
-
-interface ParsedToolResult {
-  success?: boolean;
-  error?: string;
-  content?: string;
-  data?: unknown;
-}
-```
-
----
-
-## Maintenance Notes
-
-### Adding New Core Tools
-
-If Claude Code adds new native tools, add them to `/core/index.tsx` and update the export map.
-
-### Updating Shared Components
-
-Changes to `/shared/` affect all expanded views. Test across domains.
-
-### Registry Priority
-
-Order in `expandedViewMap` matters:
-1. `misc` (lowest - fallbacks)
-2. Custom apps (middle)
-3. `mcp-core` (infrastructure)
-4. `core` (highest - Claude native)
+Order in `expandedViewMap` (ExpandedViews.tsx):
+1. `misc` (lowest — fallback)
+2. `claude-code` (meta tools)
+3. `mcp-core` (MCP tools)
+4. `core` (highest — Claude native tools)
 
 Later entries override earlier ones for the same tool name.
-

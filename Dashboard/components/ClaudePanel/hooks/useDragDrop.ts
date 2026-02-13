@@ -5,10 +5,10 @@
  * External files get uploaded to Inbox, internal paths get attached directly.
  */
 
-import { finderCreateFolder, finderUpload } from '@/lib/api';
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { INBOX_PATH } from '../constants';
+import { ensureInboxFolder, uploadWithRename } from './useAttachments';
 
 // =============================================================================
 // TYPES
@@ -65,43 +65,6 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 		}
 	}, []);
 
-	// Ensure Inbox folder exists
-	const ensureInboxFolder = useCallback(async () => {
-		try {
-			await finderCreateFolder(INBOX_PATH);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : '';
-			if (!message.toLowerCase().includes('exists')) {
-				throw err;
-			}
-		}
-	}, []);
-
-	// Upload with auto-rename on conflict
-	const uploadWithRename = useCallback(async (file: File): Promise<{ path: string; } | undefined> => {
-		let attempt = 0;
-		let currentName = file.name;
-
-		while (attempt < 10) {
-			const uploadFile = attempt === 0 ? file : new File([file], currentName, { type: file.type });
-			try {
-				return await finderUpload(uploadFile, INBOX_PATH);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : '';
-				if (!message.toLowerCase().includes('exists')) {
-					throw err;
-				}
-				attempt += 1;
-				const dotIndex = file.name.lastIndexOf('.');
-				const base = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
-				const ext = dotIndex > 0 ? file.name.slice(dotIndex) : '';
-				currentName = `${base} (${attempt})${ext}`;
-			}
-		}
-
-		throw new Error('Failed to upload after multiple attempts');
-	}, []);
-
 	const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -138,7 +101,7 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 		if (internalPath && (internalPath.startsWith('Desktop/') || internalPath.startsWith('Inbox/'))) {
 			onAttach(internalPath);
 		}
-	}, [ensureInboxFolder, uploadWithRename, onAttach, onError]);
+	}, [onAttach, onError]);
 
 	// Handle file picker input
 	const handleFilePick = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,7 +129,7 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 		} finally {
 			e.target.value = '';
 		}
-	}, [ensureInboxFolder, uploadWithRename, onAttach, onError]);
+	}, [onAttach, onError]);
 
 	return {
 		isDragOver,

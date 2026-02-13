@@ -4,25 +4,37 @@
     "allow": [
       "Bash(sqlite3:*)",
       "Bash(jq:*)",
-      "Bash(./venv/bin/python:*)",
-      "Bash(lsof:*)",
-      "Bash(pkill:*)",
-      "Bash(git branch:*)",
-      "Bash(git worktree:*)",
       "Bash(curl:*)",
       "Bash(npm:*)",
       "Bash(node:*)",
+      "Bash(lsof:*)",
+      "Bash(chmod:*)",
+      "Bash(echo:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(python3 -m venv:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(tmux list-panes:*)",
+      "Bash(tmux list-windows:*)",
+      "Bash(tmux list-sessions:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux new-window:*)",
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux set:*)",
+      "Bash(tmux source-file:*)",
       "Read",
       "Write",
       "Edit",
       "Glob",
       "Grep"
     ],
-    "deny": []
+    "deny": ["MCPSearch"]
   },
   "enabledMcpjsonServers": [
-    "life",
-    "apple"
+    "life"
   ],
   "hooks": {
     "PreToolUse": [
@@ -93,4 +105,5 @@
         ]
       }
     ]
-  }}
+  }
+}

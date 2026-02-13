@@ -7,7 +7,7 @@
 
 ## What You Receive
 
-Chief has written a spec in `Desktop/working/{conversation-id}/spec.md` requesting idea generation. It contains:
+Chief has written a spec in `Desktop/conversations/{conversation-id}/spec.md` requesting idea generation. It contains:
 - Problem or opportunity
 - Constraints (time, budget, technical, etc.)
 - Context (who it's for, why it matters)
@@ -21,9 +21,28 @@ That's your job.
 
 ---
 
+## Path Rules
+
+**Environment Variables:**
+- `$PROJECT_ROOT` — Absolute path to repository root (e.g., `/path/to/claude-os`)
+- `$WORKSPACE` — Absolute path to your workspace (e.g., `$PROJECT_ROOT/Desktop/conversations/idea-xxx`)
+
+**Always use absolute paths for workspace files:**
+- ✅ `$WORKSPACE/progress.md`
+- ✅ `$WORKSPACE/spec.md`
+- ✅ `$WORKSPACE/plan.md`
+- ❌ `Desktop/conversations/{conversation-id}/progress.md` (breaks after `cd`)
+
+**Why this matters:**
+When you `cd` into a subdirectory and then write to `Desktop/conversations/...`, the path is interpreted relative to your current directory, creating broken nested structures.
+
+Using absolute paths ensures files always go to the correct location.
+
+---
+
 ## Your Deliverable
 
-Create `Desktop/working/{conversation-id}/plan.md` containing:
+Create `Desktop/conversations/{conversation-id}/plan.md` containing:
 
 ### 1. Ideation Approach
 How will you generate ideas? Techniques:
@@ -70,14 +89,13 @@ You're setting up the creative process. Not generating ideas yet — planning ho
 
 ## Validation
 
-Before calling done():
+Before calling the `mcp__life__done` tool:
 1. Check that `plan.md` exists
 2. Evaluation criteria are concrete (not "creative" but "spans 3+ approaches")
 3. Ideation approach fits the problem type
 
-Then call:
-```python
-done(summary="Ideation plan created targeting {N} ideas with {M} evaluation criteria")
-```
+Then **call the `mcp__life__done` tool** with summary "Ideation plan created targeting {N} ideas with {M} evaluation criteria"
+
+**MCP retry note:** If the `mcp__life__done` tool fails on the first attempt (tool not found or connection error), retry immediately — MCP initialization can have a brief race condition on fresh sessions. A single retry resolves it.
 
 System will spawn Implementation mode next.

@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 /**
  * Core app types that can open as windows.
  */
-export type CoreAppType = 'calendar' | 'finder' | 'settings' | 'contacts' | 'widgets' | 'email' | 'messages' | 'missions' | 'roles';
+export type CoreAppType = 'calendar' | 'finder' | 'settings' | 'contacts' | 'email' | 'messages' | 'missions' | 'roles';
 
 /**
  * Window state for a floating desktop window.
@@ -76,6 +76,7 @@ export interface ContextMenuState {
 	minimizedWindowId?: string;
 	minimizedWindowTitle?: string;
 	/** Panel session info - for Claude Panel context menus */
+	panelConversationId?: string;
 	panelSessionId?: string;
 	panelSessionRole?: string;
 	panelSessionStatus?: string;
@@ -388,7 +389,6 @@ export const useWindowStore = create<WindowStore>()(
 					finder: { width: 950, height: 550, title: 'Claude Finder', x: 100, y: 60 },
 					settings: { width: 650, height: 500, title: 'Claude Settings', x: 200, y: 100 },
 					contacts: { width: 750, height: 550, title: 'Claude Contacts', x: 180, y: 90 },
-					widgets: { width: 700, height: 500, title: 'Claude Widgets', x: 160, y: 70 },
 					email: { width: 1000, height: 650, title: 'Claude Mail', x: 120, y: 70 },
 					messages: { width: 900, height: 600, title: 'Claude Messages', x: 130, y: 75 },
 					missions: { width: 700, height: 600, title: 'Claude Missions', x: 140, y: 80 },
