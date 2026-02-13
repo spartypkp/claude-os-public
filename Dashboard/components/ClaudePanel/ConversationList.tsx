@@ -21,17 +21,20 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
- * CloseConfirm - Inline confirmation popover for closing specialist sessions.
- * Appears below the X button when clicked, with Confirm/Cancel.
+ * CloseConfirm - Portal-rendered confirmation popover for closing specialist sessions.
+ * Renders to document.body to avoid overflow clipping and nested-button issues.
  */
 function CloseConfirm({
   roleName,
+  anchorRect,
   onConfirm,
   onCancel,
 }: {
   roleName: string;
+  anchorRect: DOMRect;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -44,7 +47,6 @@ function CloseConfirm({
         onCancel();
       }
     };
-    // Delay to avoid catching the triggering click
     const timer = setTimeout(() => document.addEventListener('mousedown', handleClick), 0);
     return () => {
       clearTimeout(timer);
@@ -61,11 +63,16 @@ function CloseConfirm({
     return () => document.removeEventListener('keydown', handleKey);
   }, [onCancel]);
 
-  return (
+  return createPortal(
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-1 z-50 w-44 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#404040] rounded-lg shadow-xl overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        top: anchorRect.bottom + 4,
+        right: window.innerWidth - anchorRect.right,
+        zIndex: 9999,
+      }}
+      className="w-44 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#404040] rounded-lg shadow-xl overflow-hidden"
     >
       <div className="px-3 py-2 text-[11px] text-gray-600 dark:text-[#999]">
         Close {roleName}?
@@ -86,11 +93,12 @@ function CloseConfirm({
           Close
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { API_BASE } from '@/lib/api';
 
 // Activity indicator - unified for Chief and Specialists
 function ActivityIndicator({ isActive, handoffPhase }: { isActive: boolean; handoffPhase?: HandoffPhase }) {
@@ -223,6 +231,7 @@ function SpecialistTab({
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [closeAnchorRect, setCloseAnchorRect] = useState<DOMRect | null>(null);
   const { openContextMenu } = useWindowStore();
   const role = conversation.role || 'builder';
   const roleConfig = getRoleConfig(role);
@@ -243,56 +252,61 @@ function SpecialistTab({
 
   const handleCloseClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setCloseAnchorRect(rect);
     setShowCloseConfirm(true);
   };
 
   return (
-    <button
-      data-conversation-id={conversation.conversation_id}
-      onClick={onSelect}
-      onContextMenu={handleContextMenu}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`
-        group relative flex items-center gap-2 px-3 py-2 text-xs font-medium self-end
-        transition-colors min-w-[100px] max-w-[140px] flex-shrink-0 rounded-t-lg overflow-hidden
-        ${isSelected
-          ? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
-          : 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
-        }
-      `}
-    >
-      {/* Phase accent stripe — top edge colored by current specialist phase */}
-      {phaseColor && (
-        <div
-          className="absolute top-0 left-0 right-0 h-[2px]"
-          style={{ backgroundColor: phaseColor }}
-        />
-      )}
-
-      <span className="flex-shrink-0 text-[#da7756]">
-        {renderRoleIcon(role, 'w-3.5 h-3.5')}
-      </span>
-
-      <span className="truncate flex-1 text-left">{roleName}</span>
-
-      <div className="flex-shrink-0 flex items-center gap-1.5">
-        <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
-
-        {onClose && (isHovered || isSelected) && (
-          <span
-            onClick={handleCloseClick}
-            className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444]"
-          >
-            <X className="w-3 h-3" />
-          </span>
+    <>
+      <button
+        data-conversation-id={conversation.conversation_id}
+        onClick={onSelect}
+        onContextMenu={handleContextMenu}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={`
+          group relative flex items-center gap-2 px-3 py-2 text-xs font-medium self-end
+          transition-colors min-w-[100px] max-w-[140px] flex-shrink-0 rounded-t-lg
+          ${isSelected
+            ? 'bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-white border-t border-l border-r border-gray-200 dark:border-[#333] border-b-0 mb-[-1px] z-10'
+            : 'bg-gray-200/50 dark:bg-[#252525] text-gray-600 dark:text-[#999] hover:bg-gray-200 dark:hover:bg-[#2a2a2a]'
+          }
+        `}
+      >
+        {/* Phase accent stripe — top edge colored by current specialist phase */}
+        {phaseColor && (
+          <div
+            className="absolute top-0 left-0 right-0 h-[2px]"
+            style={{ backgroundColor: phaseColor }}
+          />
         )}
-      </div>
 
-      {/* Close confirmation popover */}
-      {showCloseConfirm && onClose && (
+        <span className="flex-shrink-0 text-[#da7756]">
+          {renderRoleIcon(role, 'w-3.5 h-3.5')}
+        </span>
+
+        <span className="truncate flex-1 text-left">{roleName}</span>
+
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
+
+          {onClose && (isHovered || isSelected) && (
+            <span
+              onClick={handleCloseClick}
+              className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444]"
+            >
+              <X className="w-3 h-3" />
+            </span>
+          )}
+        </div>
+      </button>
+
+      {/* Close confirmation popover — portaled to body */}
+      {showCloseConfirm && onClose && closeAnchorRect && (
         <CloseConfirm
           roleName={roleName}
+          anchorRect={closeAnchorRect}
           onConfirm={() => {
             setShowCloseConfirm(false);
             onClose();
@@ -300,7 +314,7 @@ function SpecialistTab({
           onCancel={() => setShowCloseConfirm(false)}
         />
       )}
-    </button>
+    </>
   );
 }
 
