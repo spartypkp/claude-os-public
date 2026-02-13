@@ -83,6 +83,15 @@ ensure_window() {
     fi
 }
 
+claude_running_in() {
+    # Reliable detection: ask tmux what command is running in the pane
+    # Shell (bash/zsh) = no Claude. Anything else = process running.
+    local name="$1"
+    local cmd
+    cmd=$(tmux display-message -t "${SESSION}:${name}" -p "#{pane_current_command}" 2>/dev/null) || return 1
+    [[ -n "${cmd}" && "${cmd}" != "bash" && "${cmd}" != "zsh" && "${cmd}" != "-bash" && "${cmd}" != "-zsh" ]]
+}
+
 respawn_service() {
     local name="$1"
     local cmd="$2"
@@ -151,19 +160,25 @@ respawn_service "dashboard" "${DASHBOARD_CMD}"
 # ensure_window "my-project-api" "${CUSTOM_PROJECT_DIR}"
 # respawn_service "my-project-api" "${CUSTOM_PROJECT_CMD}"
 
-# Chief window
-ensure_window "chief" "${SCRIPT_DIR}"
-
 echo "==> Waiting for dashboard..."
 if ! wait_for_url "${DASHBOARD_URL}" "Dashboard"; then
     print_pane_tail "dashboard" 80
     exit 1
 fi
 
-# Chief session (proper env vars via spawn_chief.py)
+# Chief window - three paths:
+#   1. Window doesn't exist → create + spawn Chief
+#   2. Window exists, Claude not running → spawn Chief
+#   3. Window exists, Claude running → do nothing
+ensure_window "chief" "${SCRIPT_DIR}"
+
 if [[ "${START_CHIEF}" == "true" ]]; then
-    echo "==> Starting Chief..."
-    "${SCRIPT_DIR}/venv/bin/python" "${SCRIPT_DIR}/.engine/src/adapters/cli/spawn_chief.py" --force 2>&1 || true
+    if claude_running_in "chief"; then
+        echo "✓ Chief already running, skipping"
+    else
+        echo "==> Starting Chief..."
+        "${SCRIPT_DIR}/venv/bin/python" "${SCRIPT_DIR}/.engine/src/adapters/cli/spawn_chief.py" 2>&1 || true
+    fi
 fi
 
 echo ""
