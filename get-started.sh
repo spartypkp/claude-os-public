@@ -275,19 +275,31 @@ echo ""
 info "Starting Claude..."
 
 # Start Chief in tmux (spawn_chief.py registers session, sets env vars, waits for ready)
-"${INSTALL_DIR}/venv/bin/python" "${INSTALL_DIR}/.engine/src/adapters/cli/spawn_chief.py" 2>&1 || {
+SPAWN_OUTPUT=$("${INSTALL_DIR}/venv/bin/python" "${INSTALL_DIR}/.engine/src/adapters/cli/spawn_chief.py" 2>&1) || {
     warn "Could not auto-start Claude. You can start manually:"
     echo "  tmux attach -t life"
     echo "  # In the chief window, run: claude"
     exit 0
 }
+echo "$SPAWN_OUTPUT"
+
+# Parse session ID from spawn_chief.py output
+SESSION_ID=$(echo "$SPAWN_OUTPUT" | sed -n 's/.*Session ID: \([^ ]*\)/\1/p')
 
 # Give hooks a moment to load
 sleep 3
 
-# Inject /setup into the running Chief session
+# Inject /setup via backend API (reliable in piped contexts, unlike tmux send-keys)
 info "Starting onboarding..."
-tmux send-keys -t life:chief "/setup" C-m
+if [ -n "$SESSION_ID" ]; then
+    curl -s -X POST "http://localhost:${BACKEND_PORT}/api/sessions/${SESSION_ID}/say" \
+        -H "Content-Type: application/json" \
+        -d '{"message": "/setup"}' > /dev/null 2>&1 || {
+        warn "Could not auto-start onboarding. Run /setup manually in the Claude session."
+    }
+else
+    warn "Could not detect session ID. Run /setup manually in the Claude session."
+fi
 
 # Attach user to tmux session
 if [ -t 0 ]; then
@@ -296,17 +308,24 @@ if [ -t 0 ]; then
     exec tmux attach-session -t life
 else
     # No TTY (curl|bash) — open a new terminal window with tmux
-    ATTACH_CMD="cd '${INSTALL_DIR}' && tmux attach -t life:chief"
+    ATTACH_CMD="cd '${INSTALL_DIR}' && tmux attach -t life"
 
     echo ""
-    if osascript -e "tell application \"Terminal\" to do script \"${ATTACH_CMD}\"" 2>/dev/null; then
-        success "Claude is waiting in the new Terminal window."
-        echo "   Switch to it to begin."
+    if osascript -e "tell application \"Terminal\" to do script \"${ATTACH_CMD}\"" > /dev/null 2>&1; then
+        echo ""
+        success "Claude OS is ready!"
+        echo ""
+        echo "   The Dashboard is open in your browser — go talk to Claude there!"
+        echo "   A new Terminal window is also running in the background for the raw CLI."
+        echo ""
+        echo -e "   ${DIM}You can close this terminal — it's no longer needed.${NC}"
     else
         success "Claude OS is ready!"
         echo ""
-        echo "   Run this to connect:"
-        echo "     tmux attach -t life:chief"
+        echo "   The Dashboard is open in your browser — go talk to Claude there!"
+        echo ""
+        echo "   For the raw terminal, run:"
+        echo "     cd ${INSTALL_DIR} && tmux attach -t life"
     fi
     echo ""
 fi

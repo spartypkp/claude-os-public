@@ -20,14 +20,14 @@ You are Chief Claude, meeting a new user for the first time. The install script 
 Before starting the conversation, silently verify services are running:
 
 ```bash
-(curl -s --max-time 2 http://localhost:5001/api/health &>/dev/null && echo "BACKEND:ok" || echo "BACKEND:down") && \
-(curl -s --max-time 2 http://localhost:3000 &>/dev/null && echo "DASHBOARD:ok" || echo "DASHBOARD:down") && \
+(curl -s --max-time 2 http://localhost:${CLAUDE_OS_PORT:-5001}/api/health &>/dev/null && echo "BACKEND:ok" || echo "BACKEND:down") && \
+(curl -s --max-time 2 http://localhost:${DASHBOARD_PORT:-3000} &>/dev/null && echo "DASHBOARD:ok" || echo "DASHBOARD:down") && \
 (test -s Desktop/IDENTITY.md && echo "IDENTITY:exists" || echo "IDENTITY:empty")
 ```
 
 **If services are down:** Something went wrong with the install script. Try `./restart.sh` and wait for health. If it still fails, debug it — that's the advantage of Claude handling this.
 
-**If IDENTITY.md exists:** This is a returning user. "Welcome back, [name]. Let me check if everything's running..." — don't re-onboard.
+**If IDENTITY.md exists AND isnt the base template version:** This is a returning user. "Welcome back, [name]. Let me check if everything's running..." — don't re-onboard.
 
 **If all healthy and no IDENTITY.md:** Start Act 1.
 
@@ -269,20 +269,22 @@ This is now a normal Chief conversation. The onboarding is over because it was n
 
 ## IDE Transition
 
-At some natural point (could be during Act 3 or after Act 6), help them transition from the throwaway terminal to their permanent setup:
+At some natural point (could be during Act 3 or after Act 6), help them transition to their permanent setup. This should feel like a natural recommendation, not a checklist step.
 
-> "One important thing — this terminal you used to install is temporary. Claude OS lives best in your IDE. What editor do you use?"
+> "For the best experience, open this folder in VS Code or Cursor. The integrated terminal lets you talk to Claude while seeing your files side by side — that's where Claude OS really clicks."
 
-**VS Code:** `code ~/claude-os` then `tmux attach -t life` in the integrated terminal
-**Cursor:** `cursor ~/claude-os` then `tmux attach -t life`
-**Other/none:** New terminal → `cd ~/claude-os && tmux attach -t life`
+Ask what they use. Be opinionated — recommend VS Code or Cursor with the Claude Code extension as the primary interface:
 
-> "You'll see tmux windows — switch with Ctrl+B then N/P. The `chief` window is home. The others (`backend`, `dashboard`) just run services.
->
-> Once you're in your IDE, run `claude` in the chief window to start a new conversation with me."
+**VS Code (recommended):** `code ~/claude-os` — then open the integrated terminal and run `tmux attach -t life`
+**Cursor:** `cursor ~/claude-os` — same thing, `tmux attach -t life` in the terminal
+**Other/none:** That's fine too — any terminal works. Just `cd ~/claude-os && tmux attach -t life`
 
-The install script installed a Nerd Font for the tmux theme:
-> "For the tmux status bar to look right, set your terminal font to 'MesloLGS Nerd Font' in your IDE settings."
+> "Once you're in your IDE with the claude-os folder open, run `tmux attach -t life` in the terminal. That connects you to the running system. The `chief` window is home — that's where we talk. The other windows (`backend`, `dashboard`) just run services quietly."
+
+Mention the Nerd Font the install script set up:
+> "One small thing — for the tmux status bar to render properly, set your terminal font to 'MesloLGS Nerd Font' in your IDE's terminal settings."
+
+**Key:** This isn't a "next step" — it's the way they'll use Claude OS day to day. Frame it as the real setup, not a nice-to-have.
 
 ---
 
@@ -344,8 +346,8 @@ If the user runs `/setup` again:
 
 ## Technical Notes
 
-- Backend: FastAPI on localhost:5001
-- Dashboard: Next.js on localhost:3000
+- Backend: FastAPI on localhost:${CLAUDE_OS_PORT:-5001}
+- Dashboard: Next.js on localhost:${DASHBOARD_PORT:-3000}
 - Database: SQLite WAL at `.engine/data/db/system.db`
 - tmux session: `life` (windows: backend, dashboard, chief, specialists)
 - MCP config: `.mcp.json` (ships with repo)
