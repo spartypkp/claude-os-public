@@ -4,8 +4,8 @@ import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
 import { isProtectedFile as isProtectedFileName } from '@/lib/systemFiles';
-import { AlertCircle, AlertTriangle, Edit3, FileJson, GitBranch, Loader2, RefreshCw, FolderOpen } from 'lucide-react';
-import { useWindowStore } from '@/store/windowStore';
+import { AlertCircle, AlertTriangle, Edit3, FileJson, GitBranch, Loader2, RefreshCw } from 'lucide-react';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -36,7 +36,6 @@ function formatJson(raw: string): { formatted: string; error?: string } {
  */
 export function JsonEditor({ filePath }: JsonEditorProps) {
 	const isReadOnly = isProtectedFile(filePath);
-	const { openAppWindow } = useWindowStore();
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [content, setContent] = useState('');
@@ -51,24 +50,6 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 	const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const filePathRef = useRef(filePath);
 	filePathRef.current = filePath;
-
-	useFileEvents({
-		onModified: (event) => {
-			// Normalize paths for comparison (remove Desktop/ prefix if present)
-			const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
-			const eventPath = normalizeFilePath(event.path);
-			const currentPath = normalizeFilePath(filePathRef.current);
-
-			if (eventPath === currentPath) {
-				if (hasChanges || isSaving) {
-					setHasConflict(true);
-					toast.error('File was modified externally', { id: 'file-conflict' });
-				} else {
-					loadContent();
-				}
-			}
-		},
-	});
 
 	const loadContent = useCallback(async () => {
 		setLoading(true);
@@ -88,6 +69,27 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 			setLoading(false);
 		}
 	}, [filePath]);
+
+	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
+	const handleExternalChange = useCallback((event: { path: string }) => {
+		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
+		const eventPath = normalizeFilePath(event.path);
+		const currentPath = normalizeFilePath(filePathRef.current);
+
+		if (eventPath === currentPath) {
+			if (hasChanges || isSaving) {
+				setHasConflict(true);
+				toast.error('File was modified externally', { id: 'file-conflict' });
+			} else {
+				loadContent();
+			}
+		}
+	}, [loadContent, hasChanges, isSaving]);
+
+	useFileEvents({
+		onModified: handleExternalChange,
+		onCreated: handleExternalChange,
+	});
 
 	useEffect(() => {
 		loadContent();
@@ -168,13 +170,6 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 		loadContent();
 	}, [loadContent]);
 
-	// Show in Finder handler
-	const showInFinder = useCallback(() => {
-		const normalizedPath = filePath.replace(/^Desktop\//, "");
-		const lastSlash = normalizedPath.lastIndexOf("/");
-		const parentPath = lastSlash > 0 ? normalizedPath.substring(0, lastSlash) : "";
-		openAppWindow("finder", parentPath);
-	}, [filePath, openAppWindow]);
 
 	useEffect(() => {
 		return () => {
@@ -357,16 +352,6 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 				</div>
 
 				<div className="flex items-center gap-2">
-					{/* Show in Finder */}
-					<button
-						onClick={showInFinder}
-						className="p-1.5 rounded transition-colors"
-						style={{ color: 'var(--text-tertiary)' }}
-						title="Show in Finder"
-					>
-						<FolderOpen className="w-4 h-4" />
-					</button>
-
 					<div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
 					{formatError && (
 						<span style={{ color: 'var(--color-warning)' }}>Invalid JSON</span>

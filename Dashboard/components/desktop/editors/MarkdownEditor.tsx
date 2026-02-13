@@ -4,12 +4,12 @@ import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
 import { isProtectedFile as isProtectedFileName } from '@/lib/systemFiles';
-import { AlertCircle, AlertTriangle, Edit3, Eye, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Edit3, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
-import { useWindowStore } from '@/store/windowStore';
+
 
 interface MarkdownEditorProps {
 	filePath: string;
@@ -28,7 +28,6 @@ function isProtectedFile(path: string): boolean {
  */
 export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 	const isReadOnly = isProtectedFile(filePath);
-	const { openAppWindow } = useWindowStore();
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [content, setContent] = useState('');
@@ -48,28 +47,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 	hasChangesRef.current = hasChanges;
 	isSavingRef.current = isSaving;
 
-	// Listen for external file changes via SSE
-	useFileEvents({
-		onModified: (event) => {
-			// Normalize paths for comparison (remove Desktop/ prefix if present)
-			const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, '');
-			const eventPath = normalizeFilePath(event.path);
-			const currentPath = normalizeFilePath(filePathRef.current);
-
-			// Check if this event is for our file
-			if (eventPath === currentPath) {
-				// Use refs to avoid stale closure
-				if (hasChangesRef.current || isSavingRef.current) {
-					setHasConflict(true);
-					toast.error('File was modified externally', { id: 'file-conflict' });
-				} else {
-					// Auto-reload if no local changes
-					loadContent();
-				}
-			}
-		},
-	});
-
 	// Load file content
 	const loadContent = useCallback(async () => {
 		setLoading(true);
@@ -87,6 +64,28 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 			setLoading(false);
 		}
 	}, [filePath]);
+
+	// Listen for external file changes via SSE
+	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
+	const handleExternalChange = useCallback((event: { path: string }) => {
+		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, '');
+		const eventPath = normalizeFilePath(event.path);
+		const currentPath = normalizeFilePath(filePathRef.current);
+
+		if (eventPath === currentPath) {
+			if (hasChangesRef.current || isSavingRef.current) {
+				setHasConflict(true);
+				toast.error('File was modified externally', { id: 'file-conflict' });
+			} else {
+				loadContent();
+			}
+		}
+	}, [loadContent]);
+
+	useFileEvents({
+		onModified: handleExternalChange,
+		onCreated: handleExternalChange,
+	});
 
 	// Load file content on mount and when filePath changes
 	useEffect(() => {
@@ -165,17 +164,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 		loadContent();
 	}, [loadContent]);
 
-	// Show in Finder handler
-	const showInFinder = useCallback(() => {
-		// Extract parent directory from filePath
-		// filePath might be "EDIT-TEST.md" or "career/resume.md"
-		const normalizedPath = filePath.replace(/^Desktop\//, '');
-		const lastSlash = normalizedPath.lastIndexOf('/');
-		const parentPath = lastSlash > 0 ? normalizedPath.substring(0, lastSlash) : '';
-
-		// Open Finder window at parent directory
-		openAppWindow('finder', parentPath);
-	}, [filePath, openAppWindow]);
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -301,16 +289,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 				</div>
 
 				<div className="flex items-center gap-2">
-					{/* Show in Finder */}
-					<button
-						onClick={showInFinder}
-						className="p-1.5 rounded transition-colors"
-						style={{ color: 'var(--text-tertiary)' }}
-						title="Show in Finder"
-					>
-						<FolderOpen className="w-4 h-4" />
-					</button>
-
 					{/* Status */}
 					<div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
 					{isLargeFile ? (

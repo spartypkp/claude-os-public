@@ -622,9 +622,12 @@ async def file_events_stream(request: Request):
 
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    # Only forward file events; strip "file." prefix for frontend
+                    if not event.event_type.startswith("file."):
+                        continue
                     yield {
-                        "event": event.event_type,
-                        "data": event.to_json()
+                        "event": event.event_type[5:],  # "file.created" → "created"
+                        "data": json.dumps(event.data)   # flat {path, mtime} not wrapped
                     }
                 except asyncio.TimeoutError:
                     yield {

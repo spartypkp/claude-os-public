@@ -62,6 +62,9 @@ class WatchFilter:
             return False
         if '~' in p.name:
             return False
+        # Skip Claude Code atomic write temp files (e.g., file.md.tmp.PID.TIMESTAMP)
+        if '.tmp.' in p.name:
+            return False
 
         # Skip noise directories
         for part in p.parts:

@@ -185,9 +185,18 @@ async def get_email_triage(limit: int = Query(8, ge=1, le=20)):
             except Exception as e:
                 logger.warning(f"Failed to get triage for account {acct.get('id')}: {e}")
 
+        # Deduplicate across accounts (same email forwarded/synced to multiple)
+        seen = set()
+        unique_messages = []
+        for msg in all_messages:
+            dedup_key = (msg.get("subject"), msg.get("sender"), msg.get("date_received"))
+            if dedup_key not in seen:
+                seen.add(dedup_key)
+                unique_messages.append(msg)
+
         # Sort by date_received descending and take top N
-        all_messages.sort(key=lambda m: m.get("date_received", ""), reverse=True)
-        top_messages = all_messages[:limit]
+        unique_messages.sort(key=lambda m: m.get("date_received", ""), reverse=True)
+        top_messages = unique_messages[:limit]
 
         return {
             "unread_count": total_unread,

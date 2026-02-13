@@ -2,12 +2,12 @@
 
 import { useWindowStore } from '@/store/windowStore';
 import {
+	Check,
 	ChevronRight,
-	Inbox,
 	Loader2,
 	Mail,
 	MailOpen,
-	RefreshCw,
+	MessageSquare,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -44,7 +44,7 @@ interface TriageData {
 // HELPERS
 // ==========================================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { API_BASE } from '@/lib/api';
 
 function timeAgo(dateStr: string): string {
 	const now = new Date();
@@ -62,14 +62,11 @@ function timeAgo(dateStr: string): string {
 
 function senderDisplay(msg: TriageMessage): string {
 	if (msg.sender_name) {
-		// Just first name for compact display
 		const first = msg.sender_name.split(' ')[0];
 		return first || msg.sender_name;
 	}
-	// Extract name from "Name <email>" format
 	const match = msg.sender.match(/^(.+?)\s*</);
 	if (match) return match[1].split(' ')[0];
-	// Just email prefix
 	return msg.sender.split('@')[0];
 }
 
@@ -81,6 +78,8 @@ export function EmailWidgetContent() {
 	const [data, setData] = useState<TriageData | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+	const [triaging, setTriaging] = useState(false);
 	const { openAppWindow } = useWindowStore();
 
 	const loadTriage = useCallback(async () => {
@@ -100,27 +99,86 @@ export function EmailWidgetContent() {
 
 	useEffect(() => {
 		loadTriage();
-		const interval = setInterval(loadTriage, 60000); // Poll every 60s
+		const interval = setInterval(loadTriage, 60000);
 		return () => clearInterval(interval);
 	}, [loadTriage]);
+
+	const markAsRead = useCallback(async (msg: TriageMessage) => {
+		// Optimistic dismiss
+		setDismissedIds(prev => new Set(prev).add(`${msg.account}-${msg.id}`));
+		try {
+			await fetch(`${API_BASE}/api/email/messages/${msg.id}/read?account=${msg.account}`, {
+				method: 'POST',
+			});
+		} catch {
+			// Revert on failure
+			setDismissedIds(prev => {
+				const next = new Set(prev);
+				next.delete(`${msg.account}-${msg.id}`);
+				return next;
+			});
+		}
+	}, []);
+
+	// Filter out dismissed messages
+	const visibleMessages = data?.messages.filter(
+		(msg) => !dismissedIds.has(`${msg.account}-${msg.id}`)
+	) ?? [];
+
+	const triageWithClaude = useCallback(async () => {
+		setTriaging(true);
+		try {
+			// Get chief status
+			const statusRes = await fetch(`${API_BASE}/api/sessions/chief/status`);
+			const status = await statusRes.json();
+
+			if (!status.session_exists || !status.claude_running) {
+				openAppWindow('email');
+				return;
+			}
+
+			// Find the chief's active session
+			const convRes = await fetch(`${API_BASE}/api/sessions/activity`);
+			const convData = await convRes.json();
+			const chiefSession = convData.sessions?.find(
+				(s: { role: string; ended_at: string | null }) => s.role === 'chief' && !s.ended_at
+			);
+
+			if (chiefSession) {
+				const subjects = visibleMessages.slice(0, 5).map(
+					(m) => `- ${senderDisplay(m)}: ${m.subject || '(no subject)'}`
+				).join('\n');
+
+				await fetch(`${API_BASE}/api/sessions/${chiefSession.session_id}/say`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						message: `[Dashboard ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}] Help me triage my unread emails. Here's what's in my inbox:\n${subjects}\n\nWhich ones need attention and which can I ignore?`
+					}),
+				});
+			}
+		} catch (err) {
+			console.error('Failed to triage:', err);
+		} finally {
+			setTriaging(false);
+		}
+	}, [openAppWindow, visibleMessages]);
 
 	// ==========================================
 	// RENDER
 	// ==========================================
 
-	// Loading
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center h-full py-8">
+			<div className="flex items-center justify-center py-8">
 				<Loader2 className="w-5 h-5 animate-spin text-gray-400" />
 			</div>
 		);
 	}
 
-	// Error state — no accounts connected
 	if (error || !data) {
 		return (
-			<div className="flex flex-col items-center justify-center h-full p-8 text-center">
+			<div className="flex flex-col items-center justify-center p-8 text-center">
 				<div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-400/10 to-blue-400/10 border border-sky-400/20 flex items-center justify-center mb-4">
 					<Mail className="w-7 h-7 text-sky-400" />
 				</div>
@@ -140,10 +198,9 @@ export function EmailWidgetContent() {
 		);
 	}
 
-	// Inbox zero
-	if (data.unread_count === 0) {
+	if (data.unread_count === 0 && visibleMessages.length === 0) {
 		return (
-			<div className="flex flex-col items-center justify-center h-full p-8 text-center">
+			<div className="flex flex-col items-center justify-center p-8 text-center">
 				<div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400/10 to-green-400/10 border border-emerald-400/20 flex items-center justify-center mb-4">
 					<MailOpen className="w-7 h-7 text-emerald-400" />
 				</div>
@@ -163,11 +220,10 @@ export function EmailWidgetContent() {
 		);
 	}
 
-	// Has unread messages
 	return (
-		<div className="flex flex-col h-full">
-			{/* Header: unread count + account breakdown */}
-			<div className="px-3 py-2.5 bg-gradient-to-b from-gray-50 to-white dark:from-white/5 dark:to-transparent border-b border-gray-100/80 dark:border-white/5">
+		<div className="flex flex-col max-h-[460px]">
+			{/* Header */}
+			<div className="flex-shrink-0 px-3 py-2.5 bg-gradient-to-b from-gray-50 to-white dark:from-white/5 dark:to-transparent border-b border-gray-100/80 dark:border-white/5">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2">
 						<span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">
@@ -193,23 +249,44 @@ export function EmailWidgetContent() {
 				</div>
 			</div>
 
-			{/* Message list */}
-			<div className="flex-1 overflow-auto">
+			{/* Message list — scrollable */}
+			<div className="flex-1 overflow-y-auto min-h-0">
 				<div className="p-2 space-y-1">
-					{data.messages.map((msg) => (
-						<EmailItem key={msg.id} message={msg} />
+					{visibleMessages.map((msg) => (
+						<EmailItem
+							key={`${msg.account}-${msg.id}`}
+							message={msg}
+							onMarkRead={markAsRead}
+						/>
 					))}
 				</div>
 			</div>
 
-			{/* Footer */}
-			<button
-				onClick={() => openAppWindow('email')}
-				className="flex items-center justify-center gap-1 px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-sky-500 dark:hover:text-sky-400 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100/80 dark:border-white/5 transition-all hover:scale-[1.01]"
-			>
-				Open Mail
-				<ChevronRight className="w-3 h-3" />
-			</button>
+			{/* Footer actions */}
+			<div className="flex-shrink-0 border-t border-gray-100/80 dark:border-white/5">
+				<div className="flex">
+					<button
+						onClick={triageWithClaude}
+						disabled={triaging}
+						className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+					>
+						{triaging ? (
+							<Loader2 className="w-3 h-3 animate-spin" />
+						) : (
+							<MessageSquare className="w-3 h-3" />
+						)}
+						Triage with Claude
+					</button>
+					<div className="w-px bg-gray-100 dark:bg-white/5" />
+					<button
+						onClick={() => openAppWindow('email')}
+						className="flex-1 flex items-center justify-center gap-1 px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-sky-500 dark:hover:text-sky-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+					>
+						Open Mail
+						<ChevronRight className="w-3 h-3" />
+					</button>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -220,16 +297,17 @@ export function EmailWidgetContent() {
 
 interface EmailItemProps {
 	message: TriageMessage;
+	onMarkRead: (msg: TriageMessage) => void;
 }
 
-function EmailItem({ message }: EmailItemProps) {
+function EmailItem({ message, onMarkRead }: EmailItemProps) {
 	const sender = senderDisplay(message);
 	const time = timeAgo(message.date_received);
 
 	return (
 		<div
 			className="
-				flex items-start gap-2 px-2 py-2 rounded-lg transition-colors
+				group flex items-start gap-2 px-2 py-2 rounded-lg transition-colors
 				bg-white dark:bg-white/5 ring-1 ring-gray-200 dark:ring-white/10
 				hover:bg-gray-50 dark:hover:bg-white/10
 			"
@@ -259,12 +337,17 @@ function EmailItem({ message }: EmailItemProps) {
 				)}
 			</div>
 
-			{/* Flagged indicator */}
-			{message.is_flagged && (
-				<div className="flex-shrink-0 mt-1">
-					<div className="w-2 h-2 rounded-full bg-orange-400" />
-				</div>
-			)}
+			{/* Mark as read button — shows on hover */}
+			<button
+				onClick={(e) => {
+					e.stopPropagation();
+					onMarkRead(message);
+				}}
+				className="flex-shrink-0 mt-0.5 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
+				title="Mark as read"
+			>
+				<Check className="w-3 h-3 text-gray-400 hover:text-emerald-500" />
+			</button>
 		</div>
 	);
 }

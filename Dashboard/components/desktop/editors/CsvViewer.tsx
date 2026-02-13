@@ -3,8 +3,8 @@
 import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
-import { AlertCircle, AlertTriangle, RefreshCw, Table2, TextCursorInput, FolderOpen } from 'lucide-react';
-import { useWindowStore } from '@/store/windowStore';
+import { AlertCircle, AlertTriangle, RefreshCw, Table2, TextCursorInput } from 'lucide-react';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -73,31 +73,12 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 	const [hasConflict, setHasConflict] = useState(false);
 	const [viewMode, setViewMode] = useState<ViewMode>('table');
 	const [isLargeFile, setIsLargeFile] = useState(false);
-	const { openAppWindow } = useWindowStore();
 	const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const filePathRef = useRef(filePath);
 	filePathRef.current = filePath;
 
 	const extension = (filePath.split('.').pop() || '').toLowerCase();
 	const delimiter = extension === 'tsv' ? '\t' : ',';
-
-	useFileEvents({
-		onModified: (event) => {
-			// Normalize paths for comparison (remove Desktop/ prefix if present)
-			const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
-			const eventPath = normalizeFilePath(event.path);
-			const currentPath = normalizeFilePath(filePathRef.current);
-
-			if (eventPath === currentPath) {
-				if (hasChanges || isSaving) {
-					setHasConflict(true);
-					toast.error('File was modified externally', { id: 'file-conflict' });
-				} else {
-					loadContent();
-				}
-			}
-		},
-	});
 
 	const loadContent = useCallback(async () => {
 		setLoading(true);
@@ -119,6 +100,27 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 			setLoading(false);
 		}
 	}, [filePath]);
+
+	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
+	const handleExternalChange = useCallback((event: { path: string }) => {
+		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
+		const eventPath = normalizeFilePath(event.path);
+		const currentPath = normalizeFilePath(filePathRef.current);
+
+		if (eventPath === currentPath) {
+			if (hasChanges || isSaving) {
+				setHasConflict(true);
+				toast.error('File was modified externally', { id: 'file-conflict' });
+			} else {
+				loadContent();
+			}
+		}
+	}, [loadContent, hasChanges, isSaving]);
+
+	useFileEvents({
+		onModified: handleExternalChange,
+		onCreated: handleExternalChange,
+	});
 
 	useEffect(() => {
 		loadContent();
@@ -184,13 +186,6 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 		loadContent();
 	}, [loadContent]);
 
-	// Show in Finder handler
-	const showInFinder = useCallback(() => {
-		const normalizedPath = filePath.replace(/^Desktop\//, "");
-		const lastSlash = normalizedPath.lastIndexOf("/");
-		const parentPath = lastSlash > 0 ? normalizedPath.substring(0, lastSlash) : "";
-		openAppWindow("finder", parentPath);
-	}, [filePath, openAppWindow]);
 
 	useEffect(() => {
 		return () => {
@@ -302,16 +297,6 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 				</div>
 
 				<div className="flex items-center gap-2">
-					{/* Show in Finder */}
-					<button
-						onClick={showInFinder}
-						className="p-1.5 rounded transition-colors"
-						style={{ color: 'var(--text-tertiary)' }}
-						title="Show in Finder"
-					>
-						<FolderOpen className="w-4 h-4" />
-					</button>
-
 					<div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
 					{isLargeFile && (
 						<span className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ background: 'var(--surface-accent)', color: 'var(--text-tertiary)' }}>

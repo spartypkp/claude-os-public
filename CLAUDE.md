@@ -480,7 +480,9 @@ The cron scheduler runs a 60-second polling loop, executing entries from `Deskto
 
 `SCHEDULE.md` is the human-readable source of truth. Edit it directly or use `schedule()` to manage programmatically. Entries can be recurring (cron expressions) or one-off (ISO datetime, auto-removed after firing).
 
-`HEARTBEAT.md` is a queue of active items Chief checks on each `[WAKE]` pulse. Add items like "Keep the user focused on Juicebox prep until 4pm" — Chief processes them every 15 minutes and marks them done when expired.
+**Spec placement for scheduled work:** All specs referenced by cron spawns live in `Desktop/scheduled/`. This keeps automation infrastructure organized and discoverable. Example: `0 9 * * * | spawn researcher | Desktop/scheduled/money-checkup-spec.md`
+
+`HEARTBEAT.md` is a queue of active items Chief checks on each `[WAKE]` pulse. Add items like "Keep the user focused on prep until 4pm" — Chief processes them every 15 minutes and marks them done when expired.
 
 ### Skills
 
