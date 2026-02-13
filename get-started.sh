@@ -82,7 +82,7 @@ echo "memory, and notes. You should back this up to a private Git repo."
 echo ""
 
 if command -v gh &>/dev/null; then
-    read -p "Create a private GitHub repo and push? [Y/n] " -n 1 -r
+    read -p "Create a private GitHub repo and push? [Y/n] " -n 1 -r < /dev/tty 2>/dev/null || REPLY="n"
     echo ""
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         REPO_NAME=$(basename "$INSTALL_DIR")
@@ -289,7 +289,24 @@ sleep 3
 info "Starting onboarding..."
 tmux send-keys -t life:chief "/setup" C-m
 
-# Attach user to tmux on the chief window
-# When run via curl|bash, stdin is a pipe — reclaim the real terminal
-tmux select-window -t life:chief
-exec tmux attach-session -t life < /dev/tty
+# Attach user to tmux session
+if [ -t 0 ]; then
+    # Has a TTY (ran script directly) — attach in place
+    tmux select-window -t life:chief
+    exec tmux attach-session -t life
+else
+    # No TTY (curl|bash) — open a new terminal window with tmux
+    ATTACH_CMD="cd '${INSTALL_DIR}' && tmux attach -t life:chief"
+
+    echo ""
+    if osascript -e "tell application \"Terminal\" to do script \"${ATTACH_CMD}\"" 2>/dev/null; then
+        success "Claude is waiting in the new Terminal window."
+        echo "   Switch to it to begin."
+    else
+        success "Claude OS is ready!"
+        echo ""
+        echo "   Run this to connect:"
+        echo "     tmux attach -t life:chief"
+    fi
+    echo ""
+fi
