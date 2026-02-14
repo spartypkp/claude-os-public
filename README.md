@@ -4,6 +4,8 @@
 
 Claude OS is an open-source personal operating system where Claude manages your entire life — calendar, contacts, email, goals, projects, and everything in between. Multiple Claude instances collaborate as a team: a Chief orchestrates your day, Specialists handle focused work, and Subagents run in the background. Everything persists in files, so Claude remembers across conversations, days, and weeks.
 
+[Watch the demo (5 min)](https://www.loom.com/share/b12f06f60deb434e8befbb4ce75bd5d9)
+
 *Created by [@spartypkp](https://github.com/spartypkp). Built entirely with [Claude Code](https://claude.ai/claude-code).*
 
 ---
