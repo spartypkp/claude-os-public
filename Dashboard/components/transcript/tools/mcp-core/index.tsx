@@ -991,8 +991,6 @@ export const mcpCoreExpandedViews = {
 	email: EmailExpanded,
 	calendar: CalendarExpanded,
 	messages: MessagesExpanded,
-	opportunity: OpportunityExpanded,
-	turbine: TurbineExpanded,
 	pet: PetExpanded,
 
 	// Legacy: kept for rendering old transcripts

@@ -18,10 +18,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // Import app manifests to trigger registration
 import '@/app/ember/manifest';
-import '@/app/job-search/manifest';
-import '@/app/release/manifest';
-import '@/app/training-will/manifest';
-import '@/app/turbine/manifest';
 
 // ==========================================
 // CONSTANTS

@@ -789,7 +789,7 @@ Do this NOW before continuing any other work."""
             cmd_parts.append(f"--model {model}")
 
         # Chrome integration for roles that need browser access
-        CHROME_ROLES = {"job-search", "chief"}
+        CHROME_ROLES = {"chief"}
         if role in CHROME_ROLES:
             cmd_parts.append("--chrome")
 

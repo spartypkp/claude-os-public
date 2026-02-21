@@ -15,7 +15,6 @@ export function getAppName(pathname: string, focusedAppType?: CoreAppType | null
 	if (focusedAppType && CORE_APP_NAMES[focusedAppType]) {
 		return CORE_APP_NAMES[focusedAppType];
 	}
-	if (pathname.startsWith('/job-search')) return 'Job Search';
 	if (pathname.startsWith('/system')) return 'System';
 	return 'Desktop';
 }

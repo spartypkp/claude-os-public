@@ -93,8 +93,8 @@ def team(
             or session_id prefix (e.g., "7f0a578c") — resolves to active session automatically.
         role: Session role for spawn - use the slug (folder name under .claude/roles/).
             Base roles: 'builder', 'writer', 'researcher', 'curator', 'project', 'idea'
-            Custom roles: 'job-search', 'trainer', 'money'
-            IMPORTANT: Use hyphens not spaces (e.g. 'job-search' not 'job search')
+            Custom roles: any role slug defined under .claude/roles/
+            IMPORTANT: Use hyphens not spaces (e.g. 'my-role' not 'my role')
         spec_path: Path to spec file (REQUIRED for spawn) - Specialist flow starts at preparation
         max_iterations: Max specialist iterations before giving up (default 10)
         description: Status text for dashboard

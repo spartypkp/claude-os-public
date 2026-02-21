@@ -59,8 +59,6 @@ const ROLE_COLORS: Record<string, string> = {
   idea: '#a855f7',
   project: '#06b6d4',
   trainer: '#f97316',
-  money: '#10b981',
-  'job-search': '#3b82f6',
   unknown: '#6b7280',
 };
 

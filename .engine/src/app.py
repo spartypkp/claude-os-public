@@ -224,8 +224,6 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     from modules.settings import api as settings_api
     from modules.finder import api as finder_api
     from modules.system import api as system_api
-    from modules.job_search import api as job_search_api
-    from modules.training_will import api as training_will_api
     from modules.ember import api as ember_api
     from modules.schedule import api as schedule_api
     from modules.projects import api as projects_api
@@ -253,8 +251,6 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     app.include_router(schedule_api.router, prefix="/api/schedule")
 
     # Custom apps
-    app.include_router(job_search_api.router, prefix="/api/job-search")
-    app.include_router(training_will_api.router, prefix="/api/training")
     app.include_router(ember_api.router)
     app.include_router(projects_api.router, prefix="/api/projects")
 

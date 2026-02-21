@@ -40,8 +40,7 @@ Tools:
     - lineage(op)             Search Claude's private archive
 
   Custom Apps:
-    - opportunity(op)         Job opportunity pipeline management
-    - turbine(op)             Prediction market strategy management
+    - (add your own custom app tools here)
 """
 
 from __future__ import annotations
@@ -164,24 +163,6 @@ try:
     mcp.mount(telegram_mcp)
 except Exception as e:
     logger.warning(f"Failed to load telegram tools: {e}")
-
-# =============================================================================
-# CUSTOM APP TOOLS
-# =============================================================================
-
-# Job Search
-try:
-    from modules.job_search.mcp import mcp as job_search_mcp
-    mcp.mount(job_search_mcp)
-except Exception as e:
-    logger.warning(f"Failed to load job_search tools: {e}")
-
-# Turbine (prediction market)
-try:
-    from modules.turbine.mcp import mcp as turbine_mcp
-    mcp.mount(turbine_mcp)
-except Exception as e:
-    logger.warning(f"Failed to load turbine tools: {e}")
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")

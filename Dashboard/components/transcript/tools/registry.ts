@@ -6,7 +6,6 @@
  */
 import {
 	Activity,
-	Briefcase,
 	Calendar,
 	CheckCircle,
 	Contact,
@@ -29,7 +28,6 @@ import {
 	Search,
 	Star,
 	Terminal,
-	TrendingUp,
 	Workflow,
 	Wrench,
 	Zap,
@@ -655,41 +653,6 @@ const toolConfigs: Record<string, ToolConfig> = {
 				return `send "${truncate(msg, 25)}"`;
 			}
 			return phone ? `${op} ${phone}` : String(op);
-		},
-	},
-	opportunity: {
-		icon: Briefcase,
-		color: '#8b5cf6',
-		category: 'tool',
-		showToolName: true,
-		getOneLiner: (input) => {
-			const op = input.operation || '';
-			const name = input.raw?.name ? String(input.raw.name) : '';
-			const slug = input.raw?.slug ? String(input.raw.slug) : '';
-			if (name) return `${op} ${truncate(name, 35)}`;
-			if (slug) return `${op} ${truncate(slug, 35)}`;
-			if (op === 'list') return 'list opportunities';
-			if (op === 'sync') return 'sync pipeline';
-			return op || 'manage';
-		},
-	},
-	turbine: {
-		icon: TrendingUp,
-		color: '#f97316',
-		category: 'tool',
-		showToolName: true,
-		getOneLiner: (input) => {
-			const op = input.operation || '';
-			const name = input.raw?.name ? String(input.raw.name) : '';
-			if (name) return `${op} ${truncate(name, 35)}`;
-			if (op === 'scoreboard') return 'strategy scoreboard';
-			if (op === 'market') return 'market analysis';
-			if (op === 'current') return 'active positions';
-			if (op === 'signals') return 'pending signals';
-			if (op === 'stats') return 'performance stats';
-			if (op === 'portfolio') return 'portfolio overview';
-			if (op === 'calibration') return 'calibration check';
-			return op || 'manage';
 		},
 	},
 	pet: {

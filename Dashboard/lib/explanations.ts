@@ -195,19 +195,6 @@ export const EXPLANATIONS: Record<string, Explanation> = {
     ],
   },
 
-  // ============================================
-  // CUSTOM APPS (populated dynamically from APP-SPEC.md)
-  // ============================================
-  'custom:job-search': {
-    title: 'Job Search',
-    icon: '💼',
-    category: 'Custom Application',
-    description: 'Track your job search progress. Applications, interviews, and prep materials.',
-    details: [
-      'Built by Claude from APP-SPEC.md',
-      'Custom UI for job hunting workflow',
-    ],
-  },
 };
 
 /**

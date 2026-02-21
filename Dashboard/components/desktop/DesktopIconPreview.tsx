@@ -2,10 +2,7 @@
 
 import { getFileIconSpec } from '@/lib/fileTypes';
 import { FileTreeNode } from '@/lib/types';
-import {
-	Briefcase,
-	FolderOpen,
-} from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 
 // Lightweight drag preview - no interactions, no transitions
 export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
@@ -13,10 +10,9 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 	const isClaudeSystemFile = ['TODAY.md', 'MEMORY.md', 'LIFE.md', 'IDENTITY.md'].includes(node.name);
 	
 	// Determine icon
-	const isCustomApp = node.name === 'job-search';
 	const isFolder = node.type === 'directory';
-	
-	const Icon = isCustomApp ? Briefcase : (isFolder ? FolderOpen : fileIconSpec.icon);
+
+	const Icon = isFolder ? FolderOpen : fileIconSpec.icon;
 	const iconColor = isClaudeSystemFile ? 'text-[#DA7756]' : (isFolder ? 'text-[#DA7756]' : fileIconSpec.colorClass);
 	
 	// Format name
