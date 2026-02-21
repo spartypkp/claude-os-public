@@ -30,8 +30,6 @@ Tools:
     - calendar(op)            Calendar operations (list, create, update, delete)
     - contact(op)             Contact operations (search, create, update, enrich, merge, list)
     - email(op)               Email operations (send, draft, accounts, search, read, triage, handle, classification)
-    - pet(op)                 Interact with Ember (status, feed, note, play, history)
-
   Telegram:
     - telegram(op)            Send, read, info, show (visual content rendering)
 
@@ -129,13 +127,6 @@ try:
     mcp.mount(messages_mcp)
 except Exception as e:
     logger.warning(f"Failed to load messages tools: {e}")
-
-# Ember (Claude's pet)
-try:
-    from modules.ember.mcp import mcp as ember_mcp
-    mcp.mount(ember_mcp)
-except Exception as e:
-    logger.warning(f"Failed to load ember tools: {e}")
 
 # =============================================================================
 # ANALYTICS TOOLS

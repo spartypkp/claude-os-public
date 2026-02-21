@@ -16,9 +16,6 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-// Import app manifests to trigger registration
-import '@/app/ember/manifest';
-
 // ==========================================
 // CONSTANTS
 // ==========================================

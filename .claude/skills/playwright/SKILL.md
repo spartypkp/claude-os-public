@@ -233,7 +233,7 @@ All Dashboard elements use `data-testid` for stable selectors. **Never use class
 
 | testid | Component |
 |--------|-----------|
-| `app-ember` | Ember page |
+
 | `app-job-search` | Job Search page |
 | `app-turbine` | Turbine page |
 

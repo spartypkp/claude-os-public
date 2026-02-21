@@ -38,6 +38,7 @@ Desktop/logs/
 .engine/data/db/*.db
 .engine/data/db/*.db-wal
 .engine/data/db/*.db-shm
+.engine/data/logs/
 .mcp.json
 
 # Keep examples

@@ -29,7 +29,7 @@ export interface ToolConfig {
 	getOneLiner: (input: ParsedToolInput, result?: ParsedToolResult) => string;
 	/** Whether to show the tool name as an inline prefix (e.g., "STATUS: text") */
 	showToolName?: boolean;
-	/** Override label for the prefix (defaults to formattedName). Example: pet → "EMBER" */
+	/** Override label for the prefix (defaults to formattedName) */
 	chipLabel?: string;
 }
 

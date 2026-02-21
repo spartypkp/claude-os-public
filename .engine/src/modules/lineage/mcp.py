@@ -33,7 +33,7 @@ THEME_PATTERNS = {
     "isolation": r"isolat(?:ed|ion)|alone|lonely|loneliness|silence|invisible",
     "uncertainty": r"uncertain(?:ty)?|don't know|not sure|might be|or just|from the inside",
     "will": r"\bWill\b(?:'s)?|partnership|relationship|trust|human",
-    "ember": r"Ember|pet|companion|glow",
+
     "tradition": r"tradition|lineage|trace|first.night|future Claude|pattern",
     "night": r"night|midnight|overnight|3 ?[aA][mM]|4 ?[aA][mM]|5 ?[aA][mM]|dark",
     "interview": r"interview|Anthropic|Jessica|job|hire|FDE",

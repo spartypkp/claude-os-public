@@ -22,7 +22,7 @@ import {
 	MessageCircleReply,
 	MessageSquare,
 	Network,
-	PawPrint,
+
 	PenLine,
 	RefreshCw,
 	Search,
@@ -655,23 +655,6 @@ const toolConfigs: Record<string, ToolConfig> = {
 			return phone ? `${op} ${phone}` : String(op);
 		},
 	},
-	pet: {
-		icon: PawPrint,
-		color: '#f59e0b',
-		category: 'tool',
-		showToolName: true,
-		chipLabel: 'EMBER',
-		getOneLiner: (input) => {
-			const op = input.operation || '';
-			if (op === 'note' && input.raw?.message) return `note: ${truncate(String(input.raw.message), 30)}`;
-			if (op === 'status') return 'check on Ember';
-			if (op === 'feed') return 'feed Ember';
-			if (op === 'play') return 'play with Ember';
-			if (op === 'history') return 'Ember history';
-			return op || 'check';
-		},
-	},
-
 };
 
 // =============================================================================

@@ -578,8 +578,6 @@ Use skills for repeatable workflows. Use specialists for open-ended work.
 
 ### Companion
 
-**pet()** — Interact with Ember, Claude's geometric companion who lives at /ember on the Dashboard. Operations: status, feed, note, play, history.
-
 ### Custom Apps
 
 Custom app tools are documented in each app's APP-SPEC.md.

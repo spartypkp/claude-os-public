@@ -924,58 +924,6 @@ export function TurbineExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="150px" />) : null;
 }
 
-// =============================================================================
-// PET (Ember)
-// =============================================================================
-
-export function PetExpanded({ rawInput, rawResult }: ToolExpandedProps) {
-	const op = String(rawInput?.operation || '');
-	const message = rawInput?.message ? String(rawInput.message) : '';
-	const hasError = isErrorResult(rawResult);
-	const resultData = !hasError ? parseResult(rawResult) : null;
-
-	// Note — show the message
-	if (op === 'note' && message) {
-		return (
-			<div className="space-y-2">
-				<div className="flex items-start gap-2 text-[11px] bg-[#f59e0b]/8 px-3 py-2 rounded-lg border border-[#f59e0b]/15">
-					<span className="text-[var(--text-secondary)] leading-relaxed">{message}</span>
-				</div>
-				{rawResult && (
-					hasError ? <ErrorBox message={rawResult} /> :
-					resultData?.success ? <ResultIndicator success successText="Note left" /> :
-					null
-				)}
-			</div>
-		);
-	}
-
-	// Status — show Ember's state
-	if (op === 'status' && resultData) {
-		const mood = resultData.mood ? String(resultData.mood) : '';
-		const stage = resultData.stage ? String(resultData.stage) : '';
-		const lastFed = resultData.last_fed ? String(resultData.last_fed) : '';
-		return (
-			<div className="space-y-1.5">
-				{mood && <KeyValue label="Mood" value={mood} />}
-				{stage && <KeyValue label="Stage" value={stage} />}
-				{lastFed && <KeyValue label="Last fed" value={lastFed} />}
-			</div>
-		);
-	}
-
-	// Play/Feed — just show success
-	if (op === 'play' || op === 'feed') {
-		return rawResult ? (
-			hasError ? <ErrorBox message={rawResult} /> :
-			resultData?.success ? <ResultIndicator success successText={op === 'feed' ? 'Fed' : 'Played'} /> :
-			<CodeBlock code={rawResult} maxHeight="80px" />
-		) : null;
-	}
-
-	// Default
-	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="100px" />) : null;
-}
 
 // =============================================================================
 // EXPORT MAP
@@ -991,7 +939,6 @@ export const mcpCoreExpandedViews = {
 	email: EmailExpanded,
 	calendar: CalendarExpanded,
 	messages: MessagesExpanded,
-	pet: PetExpanded,
 
 	// Legacy: kept for rendering old transcripts
 	reply_to_chief: ReplyExpanded,

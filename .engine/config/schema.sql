@@ -642,39 +642,6 @@ WHERE p.front_text IS NOT NULL
 /* leetcode_speedrun_status(problem_number,name,pattern,next_review,interval_days,ease_factor,review_status) */;
 
 -- =============================================================================
--- Ember - Claude's Pet
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS pet_state (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    name TEXT DEFAULT 'Ember',
-    trace_count INTEGER DEFAULT 0,
-    stage TEXT DEFAULT 'spark',
-    mood TEXT DEFAULT 'resting',
-    mood_color TEXT DEFAULT '#FFB347',
-    last_fed TIMESTAMP,
-    last_interaction TIMESTAMP,
-    last_note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS pet_notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    direction TEXT NOT NULL CHECK (direction IN ('to_ember', 'from_ember')),
-    message TEXT NOT NULL,
-    session_id TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS pet_mood_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mood TEXT NOT NULL,
-    color TEXT NOT NULL,
-    trigger TEXT,
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- =============================================================================
 -- Team Messaging - Reply Injection Tracking
 -- =============================================================================
 

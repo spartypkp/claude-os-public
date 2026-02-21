@@ -15,7 +15,7 @@ const CORE_APPS = [
 
 // Custom apps that render at dedicated routes
 const CUSTOM_APP_ROUTES = [
-  { route: '/ember', pageId: 'app-ember', name: 'Ember' },
+
   { route: '/job-search', pageId: 'app-job-search', name: 'Job Search' },
   { route: '/turbine', pageId: 'app-turbine', name: 'Turbine' },
 ];

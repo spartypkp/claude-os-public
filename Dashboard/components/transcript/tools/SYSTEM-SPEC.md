@@ -100,7 +100,7 @@ interface ToolConfig {
   category: 'tool' | 'system';  // 'system' → SystemEventChip, 'tool' → ToolChip
   getOneLiner: (input, result?) => string;  // Collapsed text
   showToolName?: boolean;        // Show tool name as inline prefix (default: true)
-  chipLabel?: string;            // Override prefix label (e.g., pet → "EMBER")
+  chipLabel?: string;            // Override prefix label
 }
 ```
 
@@ -182,7 +182,6 @@ Reusable components for building expanded views.
 | messages | `MessagesExpanded` |
 | opportunity | `OpportunityExpanded` |
 | turbine | `TurbineExpanded` |
-| pet | `PetExpanded` |
 | Skill | `SkillExpanded` |
 
 ### `/misc` — Fallback

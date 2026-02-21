@@ -263,6 +263,16 @@ class EmailPipeline:
         """
         conn = self._get_conn()
         try:
+            # Ensure _migrations table exists (pipeline may start before run_migrations)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS _migrations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    applied_at TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+
             # Check if we've already initialized
             row = conn.execute(
                 "SELECT 1 FROM _migrations WHERE name = 'email_pipeline_initialized'"
