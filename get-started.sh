@@ -185,33 +185,57 @@ if [[ ! -d "venv" ]]; then
 fi
 
 # Python dependencies
+SETUP_LOG="${INSTALL_DIR}/setup.log"
+echo "=== Claude OS Setup Log ===" > "$SETUP_LOG"
+echo "Date: $(date)" >> "$SETUP_LOG"
+echo "Python: $($PYTHON_CMD --version 2>&1)" >> "$SETUP_LOG"
+echo "Node: $(node --version 2>&1)" >> "$SETUP_LOG"
+echo "OS: $(sw_vers -productVersion 2>/dev/null || uname -r)" >> "$SETUP_LOG"
+echo "" >> "$SETUP_LOG"
+
 info "Installing Python dependencies..."
 source venv/bin/activate
 pip install --upgrade pip --quiet
-pip install -r requirements.txt --quiet 2>/dev/null || {
-    warn "Some optional dependencies failed. Installing core deps..."
-    pip install --quiet \
+
+echo "--- pip install requirements.txt ---" >> "$SETUP_LOG"
+if pip install -r requirements.txt 2>>"$SETUP_LOG"; then
+    success "Python dependencies installed"
+else
+    warn "Some dependencies failed (see setup.log for details)"
+    echo "" >> "$SETUP_LOG"
+    echo "--- Fallback: core deps only ---" >> "$SETUP_LOG"
+    pip install \
         fastapi uvicorn aiosqlite httpx aiohttp jinja2 \
         python-multipart "pydantic>=2.0" python-dotenv \
         sse-starlette PyYAML watchdog python-dateutil \
-        mcp fastmcp 2>/dev/null || true
-}
+        mcp fastmcp 2>>"$SETUP_LOG" || {
+        warn "Core dependency install also had errors (see setup.log)"
+    }
+    success "Core Python dependencies installed"
+fi
 
 # macOS-specific integrations (Calendar, Contacts, Mail)
-pip install --quiet \
+echo "" >> "$SETUP_LOG"
+echo "--- macOS integrations ---" >> "$SETUP_LOG"
+pip install \
     pyapple-mcp \
     pyobjc-framework-Contacts \
-    pyobjc-framework-EventKit 2>/dev/null || true
-
-success "Python dependencies installed"
+    pyobjc-framework-EventKit 2>>"$SETUP_LOG" || {
+    warn "Some macOS integrations failed (Calendar/Contacts may not work)"
+}
 
 # Dashboard dependencies
 if [[ -d "Dashboard" ]]; then
     info "Installing Dashboard dependencies..."
+    echo "" >> "$SETUP_LOG"
+    echo "--- npm install (Dashboard) ---" >> "$SETUP_LOG"
     cd Dashboard
-    npm install --silent 2>/dev/null || npm install
+    if npm install 2>>"$SETUP_LOG"; then
+        success "Dashboard dependencies installed"
+    else
+        warn "Dashboard npm install had errors (see setup.log)"
+    fi
     cd ..
-    success "Dashboard dependencies installed"
 fi
 
 # Config files
