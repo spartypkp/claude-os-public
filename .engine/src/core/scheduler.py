@@ -97,7 +97,7 @@ def _usage_snapshot():
     # This just ensures a snapshot if the tracker missed one.
     try:
         import urllib.request
-        req = urllib.request.Request("http://localhost:5001/api/analytics/usage/current")
+        req = urllib.request.Request(f"{settings.backend_url}/api/analytics/usage/current")
         with urllib.request.urlopen(req, timeout=5):
             pass
     except Exception:
@@ -105,13 +105,39 @@ def _usage_snapshot():
 
 
 def _cleanup_orphan_sessions():
-    """Clean up orphaned sessions in the database."""
+    """Clean up orphaned sessions in the database and emit events."""
     storage = SystemStorage(settings.db_path)
     cutoff = (datetime.now() - timedelta(hours=6)).isoformat()
-    storage.execute("""
-        UPDATE sessions SET ended_at = datetime('now'), end_reason = 'orphan_cleanup'
+
+    # Find orphans first so we can emit events for each
+    orphans = storage.fetchall("""
+        SELECT session_id, role, mode FROM sessions
         WHERE ended_at IS NULL AND last_seen_at < ?
     """, (cutoff,))
+
+    if orphans:
+        storage.execute("""
+            UPDATE sessions SET ended_at = datetime('now'), end_reason = 'orphan_cleanup'
+            WHERE ended_at IS NULL AND last_seen_at < ?
+        """, (cutoff,))
+
+        # Emit session.ended event for each orphan
+        try:
+            from core.event_log import emit_event
+            for orphan in orphans:
+                emit_event(
+                    "session",
+                    "ended",
+                    actor=orphan["session_id"],
+                    data={
+                        "role": orphan["role"] or "unknown",
+                        "mode": orphan["mode"] or "unknown",
+                        "reason": "orphan_cleanup",
+                    },
+                )
+        except Exception as e:
+            logger.warning(f"Failed to emit orphan session.ended events: {e}")
+
     storage.close()
 
 
@@ -535,10 +561,10 @@ class CronScheduler:
         # Format the message
         is_wake = payload.strip() == "[WAKE]"
         if is_wake:
-            message = "[WAKE]"
+            message = "[SYSTEM:WAKE]"
         else:
             now_str = datetime.now(PACIFIC).strftime("%H:%M")
-            message = f"[CRON {now_str}] {payload}"
+            message = f"[SYSTEM:CRON] ({now_str}) {payload}"
 
         # Inject
         success = await asyncio.to_thread(
@@ -648,7 +674,7 @@ class CronScheduler:
     async def _check_calendar_triggers(self):
         """Check for upcoming calendar events and notify Chief."""
         try:
-            from modules.calendar import get_events
+            from modules.calendar import get_calendar_service
         except ImportError:
             return
 
@@ -657,27 +683,26 @@ class CronScheduler:
         window_end = now + timedelta(minutes=16)
 
         try:
-            events = get_events(
-                from_date=window_start,
-                to_date=window_end,
-                use_preferred=True,
+            service = get_calendar_service()
+            cal_events = service.get_events(
+                start=window_start,
+                end=window_end,
             )
         except Exception:
             return
 
-        for event in events:
-            event_id = event.get("id")
+        for cal_event in cal_events:
+            event_id = cal_event.id
             if not event_id or event_id in self._triggered_events:
                 continue
 
-            title = event.get("summary", "Unknown Event")
+            title = cal_event.summary or "Unknown Event"
             if not window_exists("chief"):
                 continue
 
-            now_str = datetime.now(PACIFIC).strftime("%H:%M")
             message = (
-                f"[CRON {now_str}] [PRE-EVENT] Event \"{title}\" in ~15 min. "
-                f"Decide if the user needs context. If important, send brief via Telegram."
+                f"[SYSTEM:EVENT] \"{title}\" in ~15 min. "
+                f"Decide if Will needs context. If important, send brief via Telegram."
             )
 
             success = await asyncio.to_thread(
@@ -740,7 +765,7 @@ class CronScheduler:
                 logger.info(f"Delivering late one-off: {entry_id}")
                 if action_type == "inject":
                     now_str = datetime.now(PACIFIC).strftime("%H:%M")
-                    late_payload = f"[LATE] {payload}"
+                    late_payload = f"[SYSTEM:LATE] {payload}"
                     await self._dispatch_inject(target, late_payload)
 
                 self.storage.execute("""

@@ -128,7 +128,7 @@ class AppleCalendarAdapter(CalendarAdapter):
         Args:
             preferred_only: If True, filter to preferred_calendars only.
             preferred_calendars: List of calendar names to prefer.
-            aliases: Calendar name aliases (e.g., {"gmail": "Personal"}).
+            aliases: Calendar name aliases (e.g., {"gmail": "Willdiamond3"}).
             default_calendar: Default calendar name to use.
         """
         self._preferred_only = preferred_only
@@ -163,7 +163,7 @@ class AppleCalendarAdapter(CalendarAdapter):
 
         Supports:
         - Calendar UUID (e.g., "ABC-123-DEF")
-        - Calendar name (e.g., "Calendar", "Personal")
+        - Calendar name (e.g., "Calendar", "Willdiamond3")
         - Friendly aliases (e.g., "Exchange", "Personal", "Gmail", "Work")
         """
         if not calendar_id:
@@ -262,7 +262,7 @@ class AppleCalendarAdapter(CalendarAdapter):
             params: List[Any] = [start_ts, end_ts]
             calendar_clause = ""
             if calendar_id:
-                # Resolve aliases (e.g., "gmail" -> "Personal", "exchange" -> "Calendar")
+                # Resolve aliases (e.g., "gmail" -> "Willdiamond3", "exchange" -> "Calendar")
                 resolved_name = self._resolve_calendar_name(calendar_id)
                 # Match by UUID, ROWID, or calendar title
                 calendar_clause = " AND (c.UUID = ? OR c.ROWID = ? OR c.title = ?)"

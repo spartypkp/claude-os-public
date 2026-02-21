@@ -23,14 +23,7 @@ def get_messages_service() -> MessagesService:
     """Get or create MessagesService singleton."""
     global _service
     if _service is None:
-        # Try to get contacts service for name lookups (optional)
-        contacts_service = None
-        try:
-            from modules.contacts import get_contacts_service
-            contacts_service = get_contacts_service()
-        except Exception:
-            pass  # Contacts service may not be available
-        _service = MessagesService(contacts_service=contacts_service)
+        _service = MessagesService(contacts_service=None)
     return _service
 
 

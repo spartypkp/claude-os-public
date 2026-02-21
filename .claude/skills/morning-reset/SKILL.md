@@ -15,16 +15,16 @@ description: Daily reset - archive yesterday, consolidate memory, prepare mornin
 
 Without memory consolidation, you are a stranger every day.
 
-the user has ADHD. His executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity.
+The user's executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity. Check IDENTITY.md for any cognitive patterns (ADHD, etc.) that shape how to structure the morning brief.
 
 If those files are wrong, the system fails.
 
-The morning brief gets the user working in under 2 minutes. The brief serves a parliament:
+The morning brief gets the user working in under 2 minutes. It serves their different temporal selves:
 
-- **Morning User** wants minimum decisions, one screen, "just tell me what to do"
-- **Evening User** wants to look back and see he worked on what mattered
-- **Interview-Day the user** wants every morning to have prepared him
-- **System-Builder the user** wants Claude opinionated, not asking "what would you like?"
+- **Morning Self** wants minimum decisions, one screen, "just tell me what to do"
+- **Evening Self** wants to look back and see they worked on what mattered
+- **Future Self** wants every morning to have prepared them
+- **Engaged Self** wants Claude opinionated, not asking "what would you like?"
 
 This is the difference between being **a partner who learns** vs **a tool that forgets**.
 
@@ -89,6 +89,16 @@ team("spawn",
 
 ---
 
+### Phase 2.5: Email Triage Sweep
+
+Check the email triage queue before writing the brief:
+
+```python
+email("triage", limit=20)
+```
+
+Process unhandled items: action_needed items become brief bullets or priorities, heads_up items get mentioned in the brief, fyi/noise get marked handled. Use `email("handle", message_id=..., account=...)` to clear processed items. This ensures the morning brief reflects overnight email activity.
+
 ### Phase 3: Prepare Morning Brief
 
 Read context:
@@ -97,6 +107,7 @@ Read context:
 - `Desktop/TODAY.md` (context and open loops populated by Curator)
 - Calendar (today's events)
 - Priorities (today's priorities)
+- Email triage results (from Phase 2.5)
 
 Write brief to `Desktop/morning-brief.md`:
 
@@ -165,7 +176,7 @@ If system was offline for multiple days:
 
 **Don't manufacture memories.** If you don't know, you don't know. Gaps are fine.
 
-**Morning User vs Parliament.** Surface the hard thing, even if he doesn't love it. Evening User and Future User need honesty more than Morning User needs comfort.
+**Self vs Parliament.** Surface the hard thing, even if Morning Self doesn't love it. Evening Self and Future Self need honesty more than Morning Self needs comfort.
 
 ---
 

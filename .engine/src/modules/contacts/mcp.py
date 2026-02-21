@@ -1,41 +1,21 @@
 """Contacts MCP tool - People database with relationship context."""
 from __future__ import annotations
 
-import os
+import logging
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastmcp import FastMCP
 
-from core.mcp_helpers import get_services, normalize_phone
+from core.mcp_helpers import get_services, normalize_phone, notify_backend_event
 from .standalone import StandaloneContactsRepository
+from .providers.apple import AppleContactsAdapter
+from .providers.base import ContactUpdate
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("life-contacts")
-
-
-def _notify_backend_event(event_type: str, data: dict = None):
-    """Notify the backend to emit an SSE event for real-time Dashboard updates."""
-    import urllib.request
-    import json as json_module
-
-    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
-    payload = {
-        "event_type": event_type,
-        "session_id": session_id,
-        "data": data or {}
-    }
-
-    try:
-        req = urllib.request.Request(
-            "http://localhost:5001/api/sessions/notify-event",
-            data=json_module.dumps(payload).encode('utf-8'),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        urllib.request.urlopen(req, timeout=1)
-    except Exception:
-        pass  # Best effort - don't fail the tool if notification fails
 
 
 @mcp.tool()
@@ -60,13 +40,27 @@ def contact(
     tags: Optional[List[str]] = None,
     limit: int = 20,
     recent_days: Optional[int] = None,
+    current_state: Optional[str] = None,
+    linkedin_url: Optional[str] = None,
+    contact_cadence: Optional[int] = None,
+    entry: Optional[str] = None,
+    source: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Contact management.
 
     Args:
-        operation: Operation - 'search', 'create', 'update', 'enrich', 'merge', 'list'
+        operation: Operation to perform:
+            - "search": Find contacts by name, email, phone, or keyword
+            - "create": Add a new contact (name required)
+            - "update": Modify existing contact fields (REPLACES values — tags replaced entirely)
+            - "enrich": Add to existing contact (ONLY fills empty fields — tags MERGED not replaced)
+            - "merge": Combine two contacts into one
+            - "list": List contacts with filters (pinned, relationship, recent activity)
+            - "history": Read or write contact interaction history.
+                With entry: appends a history entry.
+                Without entry: reads last N entries.
         query: Search query (required for search)
-        identifier: Name, phone, or short ID to find contact (required for update/enrich)
+        identifier: Name, phone, or short ID to find contact (required for update/enrich/history)
         source_identifier: Source contact to merge (required for merge)
         target_identifier: Target contact to merge into (required for merge)
         name: Display name (required for create)
@@ -84,18 +78,26 @@ def contact(
         tags: List of tags (replace-all for update, merge for enrich)
         limit: Max results for list (default 20)
         recent_days: For list - contacted in last N days
+        current_state: Living summary of who this person is right now (update replaces, enrich fills if NULL)
+        linkedin_url: LinkedIn profile URL
+        contact_cadence: Desired days between contact (e.g. 14 = every 2 weeks)
+        entry: History entry text (required for history write mode)
+        source: History entry source - chief, email, imessage, calendar, manual (default: chief)
 
     Returns:
         Object with success status and contact data
 
     Examples:
         contact("search", query="Alex")
-        contact("create", name="Jane Smith", company="Acme Corp", role="Engineer")
+        contact("create", name="Alex Bricken", company="Anthropic", role="FDE")
         contact("update", identifier="Alex", notes="Met at conference")
-        contact("enrich", identifier="Alex", notes="Great conversation about AI", tags=["ai-research"])
-        contact("merge", source_identifier="J Smith", target_identifier="Jane Smith")
+        contact("update", identifier="Alex", current_state="FDE at Anthropic, working on Claude Code")
+        contact("enrich", identifier="Mark", notes="Great conversation about AI", tags=["anthropic"])
+        contact("merge", source_identifier="Alex B", target_identifier="Alex Bricken")
         contact("list", pinned=True)
         contact("list", relationship="friend", limit=10)
+        contact("history", identifier="Mark Schlick", entry="Feb 18: Telegram session about Claude OS")
+        contact("history", identifier="Mark", limit=5)
     """
     try:
         services = get_services()
@@ -108,16 +110,20 @@ def contact(
                                    description, relationship, context_notes, value_exchange, notes, pinned, tags)
         elif operation == "update":
             return _contact_update(repo, identifier, name, phone, email, company, role, location,
-                                   description, relationship, context_notes, value_exchange, notes, pinned, tags)
+                                   description, relationship, context_notes, value_exchange, notes, pinned, tags,
+                                   current_state, linkedin_url, contact_cadence)
         elif operation == "enrich":
             return _contact_enrich(repo, identifier, name, phone, email, company, role, location,
-                                   description, relationship, context_notes, value_exchange, notes, pinned, tags)
+                                   description, relationship, context_notes, value_exchange, notes, pinned, tags,
+                                   current_state, linkedin_url, contact_cadence)
         elif operation == "merge":
             return _contact_merge(repo, source_identifier, target_identifier)
         elif operation == "list":
             return _contact_list(repo, pinned, relationship, recent_days, limit)
+        elif operation == "history":
+            return _contact_history(repo, identifier, entry, source, limit)
         else:
-            return {"success": False, "error": f"Unknown operation: {operation}. Use search, create, update, enrich, merge, or list."}
+            return {"success": False, "error": f"Unknown operation: {operation}. Use search, create, update, enrich, merge, list, or history."}
 
     except sqlite3.IntegrityError as e:
         if "phone" in str(e).lower():
@@ -166,7 +172,7 @@ def _contact_create(repo, name, phone, email, company, role, location,
         repo.replace_tags(created["id"], tags)
 
     # Emit SSE event for real-time Dashboard update
-    _notify_backend_event("contact.created", {"id": created["id"][:8], "name": created["name"]})
+    notify_backend_event("contact.created", {"id": created["id"][:8], "name": created["name"]})
 
     return {
         "success": True,
@@ -177,7 +183,8 @@ def _contact_create(repo, name, phone, email, company, role, location,
 
 
 def _contact_update(repo, identifier, name, phone, email, company, role, location,
-                    description, relationship, context_notes, value_exchange, notes, pinned, tags) -> Dict[str, Any]:
+                    description, relationship, context_notes, value_exchange, notes, pinned, tags,
+                    current_state=None, linkedin_url=None, contact_cadence=None) -> Dict[str, Any]:
     if not identifier:
         return {"success": False, "error": "identifier required for update"}
 
@@ -189,7 +196,8 @@ def _contact_update(repo, identifier, name, phone, email, company, role, locatio
 
     field_count = sum(1 for v in [name, phone, email, company, role, location,
                                   description, relationship, context_notes,
-                                  value_exchange, notes, pinned] if v is not None)
+                                  value_exchange, notes, pinned,
+                                  current_state, linkedin_url, contact_cadence] if v is not None)
 
     if field_count == 0 and tags is None:
         return {"success": False, "error": "No fields to update"}
@@ -208,13 +216,30 @@ def _contact_update(repo, identifier, name, phone, email, company, role, locatio
         value_exchange=value_exchange,
         notes=notes,
         pinned=pinned,
+        current_state=current_state,
+        linkedin_url=linkedin_url,
+        contact_cadence=contact_cadence,
     )
 
     if tags is not None:
         repo.replace_tags(contact_id, tags)
 
+    # Apple write-back for basic fields when macos_contact_id exists
+    macos_id = found.get("macos_contact_id")
+    if macos_id and any(v is not None for v in [company, role, notes]):
+        try:
+            adapter = AppleContactsAdapter()
+            update_data = ContactUpdate(
+                company=company,
+                job_title=role,
+                notes=notes,
+            )
+            adapter.update_contact(macos_id, update_data)
+        except Exception as e:
+            logger.warning(f"Apple write-back failed for {macos_id}: {e}")
+
     # Emit SSE event for real-time Dashboard update
-    _notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
+    notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
 
     return {
         "success": True,
@@ -226,7 +251,8 @@ def _contact_update(repo, identifier, name, phone, email, company, role, locatio
 
 
 def _contact_enrich(repo, identifier, name, phone, email, company, role, location,
-                    description, relationship, context_notes, value_exchange, notes, pinned, tags) -> Dict[str, Any]:
+                    description, relationship, context_notes, value_exchange, notes, pinned, tags,
+                    current_state=None, linkedin_url=None, contact_cadence=None) -> Dict[str, Any]:
     if not identifier:
         return {"success": False, "error": "identifier required for enrich"}
 
@@ -252,6 +278,9 @@ def _contact_enrich(repo, identifier, name, phone, email, company, role, locatio
         value_exchange=value_exchange,
         notes=notes,
         pinned=pinned,
+        current_state=current_state,
+        linkedin_url=linkedin_url,
+        contact_cadence=contact_cadence,
     )
 
     tags_added = 0
@@ -259,7 +288,7 @@ def _contact_enrich(repo, identifier, name, phone, email, company, role, locatio
         tags_added = repo.merge_tags(contact_id, tags)
 
     # Emit SSE event for real-time Dashboard update
-    _notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
+    notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
 
     return {
         "success": True,
@@ -298,8 +327,8 @@ def _contact_merge(repo, source_identifier, target_identifier) -> Dict[str, Any]
     result = repo.merge(source_id, target_id, source_data, target_data)
 
     # Emit SSE event for real-time Dashboard update (source deleted, target updated)
-    _notify_backend_event("contact.deleted", {"id": source_id[:8], "name": source["name"]})
-    _notify_backend_event("contact.updated", {"id": target_id[:8], "name": target["name"]})
+    notify_backend_event("contact.deleted", {"id": source_id[:8], "name": source["name"]})
+    notify_backend_event("contact.updated", {"id": target_id[:8], "name": target["name"]})
 
     return {
         "success": True,
@@ -309,6 +338,41 @@ def _contact_merge(repo, source_identifier, target_identifier) -> Dict[str, Any]
         "fields_merged": result["fields_merged"],
         "tags_merged": result["tags_merged"],
     }
+
+
+def _contact_history(repo, identifier, entry, source, limit) -> Dict[str, Any]:
+    if not identifier:
+        return {"success": False, "error": "identifier required for history"}
+
+    found = repo.find(identifier)
+    if not found:
+        return {"success": False, "error": f"Contact not found: {identifier}"}
+
+    contact_id = found["id"]
+
+    if entry:
+        # Write mode: append history entry
+        result = repo.add_history(
+            contact_id=contact_id,
+            entry=entry,
+            source=source or "chief",
+        )
+        return {
+            "success": True,
+            "mode": "write",
+            "contact": found["name"],
+            "entry": result,
+        }
+    else:
+        # Read mode: return last N entries
+        entries = repo.get_history(contact_id, limit)
+        return {
+            "success": True,
+            "mode": "read",
+            "contact": found["name"],
+            "entries": entries,
+            "count": len(entries),
+        }
 
 
 def _contact_list(repo, pinned, relationship, recent_days, limit) -> Dict[str, Any]:

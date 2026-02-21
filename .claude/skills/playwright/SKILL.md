@@ -1,484 +1,325 @@
 ---
 name: playwright
-description: Complete browser automation with Playwright. Auto-detects dev servers, writes clean test scripts to /tmp. Test pages, fill forms, take screenshots, check responsive design, validate UX, test login flows, check links, automate any browser task. Use when user wants to test websites, automate browser interactions, validate web functionality, or perform any browser-based testing.
+description: Dashboard UI testing for Claude OS. Run smoke tests to verify components render, take screenshots of app windows, check for React crashes. Use after any Dashboard component change.
 ---
 
-**IMPORTANT - Path Resolution:**
-This skill can be installed in different locations (plugin system, manual installation, global, or project-specific). Before executing any commands, determine the skill directory based on where you loaded this SKILL.md file, and use that path in all commands below. Replace `$SKILL_DIR` with the actual discovered path.
+# Dashboard UI Testing
 
-Common installation paths:
+Test the Claude OS Dashboard with Playwright. Purpose-built for Dashboard changes — NOT a generic web testing tool.
 
-- Plugin system: `~/.claude/plugins/marketplaces/playwright-skill/skills/playwright-skill`
-- Manual global: `~/.claude/skills/playwright-skill`
-- Project-specific: `<project>/.claude/skills/playwright-skill`
+## Common Mistakes (Read This First)
 
-# Playwright Browser Automation
-
-## Builder Verification
-
-Run smoke tests to verify Dashboard UI renders correctly after changes. Use this during Builder verification phase.
-
-**Run all smoke tests (recommended):**
-```bash
-cd $PROJECT_ROOT/.claude/skills/playwright && node run.js $PROJECT_ROOT/.claude/test/smoke-all.js
-```
-
-**Individual tests:**
-```bash
-# Desktop: page load, core elements, dock icons, widgets, clock
-cd $PROJECT_ROOT/.claude/skills/playwright && node run.js $PROJECT_ROOT/.claude/test/smoke-desktop.js
-
-# Apps: open each core app window via dock, verify custom app pages render
-cd $PROJECT_ROOT/.claude/skills/playwright && node run.js $PROJECT_ROOT/.claude/test/smoke-apps.js
-
-# Widgets: menubar dropdowns, dark mode toggle, clock text
-cd $PROJECT_ROOT/.claude/skills/playwright && node run.js $PROJECT_ROOT/.claude/test/smoke-widgets.js
-```
-
-**What these catch:**
-- React render crashes (component throws during render)
-- Missing DOM elements (deleted or renamed components)
-- Runtime exceptions (bad data shapes, null references)
-- Dock/window interaction failures
-
-**Available data-testid selectors:** See `.claude/test/CONVENTIONS.md` for the full list.
-
----
-
-General-purpose browser automation skill. I'll write custom Playwright code for any automation task you request and execute it via the universal executor.
-
-**CRITICAL WORKFLOW - Follow these steps in order:**
-
-1. **Auto-detect dev servers** - For localhost testing, ALWAYS run server detection FIRST:
-
-   ```bash
-   cd $SKILL_DIR && node -e "require('./lib/helpers').detectDevServers().then(servers => console.log(JSON.stringify(servers)))"
-   ```
-
-   - If **1 server found**: Use it automatically, inform user
-   - If **multiple servers found**: Ask user which one to test
-   - If **no servers found**: Ask for URL or offer to help start dev server
-
-2. **Write scripts to /tmp** - NEVER write test files to skill directory; always use `/tmp/playwright-test-*.js`
-
-3. **Use headless browser by default** - Always use `headless: true` unless user specifically requests visible mode for debugging
-
-4. **Parameterize URLs** - Always make URLs configurable via environment variable or constant at top of script
-
-## How It Works
-
-1. You describe what you want to test/automate
-2. I auto-detect running dev servers (or ask for URL if testing external site)
-3. I write custom Playwright code in `/tmp/playwright-test-*.js` (won't clutter your project)
-4. I execute it via: `cd $SKILL_DIR && node run.js /tmp/playwright-test-*.js`
-5. Results displayed in real-time, browser window visible for debugging
-6. Test files auto-cleaned from /tmp by your OS
-
-## Setup (First Time)
-
-```bash
-cd $SKILL_DIR
-npm run setup
-```
-
-This installs Playwright and Chromium browser. Only needed once.
-
-## Execution Pattern
-
-**Step 1: Detect dev servers (for localhost testing)**
-
-```bash
-cd $SKILL_DIR && node -e "require('./lib/helpers').detectDevServers().then(s => console.log(JSON.stringify(s)))"
-```
-
-**Step 2: Write test script to /tmp with URL parameter**
-
+**1. Don't write raw Playwright for Dashboard testing. Use the helpers.**
 ```javascript
-// /tmp/playwright-test-page.js
-const { chromium } = require('playwright');
-
-// Parameterized URL (detected or user-provided)
-const TARGET_URL = 'http://localhost:3001'; // <-- Auto-detected or from user
-
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  await page.goto(TARGET_URL);
-  console.log('Page loaded:', await page.title());
-
-  await page.screenshot({ path: '/tmp/screenshot.png', fullPage: true });
-  console.log('📸 Screenshot saved to /tmp/screenshot.png');
-
-  await browser.close();
-})();
-```
-
-**Step 3: Execute from skill directory**
-
-```bash
-cd $SKILL_DIR && node run.js /tmp/playwright-test-page.js
-```
-
-## Common Patterns
-
-### Test a Page (Multiple Viewports)
-
-```javascript
-// /tmp/playwright-test-responsive.js
-const { chromium } = require('playwright');
-
-const TARGET_URL = 'http://localhost:3001'; // Auto-detected
-
-(async () => {
-  const browser = await chromium.launch({ headless: true, slowMo: 100 });
-  const page = await browser.newPage();
-
-  // Desktop test
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto(TARGET_URL);
-  console.log('Desktop - Title:', await page.title());
-  await page.screenshot({ path: '/tmp/desktop.png', fullPage: true });
-
-  // Mobile test
-  await page.setViewportSize({ width: 375, height: 667 });
-  await page.screenshot({ path: '/tmp/mobile.png', fullPage: true });
-
-  await browser.close();
-})();
-```
-
-### Test Login Flow
-
-```javascript
-// /tmp/playwright-test-login.js
-const { chromium } = require('playwright');
-
-const TARGET_URL = 'http://localhost:3001'; // Auto-detected
-
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  await page.goto(`${TARGET_URL}/login`);
-
-  await page.fill('input[name="email"]', 'test@example.com');
-  await page.fill('input[name="password"]', 'password123');
-  await page.click('button[type="submit"]');
-
-  // Wait for redirect
-  await page.waitForURL('**/dashboard');
-  console.log('✅ Login successful, redirected to dashboard');
-
-  await browser.close();
-})();
-```
-
-### Fill and Submit Form
-
-```javascript
-// /tmp/playwright-test-form.js
-const { chromium } = require('playwright');
-
-const TARGET_URL = 'http://localhost:3001'; // Auto-detected
-
-(async () => {
-  const browser = await chromium.launch({ headless: true, slowMo: 50 });
-  const page = await browser.newPage();
-
-  await page.goto(`${TARGET_URL}/contact`);
-
-  await page.fill('input[name="name"]', 'John Doe');
-  await page.fill('input[name="email"]', 'john@example.com');
-  await page.fill('textarea[name="message"]', 'Test message');
-  await page.click('button[type="submit"]');
-
-  // Verify submission
-  await page.waitForSelector('.success-message');
-  console.log('✅ Form submitted successfully');
-
-  await browser.close();
-})();
-```
-
-### Check for Broken Links
-
-```javascript
-const { chromium } = require('playwright');
-
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  await page.goto('http://localhost:3000');
-
-  const links = await page.locator('a[href^="http"]').all();
-  const results = { working: 0, broken: [] };
-
-  for (const link of links) {
-    const href = await link.getAttribute('href');
-    try {
-      const response = await page.request.head(href);
-      if (response.ok()) {
-        results.working++;
-      } else {
-        results.broken.push({ url: href, status: response.status() });
-      }
-    } catch (e) {
-      results.broken.push({ url: href, error: e.message });
-    }
-  }
-
-  console.log(`✅ Working links: ${results.working}`);
-  console.log(`❌ Broken links:`, results.broken);
-
-  await browser.close();
-})();
-```
-
-### Take Screenshot with Error Handling
-
-```javascript
-const { chromium } = require('playwright');
-
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  try {
-    await page.goto('http://localhost:3000', {
-      waitUntil: 'networkidle',
-      timeout: 10000,
-    });
-
-    await page.screenshot({
-      path: '/tmp/screenshot.png',
-      fullPage: true,
-    });
-
-    console.log('📸 Screenshot saved to /tmp/screenshot.png');
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-  } finally {
-    await browser.close();
-  }
-})();
-```
-
-### Test Responsive Design
-
-```javascript
-// /tmp/playwright-test-responsive-full.js
-const { chromium } = require('playwright');
-
-const TARGET_URL = 'http://localhost:3001'; // Auto-detected
-
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  const viewports = [
-    { name: 'Desktop', width: 1920, height: 1080 },
-    { name: 'Tablet', width: 768, height: 1024 },
-    { name: 'Mobile', width: 375, height: 667 },
-  ];
-
-  for (const viewport of viewports) {
-    console.log(
-      `Testing ${viewport.name} (${viewport.width}x${viewport.height})`,
-    );
-
-    await page.setViewportSize({
-      width: viewport.width,
-      height: viewport.height,
-    });
-
-    await page.goto(TARGET_URL);
-    await page.waitForTimeout(1000);
-
-    await page.screenshot({
-      path: `/tmp/${viewport.name.toLowerCase()}.png`,
-      fullPage: true,
-    });
-  }
-
-  console.log('✅ All viewports tested');
-  await browser.close();
-})();
-```
-
-## Inline Execution (Simple Tasks)
-
-For quick one-off tasks, you can execute code inline without creating files:
-
-```bash
-# Take a quick screenshot
-cd $SKILL_DIR && node run.js "
-const browser = await chromium.launch({ headless: true });
+// WRONG — you'll get the testid wrong, miss the /desktop route, forget to wait for dock
 const page = await browser.newPage();
-await page.goto('http://localhost:3001');
-await page.screenshot({ path: '/tmp/quick-screenshot.png', fullPage: true });
-console.log('Screenshot saved');
-await browser.close();
-"
+await page.goto("http://localhost:3000");
+await page.click('[data-testid="dock-icon-Calendar"]'); // wrong case, will timeout
+
+// RIGHT — one line, handles everything
+const calWindow = await helpers.openDashboardApp(page, 'calendar');
 ```
 
-**When to use inline vs files:**
+**2. run.js needs FULL file paths, not just names.**
+```bash
+# WRONG — run.js treats "smoke-widgets" as inline JavaScript code, fails with "smoke is not defined"
+node run.js smoke-widgets
 
-- **Inline**: Quick one-off tasks (screenshot, check if element exists, get page title)
-- **Files**: Complex tests, responsive design checks, anything user might want to re-run
+# RIGHT — full path to the test file
+node run.js tests/smoke-widgets.js
+```
 
-## Available Helpers
+**3. Testids are lowercase kebab-case. Always.**
+```
+dock-icon-calendar     ✓     dock-icon-Calendar     ✗
+app-window-email       ✓     app-window-Email       ✗
+```
 
-Optional utility functions in `lib/helpers.js`:
+**4. Don't use `networkidle` for waitUntil.** Dashboard has SSE connections that never idle. Use `'load'`.
+
+**5. Page errors are warnings, not failures.** The Dashboard has a pre-existing Performance API error. Don't fail smoke tests on `pageerror` events — log them as warnings.
+
+## Quick Commands
+
+```bash
+PW=".claude/skills/playwright"
+
+# Run all smoke tests
+cd $PW && node run.js tests/smoke-all.js
+
+# Run individual tests (MUST use full path)
+cd $PW && node run.js tests/smoke-desktop.js    # Desktop shell, dock, menubar
+cd $PW && node run.js tests/smoke-apps.js        # Open each app via dock
+cd $PW && node run.js tests/smoke-widgets.js     # Widget dropdowns, dark mode
+cd $PW && node run.js tests/smoke-app-content.js # Calendar/Email/Settings content
+```
+
+## Helpers (The API)
+
+Three helpers in `lib/helpers.js`. These are how you interact with the Dashboard — they handle navigation, waiting, and selectors correctly.
 
 ```javascript
 const helpers = require('./lib/helpers');
 
-// Detect running dev servers (CRITICAL - use this first!)
-const servers = await helpers.detectDevServers();
-console.log('Found servers:', servers);
+// Launch browser with standard config (headless, no-sandbox)
+const browser = await helpers.launchBrowser();
+const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 
-// Safe click with retry
-await helpers.safeClick(page, 'button.submit', { retries: 3 });
+// Open an app: navigates to /desktop, waits for dock, clicks icon, waits for window
+const window = await helpers.openDashboardApp(page, 'calendar');
+// Accepts: 'finder', 'calendar', 'contacts', 'email', 'settings'
 
-// Safe type with clear
-await helpers.safeType(page, '#username', 'testuser');
+// Get locator for an already-open app window
+const window = helpers.getAppWindow(page, 'calendar');
 
-// Take timestamped screenshot
-await helpers.takeScreenshot(page, 'test-result');
-
-// Handle cookie banners
-await helpers.handleCookieBanner(page);
-
-// Extract table data
-const data = await helpers.extractTableData(page, 'table.results');
+// Screenshot just the app window element (not full page)
+await helpers.screenshotApp(page, 'calendar', '/tmp/calendar.png');
 ```
 
-See `lib/helpers.js` for full list.
+**Always use `openDashboardApp` to open apps.** It handles:
+- Navigating to `/desktop` first (apps only exist on this route)
+- Waiting for the dock to render (React hydration)
+- Clicking the correct dock icon (`dock-icon-{appId}`)
+- Waiting for the window to appear (`app-window-{appId}`)
 
-## Custom HTTP Headers
+## Verifying Dashboard Changes
 
-Configure custom headers for all HTTP requests via environment variables. Useful for:
+After modifying a component:
 
-- Identifying automated traffic to your backend
-- Getting LLM-optimized responses (e.g., plain text errors instead of styled HTML)
-- Adding authentication tokens globally
-
-### Configuration
-
-**Single header (common case):**
-
+### 1. Run smoke tests
 ```bash
-PW_HEADER_NAME=X-Automated-By PW_HEADER_VALUE=playwright-skill \
-  cd $SKILL_DIR && node run.js /tmp/my-script.js
+cd .claude/skills/playwright && node run.js tests/smoke-all.js
 ```
 
-**Multiple headers (JSON format):**
-
-```bash
-PW_EXTRA_HEADERS='{"X-Automated-By":"playwright-skill","X-Debug":"true"}' \
-  cd $SKILL_DIR && node run.js /tmp/my-script.js
-```
-
-### How It Works
-
-Headers are automatically applied when using `helpers.createContext()`:
+### 2. Screenshot and inspect the specific app
+Write inline code that uses helpers. Pass it to run.js:
 
 ```javascript
-const context = await helpers.createContext(browser);
-const page = await context.newPage();
-// All requests from this page include your custom headers
+// Inline code — run.js wraps this in async IIFE with Playwright imports + helpers
+const browser = await helpers.launchBrowser();
+const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+
+const calWindow = await helpers.openDashboardApp(page, 'calendar');
+await page.waitForTimeout(3000); // let async data load
+
+await helpers.screenshotApp(page, 'calendar', '/tmp/calendar-check.png');
+await browser.close();
 ```
 
-For scripts using raw Playwright API, use the injected `getContextOptionsWithHeaders()`:
+View the screenshot with the Read tool to verify visually.
+
+### 3. Check content rendered
+```javascript
+await page.waitForSelector('[data-testid="calendar-grid"]', { timeout: 5000 });
+await page.waitForSelector('[data-testid="email-list"]', { timeout: 5000 });
+```
+
+## Debugging UI Issues
+
+When something looks wrong visually (empty areas, missing elements, broken layouts), use these patterns to diagnose from Playwright:
+
+### Capture console errors
+```javascript
+const consoleErrors = [];
+page.on('console', msg => {
+  if (msg.type() === 'error') consoleErrors.push(msg.text());
+});
+page.on('pageerror', err => {
+  consoleErrors.push('PAGE ERROR: ' + err.message);
+});
+```
+
+### Count elements in the DOM
+```javascript
+const eventCount = await page.locator('.sx__event').count();
+console.log('Events in DOM: ' + eventCount);
+// If count > 0 but nothing visible → CSS/overflow problem
+// If count === 0 → data loading or rendering problem
+```
+
+### Inspect element dimensions and computed styles
+```javascript
+const info = await page.locator('[data-testid="calendar-grid"]').evaluate(el => {
+  const style = window.getComputedStyle(el);
+  return {
+    w: el.offsetWidth,
+    h: el.offsetHeight,
+    scrollHeight: el.scrollHeight,
+    overflow: style.overflow,
+    overflowY: style.overflowY,
+  };
+});
+console.log(JSON.stringify(info));
+// scrollHeight >> h with overflow:hidden = content is clipped/invisible
+```
+
+### Trace DOM hierarchy with dimensions
+Use this to find where a layout chain breaks:
+```javascript
+const chain = await page.locator('[data-testid="your-container"]').evaluate(el => {
+  function desc(e, depth) {
+    if (depth > 5) return '';
+    const s = getComputedStyle(e);
+    let r = '  '.repeat(depth) + e.tagName;
+    if (e.className) r += '.' + e.className.split(' ').slice(0, 3).join('.');
+    r += ` [${e.offsetWidth}x${e.offsetHeight} overflow:${s.overflow}]`;
+    r += '\\n';
+    if (e.children.length > 0 && depth < 5) r += desc(e.children[0], depth + 1);
+    return r;
+  }
+  return desc(el, 0);
+});
+console.log(chain);
+```
+
+### Check if elements are visible vs just in the DOM
+```javascript
+const eventInfo = await page.locator('.some-element').evaluateAll(els => {
+  return els.map(el => ({
+    text: el.textContent?.substring(0, 40),
+    w: el.offsetWidth, h: el.offsetHeight,
+    rect: el.getBoundingClientRect(),
+    visibility: getComputedStyle(el).visibility,
+    opacity: getComputedStyle(el).opacity,
+  }));
+});
+```
+
+## data-testid Reference
+
+All Dashboard elements use `data-testid` for stable selectors. **Never use class names or text content as selectors.**
+
+### Shell Elements
+
+| testid | Component | Purpose |
+|--------|-----------|---------|
+| `desktop` | ClaudeOS.tsx | Main container |
+| `dock` | Dock.tsx | Dock container |
+| `dock-icon-{id}` | Dock.tsx | Dock icons (finder, calendar, contacts, email, settings) |
+| `desktop-icon-{name}` | DesktopIcon.tsx | Desktop file icons (slugified) |
+| `app-window-{type}` | DesktopWindow.tsx | Window wrapper |
+| `window-close` | DesktopWindow.tsx | Red close button |
+| `window-minimize` | DesktopWindow.tsx | Yellow minimize button |
+| `window-maximize` | DesktopWindow.tsx | Green maximize button |
+| `menubar` | Menubar.tsx | Menubar root |
+| `widget-{title}` | Menubar.tsx | Widget dropdown buttons |
+| `dark-mode-toggle` | Menubar.tsx | Dark mode toggle |
+| `menubar-clock` | Menubar.tsx | Clock span |
+| `claude-panel` | ClaudePanel.tsx | Claude panel container |
+| `chat-input` | ChatInput.tsx | Chat textarea |
+| `send-button` | ChatInput.tsx | Send button |
+| `conversation-list` | ConversationList.tsx | Session list |
+
+### App Content
+
+| testid | Component | Purpose |
+|--------|-----------|---------|
+| `calendar-app` | CalendarWindowContent.tsx | Calendar root |
+| `calendar-view` | CalendarView.tsx | Calendar view root |
+| `calendar-toolbar` | CalendarView.tsx | Toolbar/header |
+| `calendar-grid` | CalendarView.tsx | Schedule-X container |
+| `calendar-sidebar` | CalendarSidebar.tsx | Sidebar root |
+| `email-app` | EmailWindowContent.tsx | Email root |
+| `email-accounts` | EmailWindowContent.tsx | Account filter bar |
+| `email-list` | EmailWindowContent.tsx | Message list |
+| `settings-app` | SettingsWindowContent.tsx | Settings root |
+| `settings-sidebar` | SettingsWindowContent.tsx | Nav sidebar |
+| `settings-tab-{id}` | SettingsWindowContent.tsx | Tab buttons |
+| `settings-content` | SettingsWindowContent.tsx | Content area |
+| `finder-app` | FinderWindowContent.tsx | Finder root |
+| `roles-app` | RolesWindow.tsx | Roles root |
+
+### Custom App Pages
+
+| testid | Component |
+|--------|-----------|
+| `app-ember` | Ember page |
+| `app-job-search` | Job Search page |
+| `app-turbine` | Turbine page |
+
+## Writing New Tests
 
 ```javascript
-const context = await browser.newContext(
-  getContextOptionsWithHeaders({ viewport: { width: 1920, height: 1080 } }),
-);
+const { chromium } = require('playwright');
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
+
+(async () => {
+  const errors = [];
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+
+  // Log page errors as warnings, not failures
+  page.on('pageerror', err => console.warn('Page error:', err.message));
+
+  try {
+    await page.goto(`${DASHBOARD_URL}/desktop`, { waitUntil: 'load', timeout: 30000 });
+    await page.waitForSelector('[data-testid="dock"]', { timeout: 15000 });
+
+    // Your checks using data-testid selectors:
+    const el = await page.$('[data-testid="your-element"]');
+    if (el) {
+      console.log('  PASS: Element found');
+    } else {
+      errors.push('Element not found');
+    }
+
+  } catch (err) {
+    errors.push(`Failed: ${err.message}`);
+  } finally {
+    await browser.close();
+  }
+
+  if (errors.length === 0) {
+    console.log('\nRESULT: PASS');
+    process.exit(0);
+  } else {
+    console.log(`\nRESULT: FAIL - ${errors.length} error(s):`);
+    errors.forEach(e => console.log(`  - ${e}`));
+    process.exit(1);
+  }
+})();
 ```
 
-## Advanced Usage
+Key patterns:
+- Always `headless: true` (specialists run without a display)
+- Use `data-testid` selectors exclusively
+- `waitUntil: 'load'` for initial page load (not `networkidle`)
+- `waitForSelector` with timeout after dock clicks
+- Exit 0 for pass, 1 for fail
+- `RESULT: PASS` / `RESULT: FAIL` for machine-readable output
 
-For comprehensive Playwright API documentation, see [API_REFERENCE.md](API_REFERENCE.md):
+## Adding testids to New Components
 
-- Selectors & Locators best practices
-- Network interception & API mocking
-- Authentication & session management
-- Visual regression testing
-- Mobile device emulation
-- Performance testing
-- Debugging techniques
-- CI/CD integration
+1. Add `data-testid="descriptive-name"` to the outermost meaningful element
+2. Lowercase kebab-case only, no uppercase
+3. For dynamic elements: `` data-testid={`prefix-${id}`} ``
+4. Prefer leaf elements (buttons, inputs) over wrapper divs
+5. Update the tables above in this file
 
-## Tips
+## How run.js Works
 
-- **CRITICAL: Detect servers FIRST** - Always run `detectDevServers()` before writing test code for localhost testing
-- **Custom headers** - Use `PW_HEADER_NAME`/`PW_HEADER_VALUE` env vars to identify automated traffic to your backend
-- **Use /tmp for test files** - Write to `/tmp/playwright-test-*.js`, never to skill directory or user's project
-- **Parameterize URLs** - Put detected/provided URL in a `TARGET_URL` constant at the top of every script
-- **DEFAULT: Headless browser** - Always use `headless: true` (runs in background, no window popup)
-- **Visible mode** - Use `headless: false` only when user specifically requests to SEE the browser for debugging
-- **Slow down:** Use `slowMo: 100` to make actions visible and easier to follow
-- **Wait strategies:** Use `waitForURL`, `waitForSelector`, `waitForLoadState` instead of fixed timeouts
-- **Error handling:** Always use try-catch for robust automation
-- **Console output:** Use `console.log()` to track progress and show what's happening
-
-## Troubleshooting
-
-**Playwright not installed:**
+Scripts execute via `run.js` — wraps bare code in async IIFE with Playwright imports and helpers pre-loaded.
 
 ```bash
-cd $SKILL_DIR && npm run setup
+# Run a test file (MUST be a real file path)
+cd .claude/skills/playwright && node run.js tests/smoke-desktop.js
+
+# Run inline code (gets wrapped automatically — helpers and chromium available)
+cd .claude/skills/playwright && node run.js 'await page.goto("http://localhost:3000")'
+
+# First-time setup
+cd .claude/skills/playwright && npm run setup
 ```
 
-**Module not found:**
-Ensure running from skill directory via `run.js` wrapper
+**Important:** `run.js` checks if the argument is a file path first. If the file doesn't exist, it treats the argument as inline JavaScript. This means `node run.js smoke-widgets` will try to execute `smoke-widgets` as JS code and fail with "smoke is not defined". Always use full paths.
 
-**Need to see the browser for debugging:**
-Use `headless: false` - requires display available
+## What Smoke Tests Check
 
-**Element not found:**
-Add wait: `await page.waitForSelector('.element', { timeout: 10000 })`
+| Test | What It Verifies |
+|------|-----------------|
+| `smoke-desktop.js` | Page loads, dock/menubar/claude-panel present, 5+ dock icons, widgets, clock |
+| `smoke-apps.js` | Each core app opens via dock click, custom app pages render |
+| `smoke-widgets.js` | Widget dropdowns interactive, clock text, dark mode toggle |
+| `smoke-app-content.js` | Calendar/Email/Settings content testids render inside windows |
 
-## Example Usage
-
-```
-User: "Test if the marketing page looks good"
-
-Claude: I'll test the marketing page across multiple viewports. Let me first detect running servers...
-[Runs: detectDevServers()]
-[Output: Found server on port 3001]
-I found your dev server running on http://localhost:3001
-
-[Writes custom automation script to /tmp/playwright-test-marketing.js with URL parameterized]
-[Runs: cd $SKILL_DIR && node run.js /tmp/playwright-test-marketing.js]
-[Shows results with screenshots from /tmp/]
-```
-
-```
-User: "Check if login redirects correctly"
-
-Claude: I'll test the login flow. First, let me check for running servers...
-[Runs: detectDevServers()]
-[Output: Found servers on ports 3000 and 3001]
-I found 2 dev servers. Which one should I test?
-- http://localhost:3000
-- http://localhost:3001
-
-User: "Use 3001"
-
-[Writes login automation to /tmp/playwright-test-login.js]
-[Runs: cd $SKILL_DIR && node run.js /tmp/playwright-test-login.js]
-[Reports: ✅ Login successful, redirected to /dashboard]
-```
-
-## Notes
-
-- Each automation is custom-written for your specific request
-- Not limited to pre-built scripts - any browser task possible
-- Auto-detects running dev servers to eliminate hardcoded URLs
-- Test scripts written to `/tmp` for automatic cleanup (no clutter)
-- Code executes reliably with proper module resolution via `run.js`
-- Progressive disclosure - API_REFERENCE.md loaded only when advanced features needed
+All tests save screenshots to `/tmp/smoke-*.png`.

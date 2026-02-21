@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Calendar, Clock, MapPin, X, Loader2, Check } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { ProcessedEvent, CalendarInfo } from '../utils/calendarUtils';
 import { API_BASE } from '@/lib/api';
 import { toast } from 'sonner';
@@ -19,7 +19,6 @@ interface EventModalProps {
 
 /**
  * Modal for creating and editing calendar events.
- * Handles event form state and submission.
  */
 export function EventModal({
   isOpen,
@@ -41,10 +40,14 @@ export function EventModal({
   const [notes, setNotes] = useState('');
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [multiDay, setMultiDay] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
   const formatTimeInput = (date: Date) => date.toTimeString().slice(0, 5);
+
+  // Only show writable calendars in selector
+  const writableCalendars = calendars.filter((c) => c.writable);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,8 +66,8 @@ export function EventModal({
     const defaultCalendarId =
       event?.calendar_id ||
       calendarMatch ||
-      calendars.find(cal => cal.primary)?.id ||
-      calendars[0]?.id ||
+      writableCalendars.find(cal => cal.primary)?.id ||
+      writableCalendars[0]?.id ||
       '';
 
     const isAllDay = Boolean(event?.all_day);
@@ -72,6 +75,8 @@ export function EventModal({
     if (isAllDay && modalEnd > baseStart) {
       modalEnd.setDate(modalEnd.getDate() - 1);
     }
+
+    const isDifferentDay = formatDateInput(baseStart) !== formatDateInput(modalEnd);
 
     setTitle(event?.summary || '');
     setAllDay(isAllDay);
@@ -82,6 +87,7 @@ export function EventModal({
     setLocation(event?.location || '');
     setNotes(event?.description || '');
     setSelectedCalendarId(defaultCalendarId);
+    setMultiDay(isDifferentDay);
 
     setTimeout(() => titleRef.current?.focus(), 100);
   }, [isOpen, event, initialDate, initialHour, calendars]);
@@ -92,8 +98,9 @@ export function EventModal({
 
     setIsSubmitting(true);
     try {
+      const effectiveEndDate = multiDay ? endDate : startDate;
       const start = new Date(`${startDate}T${allDay ? '00:00' : startTime}`);
-      let end = new Date(`${endDate}T${allDay ? '00:00' : endTime}`);
+      let end = new Date(`${effectiveEndDate}T${allDay ? '00:00' : endTime}`);
 
       if (allDay) {
         end.setDate(end.getDate() + 1);
@@ -116,9 +123,7 @@ export function EventModal({
           }),
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to create event');
-        }
+        if (!response.ok) throw new Error('Failed to create event');
       } else if (event) {
         const response = await fetch(`${API_BASE}/api/calendar/events/${event.id}`, {
           method: 'PUT',
@@ -134,16 +139,14 @@ export function EventModal({
           }),
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to update event');
-        }
+        if (!response.ok) throw new Error('Failed to update event');
       }
 
       onSaved();
       onClose();
     } catch (err) {
       console.error('Error saving event:', err);
-      toast.error(`Failed to ${mode === 'create' ? 'create' : 'update'} event. Please try again.`);
+      toast.error(`Failed to ${mode === 'create' ? 'create' : 'update'} event.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -153,140 +156,143 @@ export function EventModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      <div className="relative bg-[var(--surface-raised)] rounded-lg shadow-2xl w-[420px] max-w-[92vw]">
+      <div className="relative bg-[var(--surface-raised)] rounded-xl shadow-2xl w-[380px] max-w-[92vw] overflow-hidden">
         <form onSubmit={handleSubmit}>
+          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-            <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
               {mode === 'create' ? 'New Event' : 'Edit Event'}
             </h3>
-            <button type="button" onClick={onClose} className="btn btn-ghost btn-icon-sm">
-              <X className="w-4 h-4" />
+            <button type="button" onClick={onClose} className="p-1 rounded hover:bg-[var(--surface-accent)] transition-colors">
+              <X className="w-4 h-4 text-[var(--text-muted)]" />
             </button>
           </div>
 
-          <div className="p-4 space-y-4">
-            <div>
-              <input
-                ref={titleRef}
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Add title"
-                className="w-full px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                required
-              />
-            </div>
+          <div className="p-4 space-y-3">
+            {/* Title */}
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Event title"
+              className="w-full px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+              required
+            />
 
-            <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-              <input
-                id="all-day-toggle"
-                type="checkbox"
-                checked={allDay}
-                onChange={(e) => setAllDay(e.target.checked)}
-                className="h-4 w-4 rounded border-[var(--border-subtle)]"
-              />
-              <label htmlFor="all-day-toggle">All day</label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
+            {/* Date + time row */}
+            <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  className="flex-1 px-2.5 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-md text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
                   required
                 />
+                {!allDay && (
+                  <>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-28 px-2.5 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-md text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                    />
+                    <span className="text-[var(--text-muted)] text-xs">–</span>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-28 px-2.5 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-md text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                    />
+                  </>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                  required
-                />
+
+              {/* Multi-day end date */}
+              {multiDay && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-[var(--text-muted)] w-6 text-right">to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-md text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Toggles */}
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allDay}
+                    onChange={(e) => setAllDay(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--border-subtle)]"
+                  />
+                  <span className="text-[12px] text-[var(--text-secondary)]">All day</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={multiDay}
+                    onChange={(e) => setMultiDay(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--border-subtle)]"
+                  />
+                  <span className="text-[12px] text-[var(--text-secondary)]">Multi-day</span>
+                </label>
               </div>
             </div>
 
-            {!allDay && (
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                />
-                <span className="text-[var(--text-muted)]">-</span>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                />
-              </div>
-            )}
+            {/* Location */}
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Location"
+              className="w-full px-3 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+            />
 
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Add location"
-                className="flex-1 px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
-            </div>
+            {/* Notes */}
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Notes"
+              rows={2}
+              className="w-full px-3 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 resize-none"
+            />
 
-            <div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add notes"
-                rows={3}
-                className="w-full px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-[var(--text-muted)]">Calendar</label>
+            {/* Calendar selector */}
+            {writableCalendars.length > 1 && (
               <select
                 value={selectedCalendarId}
                 onChange={(e) => setSelectedCalendarId(e.target.value)}
-                className="mt-1 w-full px-3 py-2 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                className="w-full px-3 py-1.5 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
               >
-                {calendars.length === 0 ? (
-                  <option value="">No calendars available</option>
-                ) : (
-                  calendars.map((cal) => (
-                    <option key={cal.id} value={cal.id}>
-                      {cal.name}
-                    </option>
-                  ))
-                )}
+                {writableCalendars.map((cal) => (
+                  <option key={cal.id} value={cal.id}>
+                    {cal.name}
+                  </option>
+                ))}
               </select>
-            </div>
+            )}
           </div>
 
+          {/* Footer */}
           <div className="flex justify-end gap-2 px-4 py-3 border-t border-[var(--border-subtle)]">
-            <button type="button" onClick={onClose} className="btn btn-ghost">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-[var(--text-secondary)] rounded-md hover:bg-[var(--surface-accent)] transition-colors">
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim() || isSubmitting}
-              className="btn btn-primary flex items-center gap-2"
+              className="px-4 py-1.5 text-sm font-medium bg-[var(--color-primary)] text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
             >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
+              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {mode === 'create' ? 'Create' : 'Save'}
             </button>
           </div>

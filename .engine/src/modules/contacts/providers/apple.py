@@ -51,7 +51,7 @@ def _core_data_to_datetime(timestamp: Optional[float]) -> Optional[datetime]:
     try:
         from datetime import timedelta
         return CORE_DATA_EPOCH + timedelta(seconds=timestamp)
-    except:
+    except Exception:
         return None
 
 

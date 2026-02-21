@@ -13,8 +13,7 @@ Telegram is a **mobile interface to Chief**. Once connected:
 - Messages sent to the bot get injected into Chief's conversation (tagged `[Telegram HH:MM]`)
 - Chief's responses stream back to Telegram automatically
 - Photos, locations, and URLs are supported
-- Commands like `/calendar`, `/priorities`, `/status` work directly
-- The `show()` tool can render calendars and contact cards as images to Telegram
+- The `telegram("show")` operation can render calendars and contact cards as images to Telegram
 
 It's the same Chief, just accessible from your phone.
 
@@ -111,12 +110,7 @@ Send a reply — just respond naturally. Then:
 
 > "Check Telegram — you should see my response. If you do, we're all set!"
 
-**Test the commands too:**
 
-> "Try these in Telegram:
-> - `/calendar` — shows today's schedule
-> - `/priorities` — shows today's priorities
-> - `/status` — shows what Claude is doing"
 
 ## Step 5: Confirm and Explain
 
@@ -128,9 +122,8 @@ Once working:
 >
 > **What works:** Text, photos (I can see images you send), locations, and URLs (I auto-expand Twitter links and Google Maps).
 >
-> **Commands:** `/calendar`, `/priorities`, `/status`, `/spawn [role]`
 >
-> **From my side:** When I use `show("calendar")` or `show("priorities")`, I can render them as images and send them to your Telegram.
+> **From my side:** When I use `telegram("show", what="calendar")` or `telegram("show", what="priorities")`, I can render them as images and send them to your Telegram.
 >
 > This is the same conversation — Telegram is just another way to reach me, alongside the terminal and Dashboard."
 

@@ -71,10 +71,12 @@ export default function ArchitecturePage() {
 
               {/* Specialists */}
               <div className="grid grid-cols-4 gap-4">
-                <TeamBox title="Builder" desc="Infrastructure & Apps" color="purple" />
-                <TeamBox title="Deep Work" desc="Research & Analysis" color="purple" />
-                <TeamBox title="Idea" desc="Brainstorming" color="purple" />
-                <TeamBox title="Project" desc="External Code" color="purple" />
+                <TeamBox title="Builder" desc="Turns blueprints into software" color="purple" />
+                <TeamBox title="Writer" desc="Sustained artifact focus" color="purple" />
+                <TeamBox title="Researcher" desc="Investigates & synthesizes" color="purple" />
+                <TeamBox title="Idea" desc="Explores possibilities" color="purple" />
+                <TeamBox title="Project" desc="External codebases" color="purple" />
+                <TeamBox title="Curator" desc="Audits & organizes" color="purple" />
               </div>
 
               {/* Arrow */}

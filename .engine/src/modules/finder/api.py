@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from core.config import settings
-from core.events import sse_bus
+from core.events import event_bus
 
 from .service import FinderService
 from .trash import TrashService
@@ -614,7 +614,7 @@ async def file_events_stream(request: Request):
     Event types: created, modified, deleted, moved
     """
     async def event_generator():
-        queue = sse_bus.subscribe()
+        queue = event_bus.subscribe()
         try:
             while True:
                 if await request.is_disconnected():
@@ -635,7 +635,7 @@ async def file_events_stream(request: Request):
                         "data": json.dumps({"timestamp": datetime.now(timezone.utc).isoformat()})
                     }
         finally:
-            sse_bus.unsubscribe(queue)
+            event_bus.unsubscribe(queue)
 
     return EventSourceResponse(event_generator())
 

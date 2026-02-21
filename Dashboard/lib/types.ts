@@ -35,17 +35,6 @@ export interface Priorities {
   low: string[];
 }
 
-export interface DashboardData {
-  timestamp: string;
-  schedule: CalendarEvent[];
-  attention: AttentionItem[];
-  sessions: {
-    count: number;
-    active: boolean;
-  };
-  priorities: Priorities;
-}
-
 export interface SystemHealth {
   watcher: { status: string; uptime_seconds?: number };
   executor: { status: string; uptime_seconds?: number };
@@ -88,138 +77,6 @@ export interface ContactDetail {
   description: string;
   tags: string[];
   content: string;  // Full markdown body of the contact file
-}
-
-// Improvements View Types
-export type ImprovementStatus = 'active' | 'backlog' | 'completed' | 'wontfix';
-export type ImprovementCategory = 'bug' | 'feature' | 'ux' | 'research' | 'cleanup' | 'unclear';
-export type ImprovementPriority = 'urgent' | 'high' | 'medium' | 'low';
-
-export interface Improvement {
-  id: string;
-  title: string;
-  description?: string;
-  status: ImprovementStatus;
-  category: ImprovementCategory;
-  priority: ImprovementPriority;
-  domain?: string;
-  file_path: string;
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
-}
-
-export interface ImprovementsCounts {
-  active: number;
-  backlog: number;
-  completed: number;
-  wontfix: number;
-}
-
-export interface ImprovementsResponse {
-  items: Improvement[];
-  counts: ImprovementsCounts;
-}
-
-// Stage View Types
-export interface StagedItem {
-  id: string;
-  title: string;
-  content_type: 'markdown' | 'mermaid' | 'file' | 'comparison';
-  content: string;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface StageData {
-  items: StagedItem[];
-  count: number;
-}
-
-// Email View Types
-export interface Email {
-  id: number;
-  date: string;
-  timestamp: number;
-  subject: string;
-  from: string;
-  from_email: string;
-  read: boolean;
-  account: string;
-  mailbox: string;
-  content?: string;
-}
-
-export interface EmailDetail extends Email {
-  content: string;
-}
-
-export interface EmailsResponse {
-  emails: Email[];
-  count: number;
-}
-
-export interface EmailAccount {
-  uuid: string;
-  email: string;
-  name: string;
-}
-
-export interface EmailAccountsResponse {
-  accounts: EmailAccount[];
-  count: number;
-}
-
-export interface UnreadCountResponse {
-  total: number;
-  by_account: Record<string, number>;
-  by_mailbox: Record<string, number>;
-}
-
-export interface ContactEmailsResponse {
-  emails: Email[];
-  count: number;
-  contact_email: string;
-}
-
-// iMessage View Types
-export interface IMessageConversation {
-  chat_id: number;
-  handle_id: string;
-  contact_name: string | null;
-  display_name: string;
-  service: string;
-  last_message_date: string;
-  last_message_timestamp: number;
-  message_count: number;
-  unread_count: number;
-}
-
-export interface IMessage {
-  message_id: number;
-  date: string;
-  timestamp: number;
-  is_from_me: boolean;
-  is_read: boolean;
-  has_attachment: boolean;
-  service: string;
-  handle_id: string;
-}
-
-export interface IMessagesConversationsResponse {
-  conversations: IMessageConversation[];
-  count: number;
-}
-
-export interface IMessagesUnreadResponse {
-  total: number;
-  by_conversation: Record<string, number>;
-}
-
-export interface IMessagesConversationResponse {
-  messages: IMessage[];
-  count: number;
-  chat_id: number;
 }
 
 // =========================================
@@ -417,16 +274,6 @@ export interface LifeTasksResponse {
   total: number;
   pending_count: number;
   answered_count: number;
-}
-
-// Block and Memory Types (for Claude view)
-export interface BlockData {
-  filename: string;
-  started: string;
-  ended?: string;
-  description: string;
-  summary?: string;
-  files_touched: string[];
 }
 
 /**

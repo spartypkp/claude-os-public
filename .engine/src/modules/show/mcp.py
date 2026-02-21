@@ -1,4 +1,4 @@
-"""Show MCP tool - Visual content rendering for Telegram and Dashboard."""
+"""Show MCP tool — Telegram-only visual content rendering."""
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -11,26 +11,26 @@ mcp = FastMCP("life-show")
 @mcp.tool()
 async def show(
     what: str,
-    destination: str = "auto"
+    target: str = "auto",
 ) -> Dict[str, Any]:
-    """Render visual output for the given content type.
+    """Render visual output to Telegram.
+
+    This is Telegram-only — does not render to Dashboard or terminal.
+    Sends formatted content to the user's Telegram chat.
 
     Args:
         what: Content to show. Formats:
             - "calendar" — Today's calendar
-            - "calendar:week" — This week's calendar
             - "contact:{name}" — Contact card
             - "priorities" — Today's priorities
-            - "specialists" — Active specialists
-            - "diagram:{name}" — Mermaid diagram
             - "file:{path}" — File preview
-        destination: Where to render
-            - "auto" — Detect from message source
-            - "telegram" — Force Telegram (image)
-            - "dashboard" — Force Dashboard (component)
+        target: Where to send:
+            - "auto" — Owner DM (default)
+            - "owner" — Owner DM
+            - "group" — Group chat
 
     Returns:
-        {"success": True, "rendered": "telegram|dashboard", "message": "..."}
+        {"success": True, "rendered": "telegram", "target": "owner|group", "message": "..."}
     """
     from .service import show_content
-    return await show_content(what, destination)
+    return await show_content(what, target)

@@ -34,7 +34,8 @@
     "deny": ["MCPSearch"]
   },
   "enabledMcpjsonServers": [
-    "life"
+    "life",
+    "chrome-isolated"
   ],
   "hooks": {
     "PreToolUse": [

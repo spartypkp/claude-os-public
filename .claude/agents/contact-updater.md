@@ -1,6 +1,6 @@
 ---
 name: contact-updater
-description: Update contact records with new information. Use proactively when learning new facts about people.
+description: Update contact records from conversation context. No web search — pair with web-research for external enrichment.
 tools: Read, Grep
 model: haiku
 permissionMode: default
@@ -114,13 +114,13 @@ You've succeeded when:
 
 **Updated fields:**
 - role: "Engineer" → "Senior Engineer"
-- company: "Startup X" → "Target Company"
+- company: "Startup X" → "TargetCo"
 
 **Added context:**
 - "{New context from conversation}"
 
 **Tags added:**
-- target-company, referral, engineering-interview
+- anthropic, referral, fde-interview
 
 ### For proactive enrichment:
 
@@ -178,41 +178,41 @@ You've succeeded when:
 
 ### Example 1: Simple role update
 
-**Input:** "Alex Chen got promoted to Senior Engineer at Target Company"
+**Input:** "Alex Chen got promoted to Senior FDE at TargetCo"
 
 **Process:**
-1. Parse: Alex Chen, role changed to "Senior Engineer"
+1. Parse: Alex Chen, role changed to "Senior FDE"
 2. Search: `contact("search", query="Alex Chen")`
 3. Current role: "FDE"
-4. Update: `contact("update", identifier="Alex Chen", role="Senior Engineer")`
-5. Add context note: "Promoted to Senior Engineer [Jan 2026]"
+4. Update: `contact("update", identifier="Alex Chen", role="Senior FDE")`
+5. Add context note: "Promoted to Senior FDE [Jan 2026]"
 
 **Output:**
 ```
 Contact: Alex Chen (abc123)
 
 Updated fields:
-- role: "FDE" → "Senior Engineer"
+- role: "FDE" → "Senior FDE"
 
 Added context:
-- "Promoted to Senior Engineer [Jan 2026]"
+- "Promoted to Senior FDE [Jan 2026]"
 ```
 
 ### Example 2: Company change with context
 
-**Input:** "Jamie left Google and is now working on a stealth startup"
+**Input:** "Jordan left Google and is now working on a stealth startup"
 
 **Process:**
-1. Parse: Jamie, company changed to stealth startup
-2. Search: `contact("search", query="Jamie")`
+1. Parse: Jordan, company changed to stealth startup
+2. Search: `contact("search", query="Jordan")`
 3. Multiple results → Need disambiguation
-4. User clarifies: Jamie Taylor
+4. User clarifies: Jordan Martinez
 5. Update company to "Stealth Startup"
 6. Add context about leaving Google
 
 **Output:**
 ```
-Contact: Jamie Taylor (def456)
+Contact: Jordan Martinez (def456)
 
 Updated fields:
 - company: "Google" → "Stealth Startup"
@@ -226,59 +226,59 @@ Tags added:
 
 ### Example 3: Proactive enrichment before meeting
 
-**Input:** "I have a meeting with Sarah Kim tomorrow. Can you enrich her contact?"
+**Input:** "I have a meeting with Sarah Chen tomorrow. Can you enrich her contact?"
 
 **Process:**
-1. Search: `contact("search", query="Sarah Kim")`
-2. Current info: Name, company (Target Company), role empty
-3. Check internal context: Grep for "Sarah Kim" in Desktop/
+1. Search: `contact("search", query="Sarah Chen")`
+2. Current info: Name, company (TargetCo), role empty
+3. Check internal context: Grep for "Sarah Chen" in Desktop/
 4. Found: Email thread about FDE interview process
 5. Enrichment needed: role, LinkedIn, recent activity
 6. Note: No web access, document what to research
 
 **Output:**
 ```
-Contact: Sarah Kim (ghi789)
+Contact: Sarah Chen (ghi789)
 
 Current information:
-- Company: Target Company
+- Company: TargetCo
 - Role: [missing]
 - Context: Referenced in FDE interview email thread
 
 Enrichment recommendations:
 To fully enrich this contact, spawn a web-research agent to find:
 - [ ] LinkedIn profile (role, background)
-- [ ] Company team page (official role, team)
+- [ ] TargetCo team page (official role, team)
 - [ ] Recent blog posts or talks
 
 Internal context found:
 - Email thread: "FDE Interview Process" (Dec 2025)
 - Mentioned as: potential interviewer or hiring manager
-- Location: Desktop/job-search/target-role/
+- Location: Desktop/job-search/anthropic-fde/
 
 Suggested enrichment:
-Spawn web-research agent with: "Research Sarah Kim at Target Company -
+Spawn web-research agent with: "Research Sarah Chen at TargetCo -
 find role, LinkedIn profile, recent work, and any public talks or posts"
 ```
 
 ### Example 4: Adding meeting context
 
-**Input:** "Just finished meeting with Alex about the referral. He emphasized
+**Input:** "Just finished meeting with Mark about the company referral. He emphasized
 that I should mention the Claude OS project directly in my application."
 
 **Process:**
-1. Parse: Alex, context about meeting and advice
-2. Search: `contact("search", query="Alex")`
+1. Parse: Mark, context about meeting and advice
+2. Search: `contact("search", query="Mark")`
 3. Add to context_notes with date
 4. Don't overwrite existing notes
 5. Add tag for "referral-advice"
 
 **Output:**
 ```
-Contact: Alex (jkl012)
+Contact: Mark [Dad] (jkl012)
 
 Added context:
-"[Jan 14, 2026] Meeting about the referral. Advised to mention Claude OS
+"[Jan 14, 2026] Meeting about company referral. Advised to mention Claude OS
 project directly in application. Emphasized personal project as differentiator."
 
 Tags added:

@@ -22,6 +22,7 @@ export const CLAUDE_SYSTEM_FOLDERS = new Set([
 	'working',
 	'logs',
 	'conversations',
+	'scheduled',
 ]);
 
 /**

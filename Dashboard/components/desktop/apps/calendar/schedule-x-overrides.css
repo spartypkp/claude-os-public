@@ -1,0 +1,147 @@
+/* Schedule-X CSS variable overrides for Claude OS */
+@import '@schedule-x/theme-shadcn/dist/index.css';
+
+/* Brand color override — use our orange primary */
+html:has(.is-shadcn) {
+  --sx-color-primary: hsl(16, 67%, 55%);
+  --sx-color-on-primary: #fff;
+  --sx-color-primary-container: hsla(16, 67%, 55%, 0.12);
+  --sx-color-on-primary-container: hsl(16, 67%, 40%);
+  --sx-event-border-radius: 6px;
+}
+
+/* Hide default header — we use our own toolbar */
+.sx__calendar-header {
+  display: none !important;
+}
+
+/* Fill container height chain */
+.sx__calendar-wrapper {
+  height: 100%;
+  border: none !important;
+  font-family: var(--font-sans);
+}
+
+.sx-react-calendar-wrapper {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.sx__calendar {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.sx__view-container {
+  height: 100% !important;
+  overflow-y: auto !important;
+}
+
+/* Day column headers */
+.sx__week-grid__day-name {
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: var(--text-muted) !important;
+}
+
+/* Time axis labels */
+.sx__week-grid__hour-text,
+.sx__day-grid__hour-text {
+  font-size: 10px !important;
+  color: var(--text-muted) !important;
+}
+
+/* Grid lines — subtle */
+.sx__week-grid__hour-line,
+.sx__day-grid__hour-line {
+  border-color: var(--border-subtle) !important;
+  opacity: 0.5 !important;
+}
+
+/* Time grid events: rounded, glassmorphic */
+.sx__time-grid-event {
+  border: none !important;
+  border-radius: 6px !important;
+  backdrop-filter: blur(4px);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+/* Event hover — subtle lift */
+.sx__time-grid-event:hover,
+.sx__date-grid-event:hover,
+.sx__month-grid-event:hover {
+  box-shadow: 0 2px 8px hsla(0, 0%, 0%, 0.12);
+  z-index: 30 !important;
+}
+
+/* Month grid event pills */
+.sx__month-grid-event {
+  font-size: 11px !important;
+  border-radius: 4px !important;
+}
+
+/* Current time indicator — red line */
+.sx__current-time-indicator {
+  background-color: hsl(0, 84%, 60%) !important;
+  height: 2px !important;
+}
+
+.sx__current-time-indicator::before {
+  background-color: hsl(0, 84%, 60%) !important;
+}
+
+.sx__current-time-indicator-full-week {
+  background-color: hsla(0, 84%, 60%, 0.15) !important;
+}
+
+/* Today highlighting */
+.sx__week-grid__date-number--is-today {
+  background-color: hsl(16, 67%, 55%) !important;
+  color: #fff !important;
+  border-radius: 50% !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.sx__week-grid__day-name--is-today {
+  color: hsl(16, 67%, 55%) !important;
+  font-weight: 600 !important;
+}
+
+/* Day column borders — very light */
+.sx__week-grid__day {
+  border-color: var(--border-subtle) !important;
+  border-right-width: 1px !important;
+  border-right-style: solid !important;
+}
+
+.sx__week-grid__day:last-child {
+  border-right: none !important;
+}
+
+/* Smooth scrolling in view container */
+.sx__view-container {
+  scroll-behavior: smooth;
+}
+
+/* Drag preview — slight scale up */
+.sx__time-grid-event--dragging {
+  opacity: 0.85 !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 4px 12px hsla(0, 0%, 0%, 0.2) !important;
+}
+
+/* Month grid day numbers */
+.sx__month-grid__day-number {
+  font-size: 12px !important;
+}
+
+/* Remove any default event borders from Schedule-X */
+.sx__time-grid-event-inner,
+.sx__date-grid-event-inner {
+  border: none !important;
+}

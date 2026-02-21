@@ -1,10 +1,4 @@
-"""Contact providers - Adapters for different contact sources.
-
-Providers handle access to external contact systems:
-- Apple Contacts (macOS native)
-- CardDAV servers
-- Local storage
-"""
+"""Contact providers - Adapters for different contact sources."""
 
 from .base import (
     ContactsAdapter,
@@ -16,8 +10,6 @@ from .base import (
     ContactGroup,
 )
 from .apple import AppleContactsAdapter
-from .carddav import CardDAVAdapter
-from .local import LocalContactsAdapter
 
 __all__ = [
     # Base classes
@@ -30,6 +22,4 @@ __all__ = [
     'ContactGroup',
     # Adapters
     'AppleContactsAdapter',
-    'CardDAVAdapter',
-    'LocalContactsAdapter',
 ]

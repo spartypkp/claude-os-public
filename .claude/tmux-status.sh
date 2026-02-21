@@ -12,7 +12,7 @@ FG="#e8e4df"
 SEP_RIGHT=""
 
 get_health() {
-    if curl -s --max-time 1 http://localhost:5001/api/health > /dev/null 2>&1; then
+    if curl -s --max-time 1 http://localhost:${CLAUDE_OS_PORT:-5001}/api/health > /dev/null 2>&1; then
         echo "#[fg=$GREEN]󰸞#[fg=$FG]"
     else
         echo "#[fg=$RED]󰸟#[fg=$FG]"

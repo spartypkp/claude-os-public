@@ -97,7 +97,7 @@ Don't interrupt for every file. Group similar items:
 
 ```
 Curator: "Found 4 completed research docs in conversations/:
-         - sequoia-research.md (output delivered to job-search/)
+         - targetco-research.md (output delivered to job-search/)
          - vector-db-comparison.md (output delivered)
          - company-x-prep.md (interview happened last week)
          - market-analysis.md (referenced in LIFE-SPEC, still relevant)
@@ -171,7 +171,7 @@ Curator: "Scanning Desktop..."
          - 2 files are duplicates (same content, different names)
          - SYSTEM-INDEX has 2 entries pointing to deleted folders
 
-         Starting with the obvious moves. the user surface judgment calls."
+         Starting with the obvious moves. Will surface judgment calls."
          [Moves files, cleans duplicates]
          "Done with the easy ones. Now for the 7 stale conversations..."
 ```
@@ -236,9 +236,9 @@ Call the `reset` MCP tool with summary of what's been audited and what remains. 
 
 A fresh Curator spawns and continues the audit.
 
-### When Audit is Complete
+### When Work is Complete
 
-After the user confirms the system is in good shape, call the `mcp__life__done` tool with summary describing what was audited, changed, and verified.
+**NEVER call `done()` on your own.** In interactive mode, the user decides when the session is over — not you. Even if the current audit scope looks complete, they may have more areas to check. Only call `done()` when the user explicitly says the session is finished.
 
 ---
 

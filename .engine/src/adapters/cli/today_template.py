@@ -54,6 +54,19 @@ type: memory
 
 ---
 
+<!-- BEGIN EMAIL_INTEL -->
+## Email Intel
+*Rendered from DB. Chief processes on wake.*
+
+### Action Needed
+
+### Heads Up
+
+### FYI
+<!-- END EMAIL_INTEL -->
+
+---
+
 ## Notes
 *Passive observations, learnings, patterns noticed. Not actionable.*
 

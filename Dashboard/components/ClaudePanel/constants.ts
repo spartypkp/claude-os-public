@@ -31,7 +31,7 @@ export const INBOX_PATH = 'Inbox';
 // API
 // =============================================================================
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+export { API_BASE } from '@/lib/api';
 
 // =============================================================================
 // BREAK MESSAGES (Empty State)

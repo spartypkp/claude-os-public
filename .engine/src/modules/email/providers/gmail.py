@@ -452,7 +452,7 @@ class GmailAdapter(EmailAdapter):
 
         This requires the gmail.send scope.
         ONLY use this for Claude's autonomous account.
-        For user accounts, use create_draft() instead.
+        For Will's accounts, use create_draft() instead.
 
         Args:
             account_id: Account ID (not used for Gmail, here for interface compatibility)

@@ -32,8 +32,9 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 | `/desktop/[...path]` | File viewer for Desktop/ files |
 | `/activity` | Today's sessions overview |
 | `/activity/session/[id]` | Session detail with chat UI |
+| `/job-search` | Custom App: Interview prep command center |
+| `/job-search/*` | Leetcode, DS&A, Pipeline, Opportunities |
 | `/system/health` | Backend status, database, scheduler |
-| `/system/metrics` | Worker statistics |
 | `/system/settings` | System configuration |
 | `/system/docs` | System documentation browser |
 
@@ -47,6 +48,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 | Contacts | Contact management |
 | Widgets | Widget configuration |
 | Settings | System settings |
+| Observatory | Session, tool, and specialist analytics with live charts |
 
 ### Data Flow
 
@@ -55,8 +57,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 | Desktop files | Desktop/*.md | `/api/files/tree` |
 | Priorities | SQLite | `/api/priorities` |
 | Calendar | Apple Calendar | `/api/calendar/*` |
-| Sessions | SQLite | `/api/system/activity` |
-| Workers | SQLite | `/api/workers/*` |
+| Sessions | SQLite | `/api/sessions/activity` |
 | Missions | SQLite | `/api/missions` |
 | Memory | today.md + memory.md | `/api/system/memory` |
 
@@ -65,7 +66,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 - **Framework**: Next.js 16 (App Router)
 - **Styling**: Tailwind CSS + CSS variables
 - **State**: React hooks + Zustand (windowStore)
-- **Backend**: FastAPI (port 5001)
+- **Backend**: FastAPI (default port 5001, configurable via `CLAUDE_OS_PORT` env var)
 - **Database**: SQLite
 - **Graphics**: WebGL (Claude Avatar)
 - **Drag & Drop**: @dnd-kit/core with GPU-accelerated transforms
@@ -78,7 +79,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 - Lightweight `DesktopIconPreview` component for DragOverlay (no logic, just visuals)
 - GPU acceleration via `willChange: transform` hint
 - `visibility: hidden` instead of opacity changes
-- See `Desktop/conversations/desktop-ux-audit.md` for full analysis
+- See `Workspace/working/desktop-ux-audit.md` for full analysis
 
 ---
 
@@ -99,7 +100,7 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 
 ### Core App Window Convention
 
-Core Apps (Claude Finder, Claude Calendar, Claude Settings, Claude Contacts, Claude Widgets) follow a **window ↔ fullscreen pattern**:
+Core Apps (Claude Finder, Claude Calendar, Claude Settings, Claude Contacts, Claude Widgets, Observatory) follow a **window ↔ fullscreen pattern**:
 
 1. Click dock icon → Opens as window on Desktop
 2. Click green button → Navigate to fullscreen route
@@ -119,18 +120,13 @@ Custom Apps (Job Search, etc.) always open as fullscreen routes.
      ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
      │ Interactive │  │ Interactive │  │   Mission   │
      │   Claude    │  │   Claude    │  │   Claude    │
-     │   (Chief)   │  │  (System)   │  │  (Memory)   │
-     └─────────────┘  └─────────────┘  └─────────────┘
-              │               │               │
-              ▼               ▼               ▼
-     ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-     │  Workers    │  │  Workers    │  │  Workers    │
+     │   (Chief)   │  │ (Specialist)│  │  (Memory)   │
      └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
 **The Portal mirrors this:**
-- Static views = user content (Desktop, Calendar)
-- Dynamic sidebar = Active Claude work (sessions + workers)
+- Static views = Will's content (Desktop, Calendar)
+- Dynamic sidebar = Active Claude work (sessions)
 - Memory view = Claude's knowledge state
 - Missions view = Scheduled autonomous work
 - System views = Infrastructure health
@@ -144,7 +140,7 @@ Custom Apps (Job Search, etc.) always open as fullscreen routes.
 - [x] ClaudeOS / Desktop view - macOS-style with light/dark mode
 - [x] Dock with magnification, sessions, separators
 - [x] Core App window system (window ↔ fullscreen toggle)
-- [x] All Core Apps: Claude Finder, Claude Calendar, Claude Settings, Claude Contacts, Claude Widgets
+- [x] All Core Apps: Claude Finder, Claude Calendar, Claude Settings, Claude Contacts, Claude Widgets, Observatory
 - [x] Custom Apps as fullscreen routes (Job Search)
 - [x] Claude Panel with transcript, attachments, spawn
 - [x] Activity Hub with session detail
@@ -168,7 +164,6 @@ Custom Apps (Job Search, etc.) always open as fullscreen routes.
 
 ### Future
 
-- [ ] Real-time updates (WebSocket, currently polling)
 - [ ] Custom Apps as windows (currently fullscreen-only)
 - [ ] Drag files between Finder and Desktop
 
@@ -214,9 +209,9 @@ This SYSTEM-SPEC provides the overview. See these focused specs for details:
 
 | File | Purpose |
 |------|---------|
-| `hooks/useWorkers.ts` | Worker management |
 | `hooks/useClaudeActivityState.ts` | Activity indicator |
-| `hooks/useTranscriptStream.ts` | Transcript polling |
+| `hooks/useTranscriptStream.ts` | Transcript SSE stream |
+| `hooks/useEventStream.tsx` | System events SSE stream |
 | `hooks/useTheme.ts` | Theme management |
 | `hooks/useDesktopLayout.ts` | Desktop icon layout |
 

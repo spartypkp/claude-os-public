@@ -211,7 +211,7 @@ def load_and_print_context(input_data: dict, session_id: str):
 
         # Format output
         sections = [
-            f"[{_timestamp()}] [CLAUDE OS SYS: INFO]: Session context loaded",
+            f"[{_timestamp()}] [SYSTEM:INFO] Session context loaded",
             "",
             "Core memory files loaded automatically:",
         ]

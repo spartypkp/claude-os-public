@@ -77,7 +77,7 @@ function ToolbarSeparator() {
  * Path bar showing full file location with clickable breadcrumbs and file action toolbar.
  * Appears below title bar in file windows.
  *
- * Normalizes any path to Desktop-relative: "/Users/username/claude-os/Desktop/foo.md" → "Desktop/foo.md"
+ * Normalizes any path to Desktop-relative: "/Users/s/claude-os/Desktop/foo.md" → "Desktop/foo.md"
  */
 export function PathBar({ filePath, className = '' }: PathBarProps) {
 	const { openAppWindow, startRename, closeWindow, getWindowByPath } = useWindowStore();

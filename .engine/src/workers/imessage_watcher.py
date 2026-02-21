@@ -33,7 +33,10 @@ TMUX_TARGET = "life:chief"
 POLL_INTERVAL = 5  # seconds
 
 # Whitelisted senders — only these trigger injection
-WHITELIST = set()  # Add phone numbers or emails to enable iMessage injection
+WHITELIST = {
+    "danbotmorgan@gmail.com",
+    "+16452438876",  # Nudge - Jordan's AI health coach
+}
 
 
 def get_max_rowid() -> int:

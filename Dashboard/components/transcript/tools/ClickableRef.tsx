@@ -81,13 +81,6 @@ export function useOpenInDesktop() {
   }, [openAppWindow]);
 
   /**
-   * Open Missions app
-   */
-  const openMissions = useCallback(() => {
-    openAppWindow('missions');
-  }, [openAppWindow]);
-
-  /**
    * Switch to a session in Claude Panel
    */
   const switchSession = useCallback((sessionId: string, role?: string) => {
@@ -101,7 +94,6 @@ export function useOpenInDesktop() {
     openContact,
     openEmail,
     openCalendar,
-    openMissions,
     switchSession,
   };
 }
@@ -109,7 +101,7 @@ export function useOpenInDesktop() {
 /**
  * Reference types that can be clicked
  */
-type RefType = 'file' | 'directory' | 'contact' | 'email' | 'calendar' | 'mission' | 'session' | 'worker';
+type RefType = 'file' | 'directory' | 'contact' | 'email' | 'calendar' | 'session' | 'worker';
 
 interface ClickableRefProps {
   /** Type of reference */
@@ -138,13 +130,12 @@ export function ClickableRef({
   className = '',
   preferFinder = false,
 }: ClickableRefProps) {
-  const { 
-    openFile, 
-    openInFinder, 
-    openContact, 
-    openEmail, 
-    openCalendar, 
-    openMissions,
+  const {
+    openFile,
+    openInFinder,
+    openContact,
+    openEmail,
+    openCalendar,
     switchSession,
   } = useOpenInDesktop();
 
@@ -167,9 +158,6 @@ export function ClickableRef({
       case 'calendar':
         openCalendar();
         break;
-      case 'mission':
-        openMissions();
-        break;
       case 'session':
         switchSession(value, secondary);
         break;
@@ -177,7 +165,7 @@ export function ClickableRef({
         // TODO: Navigate to worker details
         break;
     }
-  }, [type, value, secondary, preferFinder, openFile, openInFinder, openContact, openEmail, openCalendar, openMissions, switchSession]);
+  }, [type, value, secondary, preferFinder, openFile, openInFinder, openContact, openEmail, openCalendar, switchSession]);
 
   return (
     <span

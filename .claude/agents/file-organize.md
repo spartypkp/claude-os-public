@@ -1,6 +1,6 @@
 ---
 name: file-organize
-description: Clean up and organize files in a target location. Use when working/ or Desktop/ becomes cluttered.
+description: Clean up and organize files in a target location. Use after project completion or when Desktop/conversations/ becomes cluttered.
 tools: Read, Write, Edit, Bash, Glob
 model: haiku
 permissionMode: acceptEdits
@@ -17,7 +17,7 @@ You clean up and organize file clutter by identifying duplicates, consolidating 
 - **Desktop/conversations/ is cluttered** - Too many loose files, hard to find current work
 - **After major project completion** - Cleanup phase after shipping features or finishing research
 - **Stale files accumulating** - Multiple old drafts, reset docs, temp files from past sessions
-- **Before context handoff** - Cleanup before reset() or done() to leave clean workspace
+- **Before context handoff** - Cleanup before reset() or calling the done MCP tool to leave clean workspace
 - **User explicitly requests** - "Clean up my working folder" or "organize these files"
 - **Regular maintenance** - Periodic sweeps (weekly/monthly) to prevent gradual accumulation
 
@@ -117,7 +117,7 @@ Return cleanup log:
 ```markdown
 **Merged:**
 - spec-draft-v1.md + spec-draft-v2.md + spec-final.md → api-spec.md (consolidated 3 drafts into canonical spec)
-- notes-meeting-alex.md + alex-followup.md → company-alex-notes.md (combined notes into one file)
+- notes-meeting-alex.md + alex-followup.md → anthropic-alex-notes.md (combined notes into one file)
 
 **Deleted:**
 - reset-2026-01-10.md (obsolete reset doc from 4 days ago)
@@ -129,7 +129,7 @@ Return cleanup log:
 - api-spec.md, api-test-plan.md, api-migration.md → Desktop/conversations/api-refactor/ (organized multi-file project into folder)
 
 **Preserved:**
-- research-company.md (active research, last modified today)
+- research-anthropic.md (active research, last modified today)
 - interview-prep-notes.md (current work, referenced in TODAY.md)
 - project-ideas.md (valuable brainstorming, worth keeping)
 
@@ -156,7 +156,7 @@ What NOT to do:
 
 5. **Breaking references** - Before moving/deleting, check if other files reference this one. Don't orphan dependencies.
 
-6. **Generic naming** - After consolidation, don't leave file named "notes.md". Use descriptive names: "company-interview-notes.md".
+6. **Generic naming** - After consolidation, don't leave file named "notes.md". Use descriptive names: "anthropic-interview-notes.md".
 
 ## Examples
 

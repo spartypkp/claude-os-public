@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 /**
  * Core app types that can open as windows.
  */
-export type CoreAppType = 'calendar' | 'finder' | 'settings' | 'contacts' | 'email' | 'messages' | 'missions' | 'roles';
+export type CoreAppType = 'calendar' | 'finder' | 'settings' | 'contacts' | 'email' | 'messages' | 'analytics' | 'projects';
 
 /**
  * Window state for a floating desktop window.
@@ -368,8 +368,8 @@ export const useWindowStore = create<WindowStore>()(
 					contacts: { width: 750, height: 550, title: 'Claude Contacts', x: 180, y: 90 },
 					email: { width: 1000, height: 650, title: 'Claude Mail', x: 120, y: 70 },
 					messages: { width: 900, height: 600, title: 'Claude Messages', x: 130, y: 75 },
-					missions: { width: 700, height: 600, title: 'Claude Missions', x: 140, y: 80 },
-					roles: { width: 700, height: 550, title: 'Claude Roles', x: 170, y: 85 },
+					analytics: { width: 1000, height: 700, title: 'Observatory', x: 120, y: 60 },
+					projects: { width: 1100, height: 700, title: 'Projects', x: 80, y: 50 },
 				};
 
 				const defaults = appDefaults[appType];

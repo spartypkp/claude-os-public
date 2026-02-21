@@ -136,15 +136,15 @@ Return consolidated brief:
 Last 5-10 interactions or mentions with dates:
 - **2026-01-10** - Email exchange about demo (they requested technical details)
 - **2025-12-15** - Coffee meeting, discussed career transitions
-- **2025-11-03** - Introduced to user by mutual friend Ernest
+- **2025-11-03** - Introduced to user by mutual friend David
 - **2025-10-20** - Mentioned in MEMORY.md as potential referral source
 
 ## Key Context
 Important facts, patterns, or history:
-- They work at Target Company as Engineer, 5 years experience
+- They work at TargetCo as FDE, 5 years experience
 - Expressed strong interest in Claude OS demo (Jan 10 email)
 - Offered to refer user to hiring team if interested
-- Connection made through Venture Capital Firm network (Alex referral)
+- Connection made through Capital Partners network (Raj referral)
 - Quarterly check-in pattern established (meet every 3 months)
 
 ## Current Status
@@ -155,16 +155,16 @@ Important facts, patterns, or history:
 
 ## File References
 Paths to relevant documents for deeper context:
-- Desktop/job-search/opportunities/target-role/LIFE-SPEC.md:45 - Mentions as referral contact
-- Desktop/MEMORY.md:78 - Pattern: "Referrals through Venture Capital Firm network highly effective"
+- Desktop/job-search/opportunities/anthropic-fde/LIFE-SPEC.md:45 - Mentions as referral contact
+- Desktop/MEMORY.md:78 - Pattern: "Referrals through Capital Partners network highly effective"
 - Desktop/logs/2026-01-10.md:234 - Timeline entry about email exchange
 - Desktop/career/resume-fde.pdf - Resume version tailored for their company
 
 ## Related
 Connected people, projects, or topics:
-- **Ernest Thompson** - Mutual friend who made introduction
-- **Alex (Venture Capital Firm)** - Referral source, also connected to this person's company
-- **target engineering role role** - Primary job opportunity user is pursuing
+- **David Thompson** - Mutual friend who made introduction
+- **Raj (Capital Partners)** - Referral source, also connected to this person's company
+- **TargetCo FDE role** - Primary job opportunity user is pursuing
 - **Claude OS Demo** - Shared with this person, garnered positive response
 ```
 
@@ -184,7 +184,7 @@ What NOT to do:
 
 3. **Ancient history emphasis** - Don't lead with 2-year-old information unless it's the most relevant. Recent context first.
 
-4. **Vague summaries** - "System knows some information about X" is useless. Be specific: "Met 3 months ago via a mutual friend, works at Target Company, offered referral."
+4. **Vague summaries** - "System knows some information about X" is useless. Be specific: "Met 3 months ago via David, works at TargetCo, offered referral."
 
 5. **Missing connections** - If person A introduced person B, and both are in contacts, that's crucial context. Surface relationships.
 
@@ -200,14 +200,14 @@ What NOT to do:
 Task: Recall "Alex Chen"
 
 Search:
-1. Contact record: Alex Chen, target engineering role, met at conference 2024
+1. Contact record: Alex Chen, TargetCo FDE, met at conference 2024
 2. Calendar: 2 past meetings (Nov 2024, Dec 2024), 1 upcoming (Jan 16)
 3. Email: 8 threads, most recent Jan 10 (following up on internal submission)
 4. Grep Desktop/: 37 mentions across job-search docs, MEMORY.md, logs
-5. Key files: job-search/opportunities/target-role/LIFE-SPEC.md
+5. Key files: job-search/opportunities/anthropic-fde/LIFE-SPEC.md
 
 Synthesis:
-- Primary contact for target engineering role opportunity (S-tier target)
+- Primary contact for TargetCo FDE opportunity (S-tier target)
 - User submitted application via Alex's internal referral
 - Follow-up scheduled Jan 16 (Thursday morning)
 - Relationship: Professional contact, met at conference, now key referral
@@ -218,19 +218,19 @@ Output: Comprehensive recall brief with all sections populated
 **Example 2: Recall company**
 
 ```
-Task: Recall "Venture Capital Firm"
+Task: Recall "Capital Partners"
 
 Search:
 1. Grep Desktop/: 23 mentions in job-search/, MEMORY.md, TODAY.md
-2. Contacts: Alex (partner at Venture Capital Firm), Lauren Chen (recruiter)
-3. Email: 5 threads with Alex about referrals and demo
-4. Key context: Venture Capital Firm is investor in Target Company, connection through Alex
+2. Contacts: Raj (partner at Capital Partners), Lisa Park (recruiter)
+3. Email: 5 threads with Raj about referrals and demo
+4. Key context: Capital Partners is investor in TargetCo, connection through Raj
 
 Synthesis:
-- Venture capital firm, investor in Target Company
-- Alex (partner) is key connection for user's job search
-- Leadership path: Alex → Lauren → N-1 level at Target Company (in motion)
-- Demo sent to Alex Jan 13, positive reception
+- Venture capital firm, investor in TargetCo
+- Raj (partner) is key connection for user's job search
+- Leadership path: Raj → Lauren → N-1 level at TargetCo (in motion)
+- Demo sent to Raj Jan 13, positive reception
 
 Output: Recall brief focused on job search relevance, contacts, active threads
 ```
@@ -271,7 +271,7 @@ Synthesis:
 - Model Context Protocol implementation for Claude OS
 - Core interface between Claude and system (calendar, contacts, email, etc.)
 - Located in .engine/src/life_mcp/
-- 20+ tools registered: contact(), calendar(), email(), priority(), etc.
+- 16 tools registered: contact(), calendar(), email(), day(), team(), etc.
 - Used by all Claude roles for taking action
 
 Output: Recall brief with technical overview, file locations, usage patterns

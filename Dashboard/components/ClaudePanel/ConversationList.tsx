@@ -292,12 +292,15 @@ function SpecialistTab({
           <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
 
           {onClose && (isHovered || isSelected) && (
-            <span
+            <div
+              role="button"
+              tabIndex={0}
               onClick={handleCloseClick}
-              className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444]"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCloseClick(e as unknown as React.MouseEvent); }}
+              className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-[#444] cursor-pointer"
             >
               <X className="w-3 h-3" />
-            </span>
+            </div>
           )}
         </div>
       </button>

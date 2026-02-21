@@ -44,9 +44,6 @@ from .events import (
     emit_email_cancelled,
     emit_message_sent,
     emit_message_received,
-    # Backwards compat
-    sse_bus,
-    FileChangeEvent,
 )
 from .audit_log import log_event, get_events, emit_event
 from .errors import (
@@ -110,8 +107,6 @@ __all__ = [
     "emit_email_cancelled",
     "emit_message_sent",
     "emit_message_received",
-    "sse_bus",
-    "FileChangeEvent",
     # Audit log (persistent)
     "log_event",
     "get_events",

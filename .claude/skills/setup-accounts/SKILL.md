@@ -20,10 +20,8 @@ Claude OS can read/write email, calendar, and iMessage through the MCP server. E
 
 Run account discovery:
 ```
-email("discover")
 email("accounts")
 calendar("calendars")
-messages("test")
 ```
 
 Show the user what's already connected and what's available.
@@ -42,8 +40,8 @@ Common setups:
 ### Step 3: Configure Each Account
 
 **For Apple Mail/Calendar (easiest):**
-1. Verify the account appears in `email("discover")`
-2. Test with `email("unread", account="...", limit=5)`
+1. Verify the account appears in `email("accounts")`
+2. Test with `email("search", query="is:unread", account="...", limit=5)`
 3. If it works, done. Apple handles auth via macOS keychain.
 
 **For Gmail sending:**
@@ -100,9 +98,8 @@ Help the user decide what Claude can do autonomously vs. what needs approval:
 
 Test each configured account:
 ```
-email("unread", account="...", limit=3)
+email("search", query="is:unread", account="...", limit=3)
 calendar("list", from_date="today", to_date="tomorrow")
-messages("test")
 ```
 
 Confirm with user: "Here's what I can see. Does this look right? Anything I shouldn't have access to?"
@@ -111,7 +108,7 @@ Confirm with user: "Here's what I can see. Does this look right? Anything I shou
 
 | Problem | Fix |
 |---------|-----|
-| `email("discover")` returns empty | Open Mail.app, add account via System Settings → Internet Accounts |
+| `email("accounts")` returns empty | Open Mail.app, add account via System Settings → Internet Accounts |
 | `calendar("calendars")` returns empty | Open Calendar.app once, check macOS Privacy & Security → Calendars |
 | `messages("test")` fails | Grant Full Disk Access to terminal app, restart terminal |
 | Draft opens wrong app | Check which Mail client is default in System Settings → Default Apps |

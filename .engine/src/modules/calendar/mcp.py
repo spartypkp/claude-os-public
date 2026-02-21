@@ -1,40 +1,16 @@
-"""Calendar MCP tool - Unified calendar operations across all providers."""
+"""Calendar MCP tool - Unified calendar operations."""
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastmcp import FastMCP
 
 from core.mcp_helpers import get_services
+from modules.accounts.access import get_access_service
 from .service import CalendarService, EventCreate, EventUpdate
 
 mcp = FastMCP("life-calendar")
-
-
-def _notify_backend_event(event_type: str, data: dict = None):
-    """Notify the backend to emit an SSE event for real-time Dashboard updates."""
-    import urllib.request
-    import json as json_module
-
-    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
-    payload = {
-        "event_type": event_type,
-        "session_id": session_id,
-        "data": data or {}
-    }
-
-    try:
-        req = urllib.request.Request(
-            "http://localhost:5001/api/sessions/notify-event",
-            data=json_module.dumps(payload).encode('utf-8'),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        urllib.request.urlopen(req, timeout=1)
-    except Exception:
-        pass  # Best effort - don't fail the tool if notification fails
 
 
 @mcp.tool()
@@ -55,8 +31,6 @@ def calendar(
     description: Optional[str] = None,
     recurrence_rule: Optional[str] = None,
     attendees: Optional[List[str]] = None,
-    # Provider selection
-    provider: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Calendar operations across all providers.
 
@@ -79,9 +53,8 @@ def calendar(
         description: Event description
         recurrence_rule: iCalendar RRULE for recurring events
         attendees: List of attendee email addresses
-
-        # Provider selection
-        provider: Provider type ('apple', 'google', 'local', etc.)
+            Note: creates local event attendee records only. Does NOT send
+            calendar invitations. Google Calendar invite sending not yet supported.
 
     Returns:
         Object with success status and operation-specific data
@@ -111,19 +84,19 @@ def calendar(
         calendar_service = CalendarService(storage)
 
         if operation == "calendars":
-            return _calendar_list_calendars(calendar_service, provider)
+            return _calendar_list_calendars(calendar_service)
         elif operation == "list":
-            return _calendar_list_events(calendar_service, from_date, to_date, calendar_id, provider, limit)
+            return _calendar_list_events(calendar_service, from_date, to_date, calendar_id, limit)
         elif operation == "get":
             return _calendar_get_event(calendar_service, event_id)
         elif operation == "create":
             return _calendar_create_event(calendar_service, title, start_time, end_time, all_day,
-                                         location, description, calendar_id, recurrence_rule, attendees, provider)
+                                         location, description, calendar_id, recurrence_rule, attendees)
         elif operation == "update":
             return _calendar_update_event(calendar_service, event_id, title, start_time, end_time,
-                                         location, description, calendar_id, provider)
+                                         location, description, calendar_id)
         elif operation == "delete":
-            return _calendar_delete_event(calendar_service, event_id, calendar_id, provider)
+            return _calendar_delete_event(calendar_service, event_id, calendar_id)
         else:
             return {
                 "success": False,
@@ -134,8 +107,8 @@ def calendar(
         return {"success": False, "error": str(e)}
 
 
-def _calendar_list_calendars(service: CalendarService, provider: Optional[str]) -> Dict[str, Any]:
-    calendars = service.get_calendars(provider_type=provider)
+def _calendar_list_calendars(service: CalendarService) -> Dict[str, Any]:
+    calendars = service.get_calendars()
 
     calendars_data = [
         {
@@ -156,7 +129,7 @@ def _calendar_list_calendars(service: CalendarService, provider: Optional[str]) 
 
 
 def _calendar_list_events(service: CalendarService, from_date: Optional[str], to_date: Optional[str],
-                          calendar_id: Optional[str], provider: Optional[str], limit: int) -> Dict[str, Any]:
+                          calendar_id: Optional[str], limit: int) -> Dict[str, Any]:
     start = None
     end = None
 
@@ -173,7 +146,6 @@ def _calendar_list_events(service: CalendarService, from_date: Optional[str], to
         start=start,
         end=end,
         calendar_id=calendar_id,
-        provider_type=provider,
         limit=limit
     )
 
@@ -207,9 +179,7 @@ def _calendar_get_event(service: CalendarService, event_id: Optional[str]) -> Di
             "error": "event_id required for get operation"
         }
 
-    # Get events and filter by ID (CalendarService doesn't have get_by_id)
-    events = service.get_events(limit=1000)
-    event = next((e for e in events if e.id == event_id), None)
+    event = service.get_event(event_id)
 
     if not event:
         return {
@@ -232,6 +202,15 @@ def _calendar_get_event(service: CalendarService, event_id: Optional[str]) -> Di
         "attendees": event.attendees,
     }
 
+    # Fire-and-forget contact signal
+    try:
+        from modules.contacts.signals import process_calendar_signals
+        from modules.contacts.standalone import StandaloneContactsRepository
+        repo = StandaloneContactsRepository(get_services().storage)
+        process_calendar_signals(event_data, repo)
+    except Exception:
+        pass  # Never block calendar operations
+
     return {
         "success": True,
         "event": event_data
@@ -241,8 +220,18 @@ def _calendar_get_event(service: CalendarService, event_id: Optional[str]) -> Di
 def _calendar_create_event(service: CalendarService, title: Optional[str], start_time: Optional[str],
                            end_time: Optional[str], all_day: bool, location: Optional[str],
                            description: Optional[str], calendar_id: Optional[str],
-                           recurrence_rule: Optional[str], attendees: Optional[List[str]],
-                           provider: Optional[str]) -> Dict[str, Any]:
+                           recurrence_rule: Optional[str], attendees: Optional[List[str]]) -> Dict[str, Any]:
+    # Access tier check — create requires assist or higher
+    try:
+        access = get_access_service()
+        if not access.can_assist('calendar'):
+            return {
+                "success": False,
+                "error": "Calendar access is set to 'Read' mode. Change to 'Assist' or 'Autonomous' in Settings to create events."
+            }
+    except RuntimeError:
+        pass  # AccessService not initialized
+
     if not title or not start_time or not end_time:
         return {
             "success": False,
@@ -264,15 +253,20 @@ def _calendar_create_event(service: CalendarService, title: Optional[str], start
         attendees=attendees or []
     )
 
-    created_event = service.create_event(
-        event=event_create,
-        provider_type=provider
-    )
-
-    if not created_event:
+    try:
+        created_event = service.create_event(event=event_create)
+    except Exception as e:
+        cal_name = calendar_id or 'default'
         return {
             "success": False,
-            "error": "Failed to create event"
+            "error": f"Failed to create event in calendar '{cal_name}'. Calendar.app returned error: {e}. Check that the calendar exists."
+        }
+
+    if not created_event:
+        cal_name = calendar_id or 'default'
+        return {
+            "success": False,
+            "error": f"Failed to create event in calendar '{cal_name}'. Check that the calendar exists in Calendar.app."
         }
 
     # Log to Timeline
@@ -281,7 +275,8 @@ def _calendar_create_event(service: CalendarService, title: Optional[str], start
     log_system_event(f'Calendar: added "{created_event.summary}" for {time_str}')
 
     # Emit SSE event for real-time Dashboard update
-    _notify_backend_event("calendar.created", {"id": created_event.id, "title": created_event.summary})
+    from core.mcp_helpers import notify_backend_event
+    notify_backend_event("calendar.created", {"id": created_event.id, "title": created_event.summary})
 
     return {
         "success": True,
@@ -298,8 +293,18 @@ def _calendar_create_event(service: CalendarService, title: Optional[str], start
 
 def _calendar_update_event(service: CalendarService, event_id: Optional[str], title: Optional[str],
                            start_time: Optional[str], end_time: Optional[str], location: Optional[str],
-                           description: Optional[str], calendar_id: Optional[str],
-                           provider: Optional[str]) -> Dict[str, Any]:
+                           description: Optional[str], calendar_id: Optional[str]) -> Dict[str, Any]:
+    # Access tier check — update requires assist or higher
+    try:
+        access = get_access_service()
+        if not access.can_assist('calendar'):
+            return {
+                "success": False,
+                "error": "Calendar access is set to 'Read' mode. Change to 'Assist' or 'Autonomous' in Settings to update events."
+            }
+    except RuntimeError:
+        pass
+
     if not event_id:
         return {
             "success": False,
@@ -321,17 +326,22 @@ def _calendar_update_event(service: CalendarService, event_id: Optional[str], ti
     if calendar_id is not None:
         event_update.calendar_id = calendar_id
 
-    updated_event = service.update_event(
-        event_id=event_id,
-        update=event_update,
-        calendar_id=calendar_id,
-        provider_type=provider
-    )
+    try:
+        updated_event = service.update_event(
+            event_id=event_id,
+            update=event_update,
+            calendar_id=calendar_id,
+        )
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to update event {event_id}. Calendar.app returned error: {e}"
+        }
 
     if not updated_event:
         return {
             "success": False,
-            "error": f"Failed to update event {event_id}"
+            "error": f"Failed to update event {event_id}. The event may not exist or the calendar may be read-only."
         }
 
     # Log to Timeline
@@ -340,7 +350,8 @@ def _calendar_update_event(service: CalendarService, event_id: Optional[str], ti
     log_system_event(f'Calendar: "{updated_event.summary}" updated to {time_str}')
 
     # Emit SSE event for real-time Dashboard update
-    _notify_backend_event("calendar.updated", {"id": updated_event.id, "title": updated_event.summary})
+    from core.mcp_helpers import notify_backend_event
+    notify_backend_event("calendar.updated", {"id": updated_event.id, "title": updated_event.summary})
 
     return {
         "success": True,
@@ -355,7 +366,19 @@ def _calendar_update_event(service: CalendarService, event_id: Optional[str], ti
 
 
 def _calendar_delete_event(service: CalendarService, event_id: Optional[str],
-                           calendar_id: Optional[str], provider: Optional[str]) -> Dict[str, Any]:
+                           calendar_id: Optional[str]) -> Dict[str, Any]:
+    # Access tier check — delete requires autonomous
+    try:
+        access = get_access_service()
+        if not access.can_act_autonomously('calendar'):
+            tier = access.get_tier('calendar')
+            return {
+                "success": False,
+                "error": f"Calendar access must be 'Autonomous' to delete events. Current tier: '{tier.title()}'. Change in Settings."
+            }
+    except RuntimeError:
+        pass
+
     if not event_id:
         return {
             "success": False,
@@ -363,22 +386,27 @@ def _calendar_delete_event(service: CalendarService, event_id: Optional[str],
         }
 
     # Get event title before deleting for logging
-    events = service.get_events(limit=1000)
-    event_to_delete = next((e for e in events if e.id == event_id), None)
+    event_to_delete = service.get_event(event_id)
     event_title = event_to_delete.summary if event_to_delete else event_id
 
-    success = service.delete_event(
-        event_id=event_id,
-        calendar_id=calendar_id,
-        provider_type=provider
-    )
+    try:
+        success = service.delete_event(
+            event_id=event_id,
+            calendar_id=calendar_id,
+        )
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to delete event {event_id}. Calendar.app returned error: {e}"
+        }
 
     if success:
         from core.timeline import log_system_event
         log_system_event(f'Calendar: "{event_title}" cancelled')
 
         # Emit SSE event for real-time Dashboard update
-        _notify_backend_event("calendar.deleted", {"id": event_id, "title": event_title})
+        from core.mcp_helpers import notify_backend_event
+        notify_backend_event("calendar.deleted", {"id": event_id, "title": event_title})
 
         return {
             "success": True,
@@ -388,5 +416,5 @@ def _calendar_delete_event(service: CalendarService, event_id: Optional[str],
     else:
         return {
             "success": False,
-            "error": f"Failed to delete event {event_id}"
+            "error": f"Failed to delete event {event_id}. The event may not exist or the calendar may be read-only."
         }

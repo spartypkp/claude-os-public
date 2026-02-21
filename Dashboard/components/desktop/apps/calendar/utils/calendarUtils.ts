@@ -2,10 +2,6 @@ import { CalendarEvent } from '@/lib/types';
 
 // ============ Constants ============
 
-export const HOUR_HEIGHT = 64; // pixels per hour
-export const START_HOUR = 7; // 7 AM
-export const END_HOUR = 22; // 10 PM
-export const HOURS = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => i + START_HOUR);
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -86,18 +82,18 @@ export const EVENT_COLORS: Record<string, { bg: string; border: string; text: st
   },
 };
 
-// Apple Calendar-style color palette
+// Calendar color palette using CSS-variable-compatible classes
 export const CALENDAR_COLOR_PALETTE: CalendarColor[] = [
-  { name: 'blue', bg: 'bg-blue-500', text: 'text-white', dot: 'bg-blue-500' },
-  { name: 'green', bg: 'bg-emerald-500', text: 'text-white', dot: 'bg-emerald-500' },
-  { name: 'orange', bg: 'bg-orange-500', text: 'text-white', dot: 'bg-orange-500' },
-  { name: 'purple', bg: 'bg-purple-500', text: 'text-white', dot: 'bg-purple-500' },
-  { name: 'red', bg: 'bg-red-500', text: 'text-white', dot: 'bg-red-500' },
-  { name: 'cyan', bg: 'bg-cyan-500', text: 'text-white', dot: 'bg-cyan-500' },
-  { name: 'pink', bg: 'bg-pink-500', text: 'text-white', dot: 'bg-pink-500' },
-  { name: 'yellow', bg: 'bg-amber-500', text: 'text-black', dot: 'bg-amber-500' },
-  { name: 'teal', bg: 'bg-teal-500', text: 'text-white', dot: 'bg-teal-500' },
-  { name: 'indigo', bg: 'bg-indigo-500', text: 'text-white', dot: 'bg-indigo-500' },
+  { name: 'blue', bg: 'bg-[#3b82f6]', text: 'text-white', dot: 'bg-[#3b82f6]' },
+  { name: 'green', bg: 'bg-[#10b981]', text: 'text-white', dot: 'bg-[#10b981]' },
+  { name: 'orange', bg: 'bg-[#f97316]', text: 'text-white', dot: 'bg-[#f97316]' },
+  { name: 'purple', bg: 'bg-[#8b5cf6]', text: 'text-white', dot: 'bg-[#8b5cf6]' },
+  { name: 'red', bg: 'bg-[#ef4444]', text: 'text-white', dot: 'bg-[#ef4444]' },
+  { name: 'cyan', bg: 'bg-[#06b6d4]', text: 'text-white', dot: 'bg-[#06b6d4]' },
+  { name: 'pink', bg: 'bg-[#ec4899]', text: 'text-white', dot: 'bg-[#ec4899]' },
+  { name: 'yellow', bg: 'bg-[#f59e0b]', text: 'text-black', dot: 'bg-[#f59e0b]' },
+  { name: 'teal', bg: 'bg-[#14b8a6]', text: 'text-white', dot: 'bg-[#14b8a6]' },
+  { name: 'indigo', bg: 'bg-[#6366f1]', text: 'text-white', dot: 'bg-[#6366f1]' },
 ];
 
 // Map calendar names to specific colors
@@ -114,12 +110,9 @@ export const CALENDAR_COLOR_ASSIGNMENTS: Record<string, number> = {
 // ============ Helper Functions ============
 
 export function getCalendarColor(calendarName: string, allCalendars: string[]): CalendarColor {
-  // Check if we have a pre-assigned color
   if (calendarName in CALENDAR_COLOR_ASSIGNMENTS) {
     return CALENDAR_COLOR_PALETTE[CALENDAR_COLOR_ASSIGNMENTS[calendarName]];
   }
-
-  // Otherwise, assign based on position in the list (consistent coloring)
   const index = allCalendars.indexOf(calendarName);
   const colorIndex = index >= 0 ? index % CALENDAR_COLOR_PALETTE.length : 0;
   return CALENDAR_COLOR_PALETTE[colorIndex];
@@ -137,7 +130,6 @@ export function parseTags(tags: string | string[] | undefined): string[] {
 }
 
 export function getEventColor(event: CalendarEvent, allCalendarNames: string[] = []): { bg: string; border: string; text: string } {
-  // First priority: calendar_name (color by source calendar)
   if (event.calendar_name) {
     const calColor = getCalendarColor(event.calendar_name, allCalendarNames);
     return {
@@ -146,24 +138,13 @@ export function getEventColor(event: CalendarEvent, allCalendarNames: string[] =
       text: calColor.text,
     };
   }
-
-  // Fall back to tags/kind for events without calendar_name
   const tags = parseTags(event.tags);
   const kind = event.kind?.toLowerCase();
-
-  // Check kind first
-  if (kind && EVENT_COLORS[kind]) {
-    return EVENT_COLORS[kind];
-  }
-
-  // Then check tags
+  if (kind && EVENT_COLORS[kind]) return EVENT_COLORS[kind];
   for (const tag of tags) {
     const lowerTag = tag.toLowerCase();
-    if (EVENT_COLORS[lowerTag]) {
-      return EVENT_COLORS[lowerTag];
-    }
+    if (EVENT_COLORS[lowerTag]) return EVENT_COLORS[lowerTag];
   }
-
   return EVENT_COLORS.default;
 }
 
@@ -185,7 +166,7 @@ export function formatTime(date: Date): string {
 export function getWeekStart(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -205,32 +186,24 @@ export function getMonthStart(date: Date): Date {
 
 export function getMonthDays(date: Date): Date[] {
   const start = getMonthStart(date);
-  const firstDayOfWeek = start.getDay(); // 0 = Sunday
-  const startPadding = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Adjust for Monday start
-
+  const firstDayOfWeek = start.getDay();
+  const startPadding = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const days: Date[] = [];
-
-  // Add padding days from previous month
   for (let i = startPadding; i > 0; i--) {
     const d = new Date(start);
     d.setDate(d.getDate() - i);
     days.push(d);
   }
-
-  // Add days of current month
   const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   for (let i = 1; i <= daysInMonth; i++) {
     days.push(new Date(date.getFullYear(), date.getMonth(), i));
   }
-
-  // Add padding days for complete weeks (6 rows max)
   while (days.length < 42) {
     const lastDay = days[days.length - 1];
     const nextDay = new Date(lastDay);
     nextDay.setDate(nextDay.getDate() + 1);
     days.push(nextDay);
   }
-
   return days;
 }
 
@@ -272,87 +245,10 @@ export function eventSpansDate(event: CalendarEvent, date: Date): boolean {
 export function formatWeekRange(weekDates: Date[]): string {
   const start = weekDates[0];
   const end = weekDates[6];
-
   const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
   const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
-
   if (start.getMonth() === end.getMonth()) {
     return `${startMonth} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`;
   }
   return `${startMonth} ${start.getDate()} - ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
-}
-
-export function processEventsForDay(
-  events: CalendarEvent[],
-  dayDate: Date,
-  viewMode: ViewMode,
-  allCalendarNames: string[] = []
-): ProcessedEvent[] {
-  const { start: dayStart, end: dayEnd } = getDayBounds(dayDate);
-
-  // Filter events that overlap this day
-  const dayEvents = events.filter((event) => {
-    const eventStart = new Date(event.start_ts);
-    const eventEnd = new Date(event.end_ts);
-    return eventStart < dayEnd && eventEnd > dayStart;
-  });
-
-  // Sort by start time
-  dayEvents.sort((a, b) => new Date(a.start_ts).getTime() - new Date(b.start_ts).getTime());
-
-  // Process each event
-  const dayKey = dayDate.toISOString().slice(0, 10);
-  const processedEvents: ProcessedEvent[] = dayEvents.map((event, idx) => {
-    const rawStart = new Date(event.start_ts);
-    const rawEnd = new Date(event.end_ts);
-    const startDate = rawStart < dayStart ? new Date(dayStart) : rawStart;
-    const endDate = rawEnd > dayEnd ? new Date(dayEnd) : rawEnd;
-
-    // Calculate position
-    const startHour = startDate.getHours() + startDate.getMinutes() / 60;
-    const endHour = endDate.getHours() + endDate.getMinutes() / 60;
-
-    // Clamp to visible hours
-    const clampedStart = Math.max(startHour, START_HOUR);
-    const clampedEnd = Math.min(endHour, END_HOUR + 1);
-
-    const topOffset = (clampedStart - START_HOUR) * HOUR_HEIGHT;
-    const height = Math.max((clampedEnd - clampedStart) * HOUR_HEIGHT, 24);
-
-    return {
-      ...event,
-      id: event.id || `${event.summary}-${event.start_ts}-${idx}`,
-      dragId: `${event.id || `${event.summary}-${event.start_ts}-${idx}`}-${dayKey}`,
-      startDate,
-      endDate,
-      topOffset,
-      height,
-      width: 100,
-      leftOffset: 0,
-      colorClass: getEventColor(event, allCalendarNames),
-      hasConflict: false,
-      parsedTags: parseTags(event.tags),
-    };
-  });
-
-  // Detect conflicts (overlapping events)
-  for (let i = 0; i < processedEvents.length; i++) {
-    for (let j = i + 1; j < processedEvents.length; j++) {
-      const a = processedEvents[i];
-      const b = processedEvents[j];
-
-      // Check if they overlap
-      if (a.startDate < b.endDate && b.startDate < a.endDate) {
-        a.hasConflict = true;
-        b.hasConflict = true;
-
-        // Adjust widths for overlapping events
-        a.width = 48;
-        b.width = 48;
-        b.leftOffset = 50;
-      }
-    }
-  }
-
-  return processedEvents;
 }

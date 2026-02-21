@@ -143,6 +143,7 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
       enableResizing={!isMaximized}
     >
       <div
+        data-testid={`app-window-${win.appType || win.id}`}
         className="
           flex flex-col h-full rounded-xl overflow-hidden
           bg-[var(--surface-raised)] border border-[var(--border-default)]
@@ -156,6 +157,7 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
           <div className="flex items-center gap-2 mr-4">
             {/* Close - Red */}
             <button
+              data-testid="window-close"
               onClick={(e) => {
                 e.stopPropagation();
                 closeWindow(win.id);
@@ -174,6 +176,7 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
 
             {/* Minimize - Yellow */}
             <button
+              data-testid="window-minimize"
               onClick={(e) => {
                 e.stopPropagation();
                 minimizeWindow(win.id);
@@ -192,6 +195,7 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
 
             {/* Maximize - Green */}
             <button
+              data-testid="window-maximize"
               onClick={handleMaximize}
               className="
                 w-3 h-3 rounded-full bg-[#28c840]

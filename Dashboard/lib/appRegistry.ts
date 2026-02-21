@@ -38,7 +38,7 @@ export interface AppBadge {
 }
 
 export interface AppManifest {
-  /** Unique identifier (used in routes, e.g., 'my-app') */
+  /** Unique identifier (used in routes, e.g., 'job-search') */
   id: string;
   /** Display name */
   name: string;

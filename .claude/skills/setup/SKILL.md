@@ -248,7 +248,7 @@ Ask genuine, open questions. Explore naturally based on what they've already sha
 > "You mentioned [thing they're working on]. Let me add that as a priority."
 
 ```python
-priority("create", content="[what they mentioned]", level="medium")
+day("priority", content="[what they mentioned]", level="medium")
 ```
 
 > "Check the right side of your Dashboard — priorities show up there. I use these to keep us both focused on what matters today."

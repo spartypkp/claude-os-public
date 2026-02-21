@@ -100,7 +100,7 @@ export function PrioritiesWidgetContent() {
 		queryClient.invalidateQueries({ queryKey: queryKeys.priorities });
 	};
 
-	const handleToggle = async (id: string, currentlyCompleted: boolean) => {
+	const handleToggle = async (id: string, currentlyCompleted: boolean, text: string) => {
 		setToggling(id);
 		try {
 			const result = currentlyCompleted
@@ -108,6 +108,10 @@ export function PrioritiesWidgetContent() {
 				: await completePriority(id);
 
 			if (result.success) {
+				// Dark Souls notification on completion
+				if (!currentlyCompleted) {
+					window.dispatchEvent(new CustomEvent('priority-completed', { detail: { text } }));
+				}
 				// SSE will invalidate, but also invalidate manually for immediate feedback
 				invalidateCache();
 			}
@@ -270,7 +274,7 @@ export function PrioritiesWidgetContent() {
 								priority={priority}
 								isToggling={toggling === priority.id}
 								isDeleting={deleting === priority.id}
-								onToggle={() => handleToggle(priority.id, priority.completed)}
+								onToggle={() => handleToggle(priority.id, priority.completed, priority.content)}
 								onDelete={() => handleDelete(priority.id)}
 							/>
 						))}
@@ -294,7 +298,7 @@ export function PrioritiesWidgetContent() {
 									priority={priority}
 									isToggling={toggling === priority.id}
 									isDeleting={deleting === priority.id}
-									onToggle={() => handleToggle(priority.id, priority.completed)}
+									onToggle={() => handleToggle(priority.id, priority.completed, priority.content)}
 									onDelete={() => handleDelete(priority.id)}
 								/>
 							))}

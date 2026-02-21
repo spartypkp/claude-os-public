@@ -82,9 +82,12 @@ function getRoleColor(role: string): string {
       return 'bg-yellow-500';
     case 'project':
       return 'bg-purple-500';
-    case 'deep-work':
-    case 'focus':
+    case 'writer':
       return 'bg-blue-500';
+    case 'researcher':
+      return 'bg-teal-500';
+    case 'curator':
+      return 'bg-amber-500';
     default:
       return 'bg-gray-500';
   }
@@ -134,7 +137,7 @@ export function SessionInfoPanel({
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE}/api/system/sessions/${sessionId}`);
+        const response = await fetch(`${API_BASE}/api/sessions/${sessionId}`);
         const data = await response.json();
 
         if (!cancelled) {

@@ -100,7 +100,7 @@ interface ToolConfig {
   category: 'tool' | 'system';  // 'system' → SystemEventChip, 'tool' → ToolChip
   getOneLiner: (input, result?) => string;  // Collapsed text
   showToolName?: boolean;        // Show tool name as inline prefix (default: true)
-  chipLabel?: string;            // Override prefix label (e.g., reply_to_chief → "REPLY")
+  chipLabel?: string;            // Override prefix label (e.g., pet → "EMBER")
 }
 ```
 
@@ -123,11 +123,11 @@ When `showToolName` is false:
 - File ops: Read, Write, Edit (showToolName: false — verb in one-liner)
 - Search: Grep, Glob (showToolName: false — pattern is clear)
 - Web: WebSearch, WebFetch (showToolName: false)
-- MCP data: contact, calendar, email, priority, etc. (showToolName: true)
+- MCP data: contact, calendar, email, opportunity, etc. (showToolName: true)
 - Subagent: Task (special rendering — agent-type pill + badges)
 
 **`category: 'system'`** — Full-width system event bars (non-expandable).
-- Lifecycle: status, timeline, reset, done, reply_to_chief, show
+- Lifecycle: status, day, reset, done
 - Orchestration: team
 - Interactive: AskUserQuestion, EnterPlanMode, ExitPlanMode, Skill
 
@@ -181,8 +181,8 @@ Reusable components for building expanded views.
 | calendar | `CalendarExpanded` |
 | messages | `MessagesExpanded` |
 | opportunity | `OpportunityExpanded` |
+| turbine | `TurbineExpanded` |
 | pet | `PetExpanded` |
-| reply_to_chief | `ReplyExpanded` |
 | Skill | `SkillExpanded` |
 
 ### `/misc` — Fallback
@@ -247,7 +247,7 @@ When `formattedName` is Task/TaskOutput/TaskStop, ToolChip renders a special lay
 Category 'system' tools render as full-width muted bars:
 - No expand/collapse
 - Icon + one-liner text only
-- Used for lifecycle events (status, timeline, reset, done, team, show, reply)
+- Used for lifecycle events (status, day, reset, done, team)
 
 ---
 

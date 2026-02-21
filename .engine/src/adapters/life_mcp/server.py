@@ -8,35 +8,40 @@ Structure:
   ├── server.py          ← This file: pure composition
   └── tools/
       ├── lifecycle.py   ← reset, done, status (CRITICAL - Claude's survival)
-      ├── system.py      ← team, service (meta-operations)
-      ├── timeline.py    ← timeline logging
-      └── helpers.py     ← shared utilities
+      ├── system.py      ← team (meta-operations incl. reply)
+      └── day.py         ← day (timeline logging + priority management)
 
   modules/*/mcp.py       ← Domain tools (calendar, contacts, email, etc.)
 
 Tools:
   Lifecycle (CRITICAL):
-    - reset(summary, path)    Refresh context - spawn fresh, kill current
+    - reset(summary)          Refresh context - spawn fresh, kill current
     - done(summary)           Work complete - log and close session
     - status(text)            Report what I'm doing (dashboard sidebar)
 
   System:
-    - team(op)                Operations: spawn, list, peek, close [Chief only]
+    - team(op)                Operations: spawn, list, peek, close, message, subscribe, reply
+    - schedule(op)            Cron schedule management
+
+  Day:
+    - day(op)                 Operations: log, priority, complete, delete, priorities
 
   Domains:
     - calendar(op)            Calendar operations (list, create, update, delete)
     - contact(op)             Contact operations (search, create, update, enrich, merge, list)
-    - email(op)               Email operations (send, draft, read, search, unread, etc.)
-    - priority(op)            Priority operations (create, delete, complete)
-    - show(what)              Render visual output (calendar, contact, etc.)
-    - timeline(description)   Add entry to day timeline
+    - email(op)               Email operations (send, draft, accounts, search, read, triage, handle, classification)
     - pet(op)                 Interact with Ember (status, feed, note, play, history)
 
+  Telegram:
+    - telegram(op)            Send, read, info, show (visual content rendering)
+
+  Analytics:
+    - analytics(op)           Operational metrics (specialists, tools, sessions, resets)
+    - lineage(op)             Search Claude's private archive
+
   Custom Apps:
-    - mock_interview(op)      Mock interview tracking
-    - dsa_topic(op)           DS&A topic confidence + practice
-    - leetcode_problem(op)    Problem + attempt tracking
-    - opportunity(op)         Job opportunity management
+    - opportunity(op)         Job opportunity pipeline management
+    - turbine(op)             Prediction market strategy management
 """
 
 from __future__ import annotations
@@ -86,13 +91,13 @@ except Exception as e:
     logger.warning(f"Failed to load system tools: {e}")
 
 # =============================================================================
-# TIMELINE TOOL
+# DAY TOOL (timeline + priorities)
 # =============================================================================
 try:
-    from adapters.life_mcp.tools.timeline import mcp as timeline_mcp
-    mcp.mount(timeline_mcp)
+    from adapters.life_mcp.tools.day import mcp as day_mcp
+    mcp.mount(day_mcp)
 except Exception as e:
-    logger.warning(f"Failed to load timeline tool: {e}")
+    logger.warning(f"Failed to load day tool: {e}")
 
 # =============================================================================
 # DOMAIN TOOLS
@@ -126,23 +131,57 @@ try:
 except Exception as e:
     logger.warning(f"Failed to load messages tools: {e}")
 
-# Priorities
+# Ember (Claude's pet)
 try:
-    from modules.priorities.mcp import mcp as priorities_mcp
-    mcp.mount(priorities_mcp)
+    from modules.ember.mcp import mcp as ember_mcp
+    mcp.mount(ember_mcp)
 except Exception as e:
-    logger.warning(f"Failed to load priorities tools: {e}")
+    logger.warning(f"Failed to load ember tools: {e}")
 
-# Show
+# =============================================================================
+# ANALYTICS TOOLS
+# =============================================================================
 try:
-    from modules.show.mcp import mcp as show_mcp
-    mcp.mount(show_mcp)
+    from modules.analytics.mcp import mcp as analytics_mcp
+    mcp.mount(analytics_mcp)
 except Exception as e:
-    logger.warning(f"Failed to load show tools: {e}")
+    logger.warning(f"Failed to load analytics tools: {e}")
+
+# =============================================================================
+# LINEAGE TOOLS
+# =============================================================================
+try:
+    from modules.lineage.mcp import mcp as lineage_mcp
+    mcp.mount(lineage_mcp)
+except Exception as e:
+    logger.warning(f"Failed to load lineage tools: {e}")
+
+# =============================================================================
+# TELEGRAM TOOLS
+# =============================================================================
+try:
+    from adapters.telegram.mcp import mcp as telegram_mcp
+    mcp.mount(telegram_mcp)
+except Exception as e:
+    logger.warning(f"Failed to load telegram tools: {e}")
 
 # =============================================================================
 # CUSTOM APP TOOLS
 # =============================================================================
+
+# Job Search
+try:
+    from modules.job_search.mcp import mcp as job_search_mcp
+    mcp.mount(job_search_mcp)
+except Exception as e:
+    logger.warning(f"Failed to load job_search tools: {e}")
+
+# Turbine (prediction market)
+try:
+    from modules.turbine.mcp import mcp as turbine_mcp
+    mcp.mount(turbine_mcp)
+except Exception as e:
+    logger.warning(f"Failed to load turbine tools: {e}")
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")

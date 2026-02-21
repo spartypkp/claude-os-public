@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     has_pinged BOOLEAN DEFAULT 0,             -- Background sessions: have they pinged?
     created_at TEXT,
     updated_at TEXT
-, conversation_id TEXT, parent_session_id TEXT, context_warning_level INTEGER DEFAULT 0, subscribed_by TEXT, spec_path TEXT);
+, conversation_id TEXT, parent_session_id TEXT, context_warning_level INTEGER DEFAULT 0, subscribed_by TEXT, spec_path TEXT, notified_chief_at TEXT, verification_passed INTEGER);
 CREATE TABLE IF NOT EXISTS contacts (
     id TEXT PRIMARY KEY,                   -- UUID
     name TEXT NOT NULL,
@@ -77,10 +77,27 @@ CREATE TABLE IF NOT EXISTS contacts (
     -- Display control
     pinned INTEGER DEFAULT 0,
 
+    -- Enrichment
+    current_state TEXT,
+    linkedin_url TEXT,
+    contact_cadence INTEGER,
+
     -- Timestamps
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS contact_history (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT NOT NULL
+        REFERENCES contacts(id) ON DELETE CASCADE,
+    entry TEXT NOT NULL,
+    entry_date TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'chief'
+        CHECK (source IN ('chief', 'email', 'imessage', 'calendar', 'manual')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contact_history_contact
+    ON contact_history(contact_id, entry_date DESC);
 CREATE TABLE IF NOT EXISTS contact_tags (
     contact_id TEXT NOT NULL,
     tag TEXT NOT NULL,
@@ -396,48 +413,6 @@ CREATE TABLE IF NOT EXISTS claude_usage (
     fetch_status TEXT CHECK(fetch_status IN ('success', 'error', 'parsing_failed')),
     error_message TEXT
 );
-CREATE TABLE IF NOT EXISTS chief_duties (
-    id TEXT PRIMARY KEY,
-    slug TEXT NOT NULL UNIQUE,           -- 'memory-consolidation'
-    name TEXT NOT NULL,                  -- 'Memory Consolidation'
-    description TEXT,
-
-    -- Schedule (daily time only - keep it simple)
-    schedule_time TEXT NOT NULL,         -- '06:00' (HH:MM, Pacific)
-
-    -- Prompt
-    prompt_file TEXT NOT NULL,           -- '.claude/scheduled/memory-consolidation.md'
-
-    -- Execution config
-    timeout_minutes INTEGER DEFAULT 45,
-
-    -- State (minimal - NO next_run!)
-    enabled INTEGER DEFAULT 1,
-    last_run TEXT,                       -- ISO timestamp of last execution
-    last_status TEXT,                    -- 'completed', 'failed', 'timeout'
-
-    -- Metadata
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS chief_duty_executions (
-    id TEXT PRIMARY KEY,
-    duty_id TEXT NOT NULL REFERENCES chief_duties(id),
-    duty_slug TEXT NOT NULL,             -- Denormalized for queries
-
-    -- Lifecycle
-    started_at TEXT NOT NULL,
-    ended_at TEXT,
-    status TEXT DEFAULT 'running'
-        CHECK (status IN ('running', 'completed', 'failed', 'timeout')),
-
-    -- Session linkage
-    session_id TEXT,                     -- Chief session during execution
-
-    -- Output
-    error_message TEXT,
-    duration_seconds INTEGER
-);
 CREATE TABLE IF NOT EXISTS missions (
     id TEXT PRIMARY KEY,
 
@@ -517,7 +492,8 @@ CREATE TABLE IF NOT EXISTS email_metadata (
     metadata_json TEXT,
 
     -- Timestamps
-    first_seen_at TEXT NOT NULL,
+    received_at TEXT,            -- Actual email date (from Apple Mail)
+    first_seen_at TEXT NOT NULL,  -- When pipeline first discovered this email
     last_updated_at TEXT NOT NULL,
 
     PRIMARY KEY (email_message_id, account_id)
@@ -527,39 +503,32 @@ CREATE TABLE IF NOT EXISTS email_classifications (
     email_message_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
 
-    -- Classification
+    -- Classification (the 3 fields that matter)
     category TEXT NOT NULL
-        CHECK (category IN ('spam', 'low', 'important', 'error')),
-    reason TEXT,
-    matched_rules TEXT,
-    confidence TEXT,
+        CHECK (category IN ('action_needed', 'heads_up', 'fyi', 'noise')),
+    summary TEXT,          -- Personalized one-liner for Will
+    briefing TEXT,         -- Rich intel for Chief
 
-    -- Action
-    action_taken TEXT
-        CHECK (action_taken IN ('archived', 'marked_read', 'escalated', 'error', NULL)),
-    escalated_to_chief BOOLEAN DEFAULT 0,
+    -- Legacy
+    reasoning TEXT,        -- Why this classification
 
-    -- Context snapshot
+    -- Context snapshot (pipeline backfills after agent runs)
+    display_name TEXT,     -- Human-friendly sender identity (e.g. "Modal (via Ashby)")
     sender TEXT,
     subject TEXT,
     preview TEXT,
 
-    -- Performance
+    -- Triage
+    suggested_actions TEXT,     -- Newline-separated action suggestions for Chief
+    handled BOOLEAN DEFAULT 0, -- Whether this has been triaged/processed
+
+    -- Timestamps
+    received_at TEXT,           -- When email was actually received
     processing_time_ms INTEGER,
     classified_at TEXT NOT NULL,
 
     FOREIGN KEY (email_message_id, account_id)
         REFERENCES email_metadata(email_message_id, account_id)
-);
-CREATE TABLE IF NOT EXISTS triggers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL                      -- 'scheduled' or 'calendar'
-        CHECK (type IN ('scheduled', 'calendar')),
-    time_spec TEXT NOT NULL,                -- HH:MM for scheduled, minutes for calendar (e.g., '15')
-    enabled INTEGER NOT NULL DEFAULT 1,     -- Boolean: is this trigger active
-    last_run TEXT,                          -- ISO8601 timestamp of last execution
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(type, time_spec)                 -- Prevent duplicate triggers
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(ended_at) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
@@ -617,11 +586,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_active_context
 ON sessions(ended_at, context_warning_level)
 WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON claude_usage(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_chief_duties_slug ON chief_duties(slug);
-CREATE INDEX IF NOT EXISTS idx_chief_duties_enabled ON chief_duties(enabled);
-CREATE INDEX IF NOT EXISTS idx_chief_duty_executions_duty ON chief_duty_executions(duty_id);
-CREATE INDEX IF NOT EXISTS idx_chief_duty_executions_status ON chief_duty_executions(status);
-CREATE INDEX IF NOT EXISTS idx_chief_duty_executions_started ON chief_duty_executions(started_at);
 CREATE INDEX IF NOT EXISTS idx_missions_next ON missions(next_run)
     WHERE enabled = 1 AND next_run IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_missions_app ON missions(app_slug);
@@ -641,6 +605,8 @@ CREATE INDEX IF NOT EXISTS idx_classifications_category
 ON email_classifications(category, classified_at DESC);
 CREATE INDEX IF NOT EXISTS idx_classifications_recent
 ON email_classifications(classified_at DESC);
+CREATE INDEX IF NOT EXISTS idx_classifications_unhandled
+ON email_classifications(handled, category, classified_at DESC) WHERE handled = 0;
 CREATE VIEW IF NOT EXISTS leetcode_impl_status AS
 SELECT
     p.*,
@@ -674,42 +640,6 @@ LEFT JOIN (
 ) s ON p.problem_number = s.problem_number AND s.rn = 1
 WHERE p.front_text IS NOT NULL
 /* leetcode_speedrun_status(problem_number,name,pattern,next_review,interval_days,ease_factor,review_status) */;
-
--- =============================================================================
--- Reading List
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS reading_list_items (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT,
-    type TEXT NOT NULL DEFAULT 'book',
-    status TEXT NOT NULL DEFAULT 'want-to-read',
-    rating INTEGER,
-    notes TEXT,
-    tags TEXT,                -- JSON array
-    added_date TEXT NOT NULL,
-    started_date TEXT,
-    finished_date TEXT
-);
-
--- Seed data for Reading List example app
-INSERT OR IGNORE INTO reading_list_items (id, title, author, type, status, rating, notes, tags, added_date, started_date, finished_date) VALUES
-    -- Currently reading (3)
-    ('seed-01', 'Thinking, Fast and Slow', 'Daniel Kahneman', 'book', 'reading', NULL, NULL, '["psychology","decision-making"]', '2025-12-15', '2026-01-10', NULL),
-    ('seed-02', 'The Pragmatic Programmer', 'David Thomas & Andrew Hunt', 'book', 'reading', NULL, NULL, '["engineering","craft"]', '2026-01-05', '2026-01-20', NULL),
-    ('seed-03', 'Designing Data-Intensive Applications', 'Martin Kleppmann', 'book', 'reading', NULL, NULL, '["systems","databases"]', '2025-11-20', '2026-02-01', NULL),
-    -- Want to read (4)
-    ('seed-04', 'The Design of Everyday Things', 'Don Norman', 'book', 'want-to-read', NULL, NULL, '["design","ux"]', '2026-02-01', NULL, NULL),
-    ('seed-05', 'Structure and Interpretation of Computer Programs', 'Harold Abelson & Gerald Jay Sussman', 'book', 'want-to-read', NULL, NULL, '["cs","fundamentals"]', '2026-01-28', NULL, NULL),
-    ('seed-06', 'Meditations on First Philosophy', 'Rene Descartes', 'book', 'want-to-read', NULL, NULL, '["philosophy"]', '2026-02-05', NULL, NULL),
-    ('seed-07', 'How to Build a Car', 'Adrian Newey', 'book', 'want-to-read', NULL, NULL, '["engineering","design"]', '2026-02-10', NULL, NULL),
-    -- Finished (3)
-    ('seed-08', 'Attention Is All You Need', 'Vaswani et al.', 'paper', 'finished', 5, 'The transformer paper that changed everything. Dense but essential reading for anyone in ML.', '["ml","transformers"]', '2025-09-01', '2025-09-05', '2025-09-15'),
-    ('seed-09', 'The Mythical Man-Month', 'Frederick P. Brooks Jr.', 'book', 'finished', 4, 'Timeless insights on software project management. "Adding manpower to a late project makes it later" still holds.', '["engineering","management"]', '2025-10-10', '2025-10-15', '2025-11-20'),
-    ('seed-10', 'A Few Useful Things to Know About Machine Learning', 'Pedro Domingos', 'article', 'finished', 4, 'Great overview of practical ML wisdom. Good for building intuition.', '["ml","overview"]', '2025-11-01', '2025-11-01', '2025-11-03'),
-    -- Abandoned (1)
-    ('seed-11', 'Godel, Escher, Bach', 'Douglas Hofstadter', 'book', 'abandoned', NULL, 'Fascinating but too dense for right now. Will revisit when I have more bandwidth.', '["math","philosophy"]', '2025-08-15', '2025-08-20', NULL);
 
 -- =============================================================================
 -- Ember - Claude's Pet
@@ -790,3 +720,90 @@ CREATE INDEX IF NOT EXISTS idx_cron_log_entry ON cron_log(entry_id);
 CREATE INDEX IF NOT EXISTS idx_cron_log_fired ON cron_log(fired_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cron_entries_next ON cron_entries(next_run)
     WHERE enabled = 1;
+
+-- Telegram message log (for context recovery)
+CREATE TABLE IF NOT EXISTS telegram_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    chat_type TEXT NOT NULL,          -- 'private', 'group', 'supergroup'
+    chat_title TEXT,                  -- group name (null for DMs)
+    user_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    message_text TEXT NOT NULL,
+    direction TEXT NOT NULL,          -- 'inbound' or 'outbound'
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_messages_chat ON telegram_messages(chat_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_telegram_messages_created ON telegram_messages(created_at DESC);
+
+-- =============================================================================
+-- Service Access & Defaults
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS service_access (
+    service TEXT PRIMARY KEY
+        CHECK (service IN ('email', 'calendar', 'contacts', 'messages')),
+    tier TEXT NOT NULL DEFAULT 'assist'
+        CHECK (tier IN ('read', 'assist', 'autonomous')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Seed with sane defaults
+INSERT OR IGNORE INTO service_access (service, tier) VALUES
+    ('email', 'assist'),
+    ('calendar', 'assist'),
+    ('contacts', 'assist'),
+    ('messages', 'read');
+
+-- =============================================================================
+-- Tool Calls Tracking
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    called_at TEXT NOT NULL,
+    duration_ms INTEGER,
+    success INTEGER,
+    error_type TEXT,
+    detail TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name, called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_date ON tool_calls(called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_detail ON tool_calls(tool_name, detail) WHERE detail IS NOT NULL;
+
+-- =============================================================================
+-- Specialist Tasks View
+-- =============================================================================
+
+CREATE VIEW IF NOT EXISTS specialist_tasks AS
+SELECT
+    s.conversation_id,
+    MIN(s.role) as role,
+    MIN(s.spec_path) as spec_path,
+    MIN(CASE WHEN s.mode = 'preparation' THEN s.started_at END) as prep_started,
+    MAX(CASE WHEN s.mode = 'verification' THEN s.ended_at END) as task_ended,
+    COUNT(CASE WHEN s.mode = 'implementation' THEN 1 END) as impl_iterations,
+    MAX(CASE WHEN s.mode = 'verification' THEN s.verification_passed END) as passed,
+    SUM(
+        CASE WHEN s.ended_at IS NOT NULL
+        THEN (julianday(s.ended_at) - julianday(s.started_at)) * 24 * 60
+        ELSE NULL END
+    ) as total_duration_min
+FROM sessions s
+WHERE s.conversation_id IS NOT NULL
+    AND s.role NOT IN ('chief', 'system')
+GROUP BY s.conversation_id;
+
+CREATE TABLE IF NOT EXISTS service_defaults (
+    service TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (service, key)
+);

@@ -206,7 +206,7 @@ class UsageTracker:
                         timeout=5,
                         capture_output=True
                     )
-                except:
+                except Exception:
                     pass
 
     def _parse_usage_output(self, output: str) -> Optional[Dict[str, Any]]:
@@ -264,7 +264,7 @@ class UsageTracker:
                         # Simple parsing - assume current year
                         from dateutil import parser
                         weekly_reset_at = parser.parse(reset_str, fuzzy=True)
-                    except:
+                    except Exception:
                         # Fallback: assume Monday
                         now = datetime.now()
                         days_until_monday = (7 - now.weekday()) % 7

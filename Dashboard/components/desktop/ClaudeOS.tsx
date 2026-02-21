@@ -28,15 +28,16 @@ import {
 	useSensors,
 } from '@dnd-kit/core';
 import { Loader2, RefreshCw, XCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CalendarWindowContent } from './apps/calendar/CalendarWindowContent';
 import { ContactsWindowContent } from './apps/contacts/ContactsWindowContent';
 import { EmailWindowContent } from './apps/email/EmailWindowContent';
 import { MessagesWindowContent } from './apps/messages/MessagesWindowContent';
 import { FinderWindowContent } from './apps/finder/FinderWindowContent';
-import { RolesWindow } from './apps/roles/RolesWindow';
 import { SettingsWindowContent } from './apps/settings/SettingsWindowContent';
+import { ObservatoryWindowContent } from './apps/analytics/ObservatoryWindowContent';
+import { ProjectsWindowContent } from './apps/projects/ProjectsWindowContent';
 
 import { ContextMenu } from './ContextMenu';
 import { DesktopIcon } from './DesktopIcon';
@@ -122,14 +123,21 @@ export function ClaudeOS() {
 		loadTree();
 	}, [mounted, loadTree]);
 
+	// Debounced loadTree for rapid SSE events (file create/delete/move bursts)
+	const loadTreeTimerRef = useRef<NodeJS.Timeout | null>(null);
+	const debouncedLoadTree = useCallback(() => {
+		if (loadTreeTimerRef.current) clearTimeout(loadTreeTimerRef.current);
+		loadTreeTimerRef.current = setTimeout(() => loadTree(), 300);
+	}, [loadTree]);
+
 	// Desktop store for file sync
 	const handleExternalChange = useDesktopStore((state) => state.handleExternalChange);
 
 	// Listen for file system changes
 	useFileEvents({
-		onCreated: () => loadTree(),
-		onDeleted: () => loadTree(),
-		onMoved: () => loadTree(),
+		onCreated: () => debouncedLoadTree(),
+		onDeleted: () => debouncedLoadTree(),
+		onMoved: () => debouncedLoadTree(),
 		onModified: (event) => {
 			// Notify desktop store of external modification
 			// This will update any open editors tracking this file
@@ -141,12 +149,12 @@ export function ClaudeOS() {
 	// Listen for refresh events from context menu
 	useEffect(() => {
 		const handleRefresh = () => {
-			loadTree();
+			debouncedLoadTree();
 		};
 
 		window.addEventListener('refresh-desktop', handleRefresh);
 		return () => window.removeEventListener('refresh-desktop', handleRefresh);
-	}, [loadTree]);
+	}, [debouncedLoadTree]);
 
 	// Close file windows when files are moved (path becomes stale)
 	useEffect(() => {
@@ -674,7 +682,8 @@ export function ClaudeOS() {
 					{win.appType === 'contacts' && <ContactsWindowContent />}
 		{win.appType === 'email' && <EmailWindowContent />}
 			{win.appType === 'messages' && <MessagesWindowContent />}
-					{win.appType === 'roles' && <RolesWindow />}
+					{win.appType === 'analytics' && <ObservatoryWindowContent />}
+					{win.appType === 'projects' && <ProjectsWindowContent />}
 					{/* File viewer windows - routes to appropriate editor */}
 					{!win.appType && <DocumentRouter filePath={win.filePath} />}
 				</DesktopWindow>

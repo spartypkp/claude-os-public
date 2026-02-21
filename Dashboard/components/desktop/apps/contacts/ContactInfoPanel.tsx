@@ -37,6 +37,9 @@ interface Contact {
   pinned: boolean;
   tags: string[];
   last_contact_date?: string;
+  current_state?: string;
+  linkedin_url?: string;
+  contact_cadence?: number;
   created_at: string;
   updated_at: string;
 }

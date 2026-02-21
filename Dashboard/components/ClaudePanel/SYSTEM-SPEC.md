@@ -1,19 +1,20 @@
 # ClaudePanel System Specification
 
-**Location:** `Dashboard/components/ClaudePanel/`  
-**Purpose:** Main Claude conversation panel with session management, transcript display, and chat input  
-**Last Updated:** Jan 2026
+**Location:** `Dashboard/components/ClaudePanel/`
+**Purpose:** Main Claude conversation panel with session management, transcript display, and chat input
+**Last Updated:** Feb 2026
 
 ---
 
 ## Overview
 
 ClaudePanel is the primary interface for interacting with Claude sessions. It displays:
-- Session list (multiple sessions: Chief, System, Focus, etc.)
-- Transcript viewer (conversation history with tool calls)
-- Chat input with file attachments
+- Conversation tabs (multiple sessions: Chief, specialists, etc.)
+- Transcript viewer (conversation history with tool calls, session boundaries)
+- Chat input with file attachments and per-conversation draft persistence
 - Activity indicators (thinking, tool use)
-- Context warnings (high context usage)
+- Handoff progress (inline during session resets)
+- Task list panel (Claude Code task tracking)
 
 ---
 
@@ -23,22 +24,18 @@ ClaudePanel is the primary interface for interacting with Claude sessions. It di
 ClaudePanel/
 ├── SYSTEM-SPEC.md              # This file
 ├── index.ts                    # Public exports
-├── constants.ts                # Constants, configs, role mappings
+├── constants.ts                # Constants, configs
 │
-├── ClaudePanel.tsx             # Main orchestrator (~560 lines)
-├── ClaudeLogo.tsx              # Claude SVG logo component
+├── ClaudePanel.tsx             # Main orchestrator
 ├── EmptyState.tsx              # "BRB" empty state display
 ├── MinimizedView.tsx           # Collapsed vertical strip
 ├── InputArea.tsx               # Chat input + attachment pills
 │
-├── ChatInput.tsx               # Text input component
-├── ConversationList.tsx        # Conversation tabs (~460 lines)
-├── ConversationRow.tsx         # Individual conversation row
-├── ChiefPopoutPanel.tsx        # Chief-specific popout panel
-├── ClaudeActivityHeader.tsx    # Activity banner + ThinkingIndicator
-├── ClaudeActivityIndicator.tsx # Activity state indicator
-├── ContextWarningBanner.tsx    # Context warning display
-├── TaskListPanel.tsx           # Task list display
+├── ChatInput.tsx               # Text input with per-conversation draft persistence
+├── ConversationList.tsx        # Conversation tabs with status bar + phase accents
+├── ClaudeActivityHeader.tsx    # Active task banner
+├── LifecycleToast.tsx          # Session lifecycle toast notifications
+├── TaskListPanel.tsx           # Task list display (reads ~/.claude/tasks/)
 │
 └── hooks/
     ├── index.ts                # Hook exports
@@ -61,13 +58,16 @@ AppShell
             ├─► usePanelResize       → Width state + localStorage
             ├─► useAttachments       → File state management
             ├─► useDragDrop          → File drop handling
+            ├─► useHandoffState      → SSE handoff lifecycle per conversation
             │
-            ├─► ConversationList     → Conversation tabs
-            │       └─► ConversationRow → Individual conversation
+            ├─► ConversationList     → Conversation tabs + status bar + phase accents
             │
             ├─► TranscriptViewer     → Conversation display (external)
+            │       Uses: lib/systemMessages.ts for injection detection
+            │       Uses: transcript/tools/ for tool chip rendering
+            │
             ├─► InputArea            → Chat input + attachments
-            │       └─► ChatInput    → Text input
+            │       └─► ChatInput    → Text input (drafts persist per conversation)
             │
             └─► MinimizedView        → Collapsed state
                 (or) EmptyState      → No session state
@@ -83,10 +83,7 @@ AppShell
 - Session sync: URL params, auto-select Chief, session lifecycle
 - Global keyboard handlers (Escape to interrupt)
 - Message sending with attachments
-
-### ClaudeLogo.tsx
-- SVG Claude logo used in session icons
-- Exported for reuse in MinimizedView
+- Threads handoff state to ConversationList and TranscriptViewer
 
 ### EmptyState.tsx
 - Fun "BRB" messages when no sessions (TV static effect)
@@ -94,7 +91,7 @@ AppShell
 - "Start Chief" button
 
 ### MinimizedView.tsx
-- Vertical strip of session icons
+- Vertical strip of session icons (uses `getRoleConfig()` from sessionUtils)
 - Click to expand and select session
 - Activity indicators (green dot = active, blue = tool)
 - Plus button for new specialists
@@ -105,22 +102,24 @@ AppShell
 - ChatInput wrapper
 - Help text (Enter to send, Esc to stop)
 
+### ChatInput.tsx
+- Text input with per-conversation draft persistence via localStorage
+- Drafts keyed by sessionId, survive tab switches and page resets
+- Cleared on send, flushed on cleanup
+
 ### ConversationList.tsx
-- Horizontal conversation tabs with icons
+- Horizontal conversation tabs with role icons
+- Status bar showing handoff phase, interactive mode indicator
+- Phase accent stripes on autonomous specialist tabs (colored by current phase)
 - Session actions dropdown (end, handoff, reset)
-- Worker count badge
 - Minimize button
 
-### ConversationRow.tsx
-- Individual conversation tab
-- Role icon and color
-- Activity state indicator
-- Selection highlight
+### ClaudeActivityHeader.tsx
+- Active task banner (trimmed from original multi-component design)
 
-### ChiefPopoutPanel.tsx
-- Chief-specific expanded panel
-- Shows Chief conversation in popout mode
-- Used when Chief is the active conversation
+### TaskListPanel.tsx
+- Reads tasks from backend (`~/.claude/tasks/` format)
+- Shows task items with status icons, IDs, owner badges, blocked indicators
 
 ---
 
@@ -186,11 +185,9 @@ MAX_PREVIEW_CHARS = 2000
 INBOX_PATH = 'Inbox'
 
 // API
-API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'
+API_BASE — re-exported from '@/lib/api' (reads NEXT_PUBLIC_API_URL env var, defaults to http://localhost:5001)
 
 // Configs
-ROLE_NAMES: Record<string, string>
-ROLE_ICONS: Record<string, RoleIconConfig>
 BREAK_MESSAGES: BreakMessage[]
 CLAUDE_LOGO_PATH: string  // SVG path data
 ```
@@ -199,13 +196,17 @@ CLAUDE_LOGO_PATH: string  // SVG path data
 
 ## Session Roles
 
-| Role | Icon | Color | Description |
-|------|------|-------|-------------|
-| chief | ClaudeLogo | #da7756 | Main orchestrator |
-| builder | Code2 | blue | Custom Apps, infrastructure, debugging |
-| deep-work | Target | green | Sustained complex tasks |
-| project | Briefcase | purple | External codebases |
-| idea | Lightbulb | yellow | Brainstorming, design, planning |
+Role configs are defined in `lib/sessionUtils.ts` as the single source of truth (`ROLE_CONFIGS`). All roles use color `#da7756`.
+
+| Role | Icon | Description |
+|------|------|-------------|
+| chief | ClaudeLogo | Main orchestrator |
+| builder | Code2 | Custom Apps, infrastructure, debugging |
+| writer | BookOpen | Sustained focus on a single artifact |
+| researcher | Search | Investigates topics, synthesizes findings |
+| idea | Lightbulb | Brainstorming, design, planning |
+| project | FolderGit2 | External codebases |
+| curator | Library | Audits, organizes, maintains accuracy |
 
 **Conversation Architecture:** Chief uses an "eternal" `conversation_id` of `"chief"` that persists across days, providing continuity for overnight missions and worker ownership. Specialists use unique conversation IDs per task.
 
@@ -247,9 +248,9 @@ CLAUDE_LOGO_PATH: string  // SVG path data
 ## Adding New Features
 
 ### Adding a new role
-1. Add to `ROLE_NAMES` in `constants.ts`
-2. Add icon config to `ROLE_ICONS` in `constants.ts`
-3. Add to `MINIMIZED_ROLE_ICONS` in `MinimizedView.tsx`
+1. Add to `ROLE_CONFIGS` in `lib/sessionUtils.ts` (single source of truth)
+2. Add to `SessionRole` type in backend `types.py`
+3. All consumers (ConversationList, MinimizedView, ContextMenu) use `getRoleConfig()`
 
 ### Adding attachment features
 1. Update `useAttachments.ts` hook
@@ -263,12 +264,44 @@ CLAUDE_LOGO_PATH: string  // SVG path data
 
 ---
 
+## System Message Detection
+
+**Location:** `lib/systemMessages.ts`
+
+User messages in the transcript may actually be system injections (hook outputs, handoffs, role prompts, etc.). The `isSystemMessage()` function gates which messages get rendered as system pills vs. user bubbles.
+
+**Critical rule:** All pattern matching uses `startsWith` on trimmed content — never `includes`. This prevents false positives when trigger words appear mid-message in normal user text.
+
+**Patterns detected (must appear at START of message):**
+- `[AUTO-HANDOFF]` — Session handoff injection
+- `<session-role>`, `<session-mode>` — Role/mode prompt injection
+- `<system-reminder>` — System reminder injection
+- `SessionStart:` — Startup hook context
+- `[CLAUDE OS SYS:` — System notifications (specialist complete, context warnings, etc.)
+- `[TEAM →` — Direct team messages between sessions
+- `[TEAM REQUEST:` — Spawn requests from non-Chief specialists
+- `Base directory for this skill:`, `ARGUMENTS:` — Skill invocation
+- `[Request interrupted by user]` — User interrupt
+
+**Downstream routing (in TranscriptViewer):**
+1. `isSpecialistNotification()` → SpecialistReport component (pass/fail card)
+2. `isSpecialistReply()` → SpecialistReplyCard (chat-style card from specialist)
+3. `isTeamMessage()` → Team message card
+4. Other system messages → SystemMessage pill (centered, muted)
+
+**In `groupEventsIntoTurns()`:** System messages after session boundaries are absorbed silently (they're plumbing, not content). System messages at conversation start create a synthetic `session_start` boundary.
+
+---
+
 ## External Dependencies
 
-- `TranscriptViewer` — Renders conversation events
+- `TranscriptViewer` — Renders conversation events (see inline in `transcript/`)
 - `transcript/tools/` — Tool call rendering (see `tools/SYSTEM-SPEC.md`)
+- `lib/systemMessages.ts` — System message detection and parsing
+- `lib/sessionUtils.ts` — Role configs (single source of truth)
+- `hooks/useHandoffState.ts` — SSE handoff lifecycle tracking per conversation
 - `ChatPanelContext` — Global panel state (sessionId, visibility, openSession)
-- `useClaudeSession` — SSE connection for transcript events
+- `useClaudeSession` / `useConversation` — SSE connection for transcript events
 - `useClaudeActivity` — Session list from API
 - `useChiefStatus` — Chief spawn/status
 
@@ -277,19 +310,13 @@ CLAUDE_LOGO_PATH: string  // SVG path data
 ## Debugging
 
 ### Session not loading
-```ts
-// In ClaudePanel.tsx
-console.log('Sessions:', activeSessions);
-console.log('Selected:', sessionId, sessionRole);
-console.log('ConversationId:', conversationId);
-```
+Check: `activeSessions`, `sessionId`, `conversationId` in ClaudePanel.
 
 ### Attachments not working
-```ts
-// In useAttachments.ts
-console.log('Attached:', attachedFiles);
-console.log('Adding:', path);
-```
+Check: `attachedFiles` in useAttachments.
+
+### System messages showing as user bubbles
+Check `lib/systemMessages.ts` — the pattern must appear at the START of the message content. If a new injection format isn't detected, add its prefix to `SYSTEM_MESSAGE_PATTERNS`.
 
 ### Panel not resizing
 - Check localStorage key: `claude-panel-width`

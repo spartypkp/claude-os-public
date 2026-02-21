@@ -139,11 +139,7 @@ reset(summary="Draft 1 complete, starting revision pass")
 
 Hand off to fresh Writer when context fills up.
 
-```python
-done(summary="API proposal complete, saved to Desktop/career/api-proposal.md")
-```
-
-Close session when the artifact is delivered and user confirms.
+**NEVER call `done()` on your own.** In interactive mode, the user decides when the session is over — not you. Even if the current artifact looks finished, they may have revisions or more work. Only call `done()` when the user explicitly says the session is finished.
 
 ---
 

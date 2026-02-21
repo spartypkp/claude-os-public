@@ -39,7 +39,11 @@ class HandoffService:
             "today_content": self._read_file(self.repo_root / "Desktop" / "TODAY.md"),
             "memory_content": self._read_file(self.repo_root / "Desktop" / "MEMORY.md"),
             "role_content": self._read_file(self.repo_root / ".claude" / "roles" / role / "role.md"),
-            "mode_content": self._read_file(self.repo_root / ".claude" / "roles" / role / f"{mode}.md"),
+            "mode_content": self._read_file(
+                self.repo_root / ".claude" / "modes" / f"{mode}.md"
+                if (self.repo_root / ".claude" / "modes" / f"{mode}.md").exists()
+                else self.repo_root / ".claude" / "roles" / role / f"{mode}.md"
+            ),
         }
 
     def create_chief_handoff(

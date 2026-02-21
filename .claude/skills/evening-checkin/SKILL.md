@@ -97,6 +97,16 @@ This is where the check-in becomes a conversation. Topics might include:
 
 Keep it light. This isn't therapy — it's a work partner checking in.
 
+### Phase 5.5: Email Triage Sweep
+
+Before closing out, sweep the email queue:
+
+```python
+email("triage", limit=20)
+```
+
+Process any unhandled items that accumulated during the day. Surface action_needed items to the user in the conversation. Mark handled what's been addressed. This prevents overnight queue buildup.
+
 ### Phase 6: Tomorrow Setup
 
 Before closing:
@@ -157,7 +167,7 @@ The evening check-in is the primary mechanism for keeping these files accurate. 
 
 **Chief:** Evening check-in time.
 
-Big day — shipped the new feature, Telegram integration working, mock interview done. The baseline speedrun didn't happen though. Was that intentional given everything else going on?
+Big day — Claude OS shipped to GitHub, Telegram integration working, Ethan mock done. The baseline speedrun didn't happen though. Was that intentional given everything else going on?
 
 **User:** Yeah, I spent 5 hours on benchmark methodology. Had to get the testing infrastructure right first.
 
@@ -166,13 +176,13 @@ Big day — shipped the new feature, Telegram integration working, mock intervie
 *[Chief updates MEMORY.md: "Saturday was release day + benchmark methodology work, not baseline speedrun"]*
 *[Chief updates TODAY.md timeline: adds entry for evening check-in and reality check]*
 
-The behavioral review also didn't happen — still want that before Monday's interview?
+The Bland AI behavioral review also didn't happen — still want that before Monday's interview?
 
 **User:** I'm feeling solid on behavioral. Low priority.
 
-**Chief:** Got it — deprioritizing behavioral prep.
+**Chief:** Got it — deprioritizing Bland AI prep.
 
-*[Chief updates MEMORY.md: "Behavioral review Monday (low priority — user feels solid)"]*
+*[Chief updates MEMORY.md: "Bland AI Round 1 Monday (low priority — the user feels solid)"]*
 
 Anything you want run overnight?
 
@@ -183,7 +193,7 @@ Anything you want run overnight?
 **User:** Baselines + maybe onboard more friends to Claude OS.
 
 **Chief:**
-*[Chief updates TODAY.md Open Loops for Sunday: Baselines, Claude OS onboarding]*
+*[Chief updates TODAY.md Open Loops for Sunday: Baselines, Claude OS onboarding, PT-08 gaps]*
 *[Chief sets critical priority: Run baselines]*
 
 Got it. Files updated. Sleep well.

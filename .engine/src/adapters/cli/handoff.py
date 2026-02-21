@@ -16,6 +16,7 @@ information needed to:
 """
 
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -70,7 +71,8 @@ def _notify_backend_event(event_type: str, session_id: str, data: dict = None):
     import json as json_module
 
     try:
-        url = "http://localhost:5001/api/sessions/notify-event"
+        port = os.environ.get("CLAUDE_OS_PORT", "5001")
+        url = f"http://localhost:{port}/api/sessions/notify-event"
         payload = json_module.dumps({
             "event_type": event_type,
             "session_id": session_id,
@@ -450,7 +452,7 @@ def execute_handoff(handoff_id: str):
         logger.error(f"Handoff execution error: {e}", exc_info=True)
         try:
             update_handoff_status(handoff_id, "failed", error=str(e))
-        except:
+        except Exception:
             pass
 
 

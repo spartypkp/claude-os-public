@@ -14,6 +14,8 @@ from core.config import settings
 class SystemStorage:
     """Thin wrapper around the shared SQLite database."""
 
+    _schema_initialized = False
+
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -26,7 +28,9 @@ class SystemStorage:
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute("PRAGMA busy_timeout=5000;")
         self._conn.execute("PRAGMA foreign_keys=ON;")
-        self._initialize_schema()
+        if not SystemStorage._schema_initialized:
+            self._initialize_schema()
+            SystemStorage._schema_initialized = True
 
     def close(self) -> None:
         self._conn.close()

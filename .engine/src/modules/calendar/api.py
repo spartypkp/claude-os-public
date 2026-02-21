@@ -1,17 +1,17 @@
 """Calendar API - REST endpoints for Dashboard.
 
-Bridges to Apple Calendar via direct database read and AppleScript for mutations.
+Bridges to Apple Calendar via CalendarService.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
-import subprocess
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.database import get_db
-from modules.calendar import get_events, get_calendars, CALENDAR_ALIASES
+from modules.calendar import get_calendar_service
+from modules.calendar.models import EventCreate
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,47 @@ async def _run_blocking(fn, *args, **kwargs):
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
+def _get_events_as_dicts(from_date=None, to_date=None, limit=50, calendar_filter=None):
+    """Get events from service and convert to legacy dict format."""
+    service = get_calendar_service()
+    events = service.get_events(
+        start=from_date,
+        end=to_date,
+        calendar_id=calendar_filter,
+        limit=limit,
+    )
+    return [
+        {
+            "summary": event.summary,
+            "start_ts": event.start.isoformat() if event.start else None,
+            "end_ts": event.end.isoformat() if event.end else None,
+            "location": event.location,
+            "all_day": event.all_day,
+            "calendar_name": event.calendar_name,
+            "kind": "calendar",
+            "id": event.id,
+            "organizer_email": event.organizer_email,
+            "organizer_name": event.organizer_name,
+        }
+        for event in events
+    ]
+
+
+def _get_calendars_as_dicts():
+    """Get calendars from service and convert to legacy dict format."""
+    service = get_calendar_service()
+    calendars = service.get_calendars()
+    return [
+        {
+            "id": cal.id,
+            "name": cal.name,
+            "title": cal.name,
+            "UUID": cal.id,
+        }
+        for cal in calendars
+    ]
+
+
 @router.get("/events")
 async def list_events(
     from_date: Optional[str] = Query(None, description="Start date (ISO format)"),
@@ -33,35 +74,28 @@ async def list_events(
     use_preferred: bool = Query(True, description="Only show preferred calendars"),
     limit: int = Query(100, ge=1, le=500),
 ):
-    """List calendar events from Apple Calendar.
-
-    Reads directly from the macOS Calendar database for real-time access.
-    """
+    """List calendar events from Apple Calendar."""
     try:
-        # Parse dates if provided
         start = None
         end = None
 
         if from_date:
             start = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
         else:
-            # Default: start from beginning of today
             now = datetime.now()
             start = datetime(now.year, now.month, now.day)
 
         if to_date:
             end = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
         else:
-            # Default: end at start + days
             end = start + timedelta(days=days)
 
         events = await _run_blocking(
-            get_events,
+            _get_events_as_dicts,
             from_date=start,
             to_date=end,
             limit=limit,
             calendar_filter=calendar,
-            use_preferred=use_preferred,
         )
 
         return {
@@ -80,7 +114,7 @@ async def list_events(
 async def list_calendars():
     """List available calendars."""
     try:
-        calendars = await _run_blocking(get_calendars)
+        calendars = await _run_blocking(_get_calendars_as_dicts)
         return {"calendars": calendars, "count": len(calendars)}
     except Exception as e:
         logger.error(f"Failed to fetch calendars: {e}")
@@ -104,6 +138,7 @@ class MoveEventRequest(BaseModel):
 
 def run_applescript(script: str) -> str:
     """Run AppleScript and return output."""
+    import subprocess
     try:
         result = subprocess.run(
             ['osascript', '-e', script],
@@ -121,49 +156,31 @@ def run_applescript(script: str) -> str:
 
 @router.post("/create")
 async def create_event(req: CreateEventRequest):
-    """Create a new calendar event via AppleScript.
-
-    Uses AppleScript to create events in Apple Calendar since the MCP
-    tool would require a Claude instance to invoke.
-    """
+    """Create a new calendar event via CalendarService."""
     try:
-        # Parse dates
         start_dt = datetime.fromisoformat(req.start_date.replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(req.end_date.replace('Z', '+00:00'))
 
-        # Format for AppleScript
-        start_str = start_dt.strftime('%B %d, %Y at %I:%M:%S %p')
-        end_str = end_dt.strftime('%B %d, %Y at %I:%M:%S %p')
-
-        # Escape title for AppleScript
-        title_escaped = req.title.replace('"', '\\"')
-        location_escaped = (req.location or '').replace('"', '\\"')
-        notes_escaped = (req.notes or '').replace('"', '\\"')
-
-        # Resolve calendar alias (e.g., "Exchange" -> "Calendar") and default
+        service = get_calendar_service()
+        aliases = service.get_aliases()
         raw_calendar = req.calendar_name or 'Calendar'
-        calendar_name = CALENDAR_ALIASES.get(raw_calendar.lower(), raw_calendar)
+        calendar_name = aliases.get(raw_calendar.lower(), raw_calendar)
 
-        # Build AppleScript
-        script = f'''
-tell application "Calendar"
-    tell calendar "{calendar_name}"
-        set newEvent to make new event with properties {{summary:"{title_escaped}", start date:date "{start_str}", end date:date "{end_str}"'''
+        event_create = EventCreate(
+            summary=req.title,
+            start=start_dt,
+            end=end_dt,
+            location=req.location,
+            description=req.notes,
+            calendar_id=calendar_name,
+        )
 
-        if req.location:
-            script += f', location:"{location_escaped}"'
-        if req.notes:
-            script += f', description:"{notes_escaped}"'
+        created = await _run_blocking(service.create_event, event_create)
+        if not created:
+            raise Exception("Failed to create event")
 
-        script += '''}}
-        return uid of newEvent
-    end tell
-end tell'''
-
-        event_uid = await _run_blocking(run_applescript, script)
-        logger.info(f"Created event: {req.title} -> {event_uid}")
-
-        return {"success": True, "event_id": event_uid}
+        logger.info(f"Created event: {req.title} -> {created.id}")
+        return {"success": True, "event_id": created.id}
 
     except Exception as e:
         logger.error(f"Failed to create event: {e}")
@@ -172,21 +189,14 @@ end tell'''
 
 @router.post("/move")
 async def move_event(req: MoveEventRequest):
-    """Move a calendar event to a new time via AppleScript.
-
-    Since Apple Calendar MCP doesn't have an update operation,
-    we use AppleScript to modify the event directly.
-    """
+    """Move a calendar event to a new time via AppleScript."""
     try:
-        # Parse dates
         new_start = datetime.fromisoformat(req.new_start.replace('Z', '+00:00'))
         new_end = datetime.fromisoformat(req.new_end.replace('Z', '+00:00'))
 
-        # Format for AppleScript
         start_str = new_start.strftime('%B %d, %Y at %I:%M:%S %p')
         end_str = new_end.strftime('%B %d, %Y at %I:%M:%S %p')
 
-        # AppleScript to find and update the event by UID
         script = f'''
 tell application "Calendar"
     set foundEvent to missing value
@@ -226,8 +236,8 @@ end tell'''
 # =============================================================================
 
 DEFAULT_CALENDAR_SETTINGS = {
-    "default_calendar": "Calendar",
-    "default_meeting_calendar": "Calendar",
+    "default_calendar": "Willdiamond3",
+    "default_meeting_calendar": "Willdiamond3",
     "default_personal_calendar": "Calendar",
 }
 

@@ -2,7 +2,7 @@
 
 **Location:** `Dashboard/components/desktop/`  
 **Purpose:** ClaudeOS desktop environment — macOS-inspired window manager  
-**Last Updated:** Jan 2026
+**Last Updated:** Feb 2026
 
 ---
 
@@ -44,6 +44,7 @@ desktop/
 │
 ├── widgets/               # Widget content for menubar dropdowns
 │   ├── CalendarWidgetContent.tsx   # Calendar widget content
+│   ├── EmailWidgetContent.tsx      # Email triage widget content
 │   └── PrioritiesWidgetContent.tsx # Priorities widget content
 │
 └── editors/               # File type editors
@@ -120,10 +121,18 @@ macOS-style dock with:
 
 ### Menubar.tsx
 
-Top menu bar with:
-- Apple menu (system actions)
-- App-specific menus
-- Status icons (health, clock)
+Top menu bar with three sections:
+
+**Left:** Claude logo (orange, opens About dialog) + active app name + Claude status text.
+
+**Center:** Three widget dropdowns with inline indicators:
+- Calendar (red icon) — inline label showing `Now: Event (Xm left)` or `Next: Event — HH:MM AM`
+- Priorities (amber icon) — inline text showing `N left` or green `N/N` when all complete
+- Email (blue icon) — inline badge with unread count (hidden at inbox zero)
+
+Each icon opens a dropdown with full widget content (CalendarWidgetContent, PrioritiesWidgetContent, EmailWidgetContent).
+
+**Right:** Dark mode toggle, connection status, usage battery, clock.
 
 ### DesktopWindow.tsx
 
@@ -180,6 +189,7 @@ apps/[appname]/
 | `roles` | Claude Roles | RolesWindow | Claude personas |
 | `settings` | Claude Settings | SettingsWindowContent | System settings |
 | `widgets-manager` | Claude Widgets | WidgetsWindowContent | Menubar widget configuration |
+| `analytics` | Observatory | ObservatoryWindowContent | Session, tool, and specialist analytics |
 
 ### Adding a New Core App
 
@@ -196,10 +206,13 @@ apps/[appname]/
 
 **Note:** Widgets have been moved from floating desktop panels to menubar dropdowns. The `DesktopWidget.tsx` and `DesktopWidgetRnd.tsx` files remain but are no longer used. Widgets now render as dropdown menus from center menubar icons via `WidgetDropdown` in `Menubar.tsx`.
 
-| Content Component | Purpose | Location |
-|-------------------|---------|----------|
-| `CalendarWidgetContent` | Upcoming events | Menubar dropdown |
-| `PrioritiesWidgetContent` | Priority queue | Menubar dropdown |
+| Content Component | Purpose | Location | Inline Indicator |
+|-------------------|---------|----------|-----------------|
+| `CalendarWidgetContent` | Today's events | Menubar dropdown | Current/next event text |
+| `PrioritiesWidgetContent` | Priority queue | Menubar dropdown | Remaining/completion count |
+| `EmailWidgetContent` | Email triage | Menubar dropdown | Unread count badge |
+
+Widget icons are color-coded to match their dock app colors (calendar=red, priorities=amber, email=blue). Inline indicators show at-a-glance data next to each icon without opening the dropdown. Components: `CalendarInlineLabel`, `PriorityBadge`, `EmailBadge` in Menubar.tsx.
 
 The Claude Widgets app (`widgets-manager/`) now manages which widgets appear in the menubar rather than configuring floating desktop widgets.
 

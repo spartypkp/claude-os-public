@@ -62,18 +62,18 @@ class CalendarService:
         if not preferred:
             # Fallback to hardcoded defaults if no config found
             logger.warning("No calendar config in accounts, using fallback defaults")
-            self._preferred_calendars = ["Personal", "Calendar", "Work", "Home"]
+            self._preferred_calendars = ["Willdiamond3", "Calendar", "Contoural", "Home"]
             self._aliases = {
                 "exchange": "Calendar",
                 "personal": "Calendar",
-                "gmail": "Personal",
-                "work": "Work",
+                "gmail": "Willdiamond3",
+                "work": "Contoural",
             }
             self._defaults = {
-                "meeting": "Personal",
+                "meeting": "Willdiamond3",
                 "personal": "Calendar",
-                "work": "Work",
-                "fallback": "Personal",
+                "work": "Contoural",
+                "fallback": "Willdiamond3",
             }
         else:
             self._preferred_calendars = preferred
@@ -373,37 +373,3 @@ class CalendarService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    # =========================================================================
-    # Stub Methods (for API compatibility)
-    # =========================================================================
-
-    def get_accounts(self) -> List[dict]:
-        """Get calendar accounts (stub - returns empty for direct-read mode)."""
-        # Direct-read mode doesn't manage accounts
-        return []
-
-    def add_account(self, provider_type: str, name: str, config: dict, email: str = None) -> dict:
-        """Add account (stub - not supported in direct-read mode)."""
-        return {
-            'success': False,
-            'error': 'Account management not available in direct-read mode. Use Apple System Preferences.'
-        }
-
-    def remove_account(self, account_id: str) -> dict:
-        """Remove account (stub - not supported in direct-read mode)."""
-        return {
-            'success': False,
-            'error': 'Account management not available in direct-read mode. Use Apple System Preferences.'
-        }
-
-    def set_primary_account(self, account_id: str) -> dict:
-        """Set primary account (stub - not supported in direct-read mode)."""
-        return {
-            'success': False,
-            'error': 'Account management not available in direct-read mode. Use Apple System Preferences.'
-        }
-
-    async def sync_all(self) -> dict:
-        """Sync all (stub - not needed in direct-read mode)."""
-        # Direct-read mode doesn't need sync - reads directly from Apple Calendar
-        return {'apple': {'success': True, 'message': 'Direct-read mode - no sync needed'}}

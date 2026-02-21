@@ -89,7 +89,7 @@ def get_session_reminder(storage, session_id: str) -> str | None:
             )
 
             return (
-                f"[{_timestamp()}] [CLAUDE OS SYS: INFO]: Reminder - Use mcp__life__done tool to end cleanly\n\n"
+                f"[{_timestamp()}] [SYSTEM:INFO]: Reminder - Use mcp__life__done tool to end cleanly\n\n"
                 "You're in background mode. Call the `mcp__life__done` tool with summary \"what you accomplished\" to:\n"
                 "- Log your work\n"
                 "- Auto-notify Chief\n"
@@ -104,7 +104,7 @@ def get_session_reminder(storage, session_id: str) -> str | None:
                 (session_id,)
             )
             return (
-                f"[{_timestamp()}] [CLAUDE OS SYS: INFO]: Preparation phase reminder\n\n"
+                f"[{_timestamp()}] [SYSTEM:INFO]: Preparation phase reminder\n\n"
                 "You're in **preparation** mode. After creating plan.md:\n\n"
                 "Call the `mcp__life__done` tool with summary \"Plan created, ready for implementation\"\n\n"
                 "This spawns Implementation mode to execute your plan."
@@ -116,7 +116,7 @@ def get_session_reminder(storage, session_id: str) -> str | None:
                 (session_id,)
             )
             return (
-                f"[{_timestamp()}] [CLAUDE OS SYS: INFO]: Implementation phase reminder\n\n"
+                f"[{_timestamp()}] [SYSTEM:INFO]: Implementation phase reminder\n\n"
                 "You're in **implementation** mode. After completing the plan steps:\n\n"
                 "Call the `mcp__life__done` tool with summary \"Implementation complete, ready for verification\"\n\n"
                 "This spawns Verification mode to check your work."
@@ -128,7 +128,7 @@ def get_session_reminder(storage, session_id: str) -> str | None:
                 (session_id,)
             )
             return (
-                f"[{_timestamp()}] [CLAUDE OS SYS: INFO]: Verification phase reminder\n\n"
+                f"[{_timestamp()}] [SYSTEM:INFO]: Verification phase reminder\n\n"
                 "You're in **verification** mode. After checking all criteria:\n\n"
                 "If all criteria pass: Call the `mcp__life__done` tool with summary \"All N criteria passed\", passed true\n\n"
                 "If criteria fail: Call the `mcp__life__done` tool with summary \"M of N criteria met\", passed false, feedback \"What needs fixing\"\n\n"

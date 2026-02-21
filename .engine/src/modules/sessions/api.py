@@ -38,9 +38,8 @@ from .transcript import (
 router = APIRouter(tags=["sessions"])
 
 # Paths
-REPO_ROOT = Path(settings.repo_root) if hasattr(settings, 'repo_root') else Path(__file__).resolve().parents[4]
-DB_PATH = REPO_ROOT / ".engine" / "data" / "db" / "system.db"
-HANDOFF_FILE = REPO_ROOT / "Desktop" / "handoffs" / "chief.md"
+DB_PATH = settings.db_path
+HANDOFF_FILE = settings.desktop_dir / "handoffs" / "chief.md"
 
 
 # ============================================

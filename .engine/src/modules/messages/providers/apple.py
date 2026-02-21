@@ -92,7 +92,7 @@ def _extract_text_from_attributed_body(attributed_body: Optional[bytes]) -> Opti
 
             if isinstance(plist, str):
                 return plist
-        except:
+        except Exception:
             pass
 
         # Fallback: Extract readable strings from binary data

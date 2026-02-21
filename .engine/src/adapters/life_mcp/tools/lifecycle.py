@@ -26,6 +26,7 @@ from typing import Any, Dict, Optional
 
 from fastmcp import FastMCP
 
+from core.config import settings
 from core.mcp_helpers import (
     PACIFIC,
     REPO_ROOT,
@@ -57,7 +58,7 @@ def _notify_backend_event(event_type: str, session_id: str, data: dict = None):
     import json as json_module
 
     try:
-        url = "http://localhost:5001/api/sessions/notify-event"
+        url = f"{settings.backend_url}/api/sessions/notify-event"
         payload = json_module.dumps({
             "event_type": event_type,
             "session_id": session_id,
@@ -310,9 +311,24 @@ def _spawn_next_mode(role: str, mode: str, conversation_id: str, description: st
 
 
 def _notify_chief(conversation_id: str, role: str, summary: str, failed: bool = False):
-    """Notify Chief about specialist completion."""
+    """Notify Chief about specialist completion.
+
+    Deduplicates by conversation_id — only sends one notification per
+    conversation to prevent duplicate messages when done() is retried.
+    """
     try:
         with get_db() as conn:
+            # Dedup check: see if we already notified for this conversation
+            already = conn.execute(
+                """SELECT session_id FROM sessions
+                   WHERE conversation_id = ? AND notified_chief_at IS NOT NULL
+                   LIMIT 1""",
+                (conversation_id,)
+            ).fetchone()
+            if already:
+                logger.info(f"Chief already notified for {conversation_id}, skipping duplicate")
+                return
+
             chief = conn.execute(
                 """SELECT session_id FROM sessions
                    WHERE role = 'chief' AND ended_at IS NULL
@@ -323,18 +339,26 @@ def _notify_chief(conversation_id: str, role: str, summary: str, failed: bool = 
                 from adapters.telegram.messaging import get_messaging
                 messaging = get_messaging(SYSTEM_ROOT / "data/db/system.db")
 
-                if failed:
-                    messaging.send_system_message(
-                        chief["session_id"],
-                        f"Specialist FAILED - {role} ({conversation_id})",
-                        f"{summary}\n\nWorkspace: Desktop/conversations/{conversation_id}/"
-                    )
-                else:
-                    messaging.send_system_message(
-                        chief["session_id"],
-                        f"Specialist complete - {role} ({conversation_id})",
-                        f"{summary}\n\nWorkspace: Desktop/conversations/{conversation_id}/"
-                    )
+                from adapters.telegram.messaging import MessageTarget, MessageType
+                chief_target = MessageTarget.by_role("chief")
+                status_word = "FAILED" if failed else "complete"
+                specialist_msg = (
+                    f"[SYSTEM:SPECIALIST] {status_word} - {role} ({conversation_id})\n\n"
+                    f"{summary}\n\nWorkspace: Desktop/conversations/{conversation_id}/"
+                )
+                messaging.send(
+                    specialist_msg,
+                    type=MessageType.NOTIFICATION,
+                    target=chief_target,
+                )
+
+                # Mark as notified to prevent duplicates
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    "UPDATE sessions SET notified_chief_at = ? WHERE conversation_id = ? AND ended_at IS NULL",
+                    (now_iso, conversation_id)
+                )
+                conn.commit()
     except Exception as e:
         logger.warning(f"Chief notification failed: {e}")
 
@@ -404,7 +428,14 @@ def done(
             return _handle_mission_chief_completion(session_id, summary)
 
         # SPECIALIST MODE TRANSITIONS
-        conversation_id = os.environ.get("CLAUDE_CONVERSATION_ID", "")
+        # Prefer DB lookup over env var - env var can be truncated if role name had spaces
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT conversation_id FROM sessions WHERE session_id = ?",
+                (session_id,)
+            )
+            row = cursor.fetchone()
+            conversation_id = (row["conversation_id"] if row else None) or os.environ.get("CLAUDE_CONVERSATION_ID", "")
 
         if mode == "preparation":
             return _handle_preparation_done(session_id, role, conversation_id, summary)
@@ -443,7 +474,6 @@ def _handle_preparation_done(session_id: str, role: str, conversation_id: str, s
     result = _spawn_next_mode(role, "implementation", conversation_id, f"{role.title()} implementing", spec_path=spec_path)
 
     if result.success:
-        log_session_event(summary, role, "preparation")
         _mark_session_ended(session_id)
         _notify_backend_event("session.ended", session_id, {"reason": "mode_transition"})
         _schedule_pane_kill(session_id)
@@ -486,7 +516,6 @@ def _handle_implementation_done(session_id: str, role: str, conversation_id: str
     result = _spawn_next_mode(role, "verification", conversation_id, f"{role.title()} verifying", spec_path=spec_path)
 
     if result.success:
-        log_session_event(summary, role, "implementation")
         _mark_session_ended(session_id)
         _notify_backend_event("session.ended", session_id, {"reason": "mode_transition"})
         _schedule_pane_kill(session_id)
@@ -513,6 +542,14 @@ def _handle_verification_done(session_id: str, role: str, conversation_id: str, 
     workspace = REPO_ROOT / "Desktop/conversations" / conversation_id
     progress_file = workspace / "progress.md"
     timestamp = datetime.now(PACIFIC).strftime("%H:%M")
+
+    # Write verification_passed to sessions table
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sessions SET verification_passed = ? WHERE session_id = ?",
+            (1 if passed else 0, session_id)
+        )
+        conn.commit()
 
     if passed:
         # PASS - log success, notify Chief, exit

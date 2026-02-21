@@ -19,11 +19,18 @@ import {
   X,
   Check,
   ChevronDown,
+  Linkedin,
+  Clock,
+  MessageSquare,
 } from 'lucide-react';
 import { ContactInfoPanel } from './ContactInfoPanel';
+import { CadenceView } from './CadenceView';
+import { NetworkGraph } from './NetworkGraph';
 import { API_BASE } from '@/lib/api';
 
 const CLAUDE_CORAL = '#DA7756';
+
+type ContactsTab = 'list' | 'cadence' | 'network';
 
 interface ContactListItem {
   id: string;
@@ -52,8 +59,20 @@ interface Contact {
   pinned: boolean;
   tags: string[];
   last_contact_date?: string;
+  current_state?: string;
+  linkedin_url?: string;
+  contact_cadence?: number;
   created_at: string;
   updated_at: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  contact_id: string;
+  entry: string;
+  entry_date: string;
+  source: string;
+  created_at: string;
 }
 
 // Group contacts by first letter
@@ -85,6 +104,8 @@ export function ContactsWindowContent() {
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<ContactsTab>('list');
 
   // Add/Edit form state
   const [formData, setFormData] = useState({
@@ -106,11 +127,19 @@ export function ContactsWindowContent() {
   const loadContactDetail = useCallback(async (contactId: string) => {
     setDetailLoading(true);
     setEditMode(false);
+    setHistory([]);
     try {
-      const response = await fetch(`${API_BASE}/api/contacts/${contactId}`);
-      if (!response.ok) throw new Error('Failed to load contact');
-      const data = await response.json();
+      const [detailRes, historyRes] = await Promise.all([
+        fetch(`${API_BASE}/api/contacts/${contactId}`),
+        fetch(`${API_BASE}/api/contacts/${contactId}/history?limit=20`),
+      ]);
+      if (!detailRes.ok) throw new Error('Failed to load contact');
+      const data = await detailRes.json();
       setSelectedContact(data);
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setHistory(Array.isArray(historyData) ? historyData : []);
+      }
     } catch (err) {
       console.error('Detail load error:', err);
     } finally {
@@ -228,6 +257,12 @@ export function ContactsWindowContent() {
     setEditMode(true);
   }, [selectedContact]);
 
+  // Handle contact selection from Cadence/Network tabs
+  const handleTabContactSelect = useCallback((contactId: string) => {
+    setActiveTab('list');
+    loadContactDetail(contactId);
+  }, [loadContactDetail]);
+
   // Initial load
   useEffect(() => { loadAllContacts(); }, [loadAllContacts]);
 
@@ -310,36 +345,70 @@ export function ContactsWindowContent() {
           <span className="text-xs font-semibold text-[var(--text-primary)]">Contacts</span>
         </div>
 
-        {/* Search */}
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8E8E93]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search contacts..."
-            data-testid="contacts-search"
-            className="w-full pl-7 pr-2 py-1 text-xs bg-white/80 dark:bg-black/20 border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md placeholder-[#8E8E93] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#DA7756]/50 focus:border-[#DA7756]"
-          />
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 rounded-md p-0.5">
+          {([
+            { key: 'list' as const, label: 'List' },
+            { key: 'cadence' as const, label: 'Cadence' },
+            { key: 'network' as const, label: 'Network' },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-colors ${
+                activeTab === key
+                  ? 'bg-white dark:bg-[#3a3a3a] text-[var(--text-primary)] shadow-sm'
+                  : 'text-[#8E8E93] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Add Contact */}
+        {/* Search (list tab only) */}
+        {activeTab === 'list' && (
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8E8E93]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search contacts..."
+              data-testid="contacts-search"
+              className="w-full pl-7 pr-2 py-1 text-xs bg-white/80 dark:bg-black/20 border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md placeholder-[#8E8E93] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#DA7756]/50 focus:border-[#DA7756]"
+            />
+          </div>
+        )}
+
+        {/* Add Contact (list tab only) */}
         <div className="flex items-center gap-1 ml-auto">
-          <button
-            onClick={() => {
-              setShowAddForm(true);
-              setFormData({ name: '', phone: '', email: '', company: '', role: '', location: '', description: '', relationship: '', notes: '' });
-            }}
-            className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            title="Add Contact"
-            data-testid="contacts-add-btn"
-          >
-            <UserPlus className="w-3.5 h-3.5 text-[#6E6E73] dark:text-[#8e8e93]" />
-          </button>
+          {activeTab === 'list' && (
+            <button
+              onClick={() => {
+                setShowAddForm(true);
+                setFormData({ name: '', phone: '', email: '', company: '', role: '', location: '', description: '', relationship: '', notes: '' });
+              }}
+              className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              title="Add Contact"
+              data-testid="contacts-add-btn"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-[#6E6E73] dark:text-[#8e8e93]" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main content */}
+      {activeTab === 'cadence' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CadenceView onSelectContact={handleTabContactSelect} />
+        </div>
+      ) : activeTab === 'network' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <NetworkGraph onSelectContact={handleTabContactSelect} />
+        </div>
+      ) : (
       <div className="flex flex-1 min-h-0">
         {/* Left: Contact List with alphabetical sections */}
         <div className="w-64 flex flex-col border-r border-[#D1D1D1] dark:border-[#3a3a3a] bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl">
@@ -507,6 +576,13 @@ export function ContactsWindowContent() {
 
               {/* Detail Content */}
               <div className="flex-1 overflow-auto p-4 space-y-4" data-testid="contact-detail">
+                {/* Current State — prominent summary */}
+                {selectedContact.current_state && (
+                  <div className="px-3 py-2 bg-[#DA7756]/5 border border-[#DA7756]/15 rounded-lg">
+                    <p className="text-sm text-[var(--text-primary)]">{selectedContact.current_state}</p>
+                  </div>
+                )}
+
                 {/* Contact Info */}
                 <div className="space-y-2">
                   <h4 className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">Contact Info</h4>
@@ -539,6 +615,20 @@ export function ContactsWindowContent() {
                     <div className="flex items-center gap-2 text-sm">
                       <MapPin className="w-3.5 h-3.5 text-[#DA7756]" />
                       <span className="text-[var(--text-primary)]">{selectedContact.location}</span>
+                    </div>
+                  )}
+
+                  {selectedContact.linkedin_url && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Linkedin className="w-3.5 h-3.5 text-[#DA7756]" />
+                      <a
+                        href={selectedContact.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#DA7756] hover:underline"
+                      >
+                        LinkedIn
+                      </a>
                     </div>
                   )}
                 </div>
@@ -593,6 +683,31 @@ export function ContactsWindowContent() {
                   </div>
                 )}
 
+                {/* History */}
+                {history.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      History
+                    </h4>
+                    <div className="space-y-1.5">
+                      {history.map((h) => (
+                        <div key={h.id} className="flex gap-2 text-sm">
+                          <span className="text-[10px] text-[#8E8E93] font-mono whitespace-nowrap mt-0.5">
+                            {h.entry_date}
+                          </span>
+                          <p className="text-[var(--text-primary)] text-xs flex-1">{h.entry}</p>
+                          {h.source !== 'chief' && (
+                            <span className="text-[9px] text-[#8E8E93] bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded self-start">
+                              {h.source}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Metadata */}
                 <div className="pt-4 border-t border-[#E5E5E5] dark:border-[#3a3a3a] space-y-1">
                   {selectedContact.last_contact_date && (
@@ -610,6 +725,7 @@ export function ContactsWindowContent() {
           )}
         </div>
       </div>
+      )}
 
       {/* Contact Info Panel */}
       {showContactInfo && selectedContact && (

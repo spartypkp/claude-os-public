@@ -1,5 +1,6 @@
-"""Show service for rendering visual content."""
+"""Show service — Telegram-only visual content rendering with multi-chat routing."""
 
+import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 import logging
@@ -30,15 +31,12 @@ async def _get_telegram_service():
         from adapters.telegram.service import TelegramService
         service = TelegramService()
 
-        # Only initialize if credentials are available
         if service.bot_token and service.authorized_user_id:
-            # Use init_bot_only() instead of start() - MCP runs in separate process
-            # from FastAPI, so we don't want to start polling (that's FastAPI's job)
             await service.init_bot_only()
             _telegram_service = service
             logger.info("Telegram bot client initialized for show module (send-only)")
         else:
-            logger.warning("Telegram credentials not available - document sending disabled")
+            logger.warning("Telegram credentials not available - show module disabled")
             _telegram_service = None
     except Exception as e:
         logger.error(f"Failed to initialize Telegram bot client: {e}")
@@ -47,8 +45,30 @@ async def _get_telegram_service():
     return _telegram_service
 
 
+def _resolve_chat_id(target: str) -> Optional[int]:
+    """Resolve target name to a Telegram chat_id.
+
+    Args:
+        target: "owner", "group", or "auto" (defaults to owner)
+
+    Returns:
+        Chat ID or None if not configured
+    """
+    if target == "group":
+        chat_id_str = os.getenv("TELEGRAM_GROUP_CHAT_ID")
+        if not chat_id_str:
+            return None
+        return int(chat_id_str)
+    else:
+        # "owner" or "auto" both resolve to owner
+        user_id_str = os.getenv("TELEGRAM_USER_ID")
+        if not user_id_str:
+            return None
+        return int(user_id_str)
+
+
 class ShowService:
-    """Service for rendering visual content."""
+    """Service for rendering visual content to Telegram."""
 
     def __init__(self):
         """Initialize show service."""
@@ -58,22 +78,11 @@ class ShowService:
             "contact": ContactRenderer(),
         }
 
-    def _detect_destination(self) -> str:
-        """Auto-detect destination from context.
-
-        Returns:
-            "telegram" or "dashboard"
-        """
-        # TODO: Check if current conversation has [Telegram HH:MM] tag
-        # For now, default to telegram (will be primary use case)
-        # This can be enhanced later to check session context or message source
-        return "telegram"
-
     def _parse_what(self, what: str) -> tuple[str, Optional[str]]:
         """Parse the 'what' parameter.
 
         Args:
-            what: Content type, e.g. "calendar", "contact:alex", "diagram:name"
+            what: Content type, e.g. "calendar", "contact:alex", "file:/path"
 
         Returns:
             Tuple of (content_type, parameter)
@@ -84,17 +93,11 @@ class ShowService:
         return what.lower(), None
 
     def _fetch_calendar_events(self) -> list[Dict[str, Any]]:
-        """Fetch today's calendar events.
-
-        Returns:
-            List of event dicts
-        """
-        # Import here to avoid circular dependencies
+        """Fetch today's calendar events."""
         from modules.calendar import CalendarService
         from core.storage import SystemStorage
         from core.config import settings
 
-        # Get today's date range
         today = datetime.now().date()
         today_start = datetime.combine(today, datetime.min.time())
         today_end = datetime.combine(today, datetime.max.time())
@@ -106,7 +109,6 @@ class ShowService:
                 start_date=today_start,
                 end_date=today_end
             )
-            # Convert to dicts
             return [
                 {
                     "id": e.id,
@@ -124,54 +126,35 @@ class ShowService:
             return []
 
     def _fetch_priorities(self, date: Optional[str] = None) -> list[Dict[str, Any]]:
-        """Fetch priorities for a date.
-
-        Args:
-            date: ISO date string (defaults to today)
-
-        Returns:
-            List of priority dicts
-        """
+        """Fetch priorities for a date."""
         if date is None:
             date = datetime.now().date().isoformat()
 
-        # Query database directly
         try:
             with get_db() as conn:
                 cursor = conn.execute(
-                """
-                SELECT id, content, level, completed, date, created_at
-                FROM priorities
-                WHERE date = ?
-                ORDER BY
-                    CASE level
-                        WHEN 'critical' THEN 1
-                        WHEN 'medium' THEN 2
-                        WHEN 'low' THEN 3
-                    END,
-                    position,
-                    created_at
-                """,
-                (date,)
-            )
-
-            priorities = [dict(row) for row in cursor.fetchall()]
-
-            return priorities
-
+                    """
+                    SELECT id, content, level, completed, date, created_at
+                    FROM priorities
+                    WHERE date = ?
+                    ORDER BY
+                        CASE level
+                            WHEN 'critical' THEN 1
+                            WHEN 'medium' THEN 2
+                            WHEN 'low' THEN 3
+                        END,
+                        position,
+                        created_at
+                    """,
+                    (date,)
+                )
+                return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"Failed to fetch priorities: {e}")
             return []
 
     def _fetch_contact(self, identifier: str) -> Optional[Dict[str, Any]]:
-        """Fetch contact by name or identifier.
-
-        Args:
-            identifier: Contact name or ID
-
-        Returns:
-            Contact dict or None
-        """
+        """Fetch contact by name or identifier."""
         try:
             with get_db() as conn:
                 search_term = f"%{identifier}%"
@@ -187,7 +170,6 @@ class ShowService:
                     """,
                     (search_term, search_term, search_term)
                 )
-
                 row = cursor.fetchone()
 
             if row:
@@ -195,7 +177,6 @@ class ShowService:
 
             logger.error(f"Contact not found: {identifier}")
             return None
-
         except Exception as e:
             logger.error(f"Failed to fetch contact: {e}")
             return None
@@ -203,155 +184,108 @@ class ShowService:
     async def show_content(
         self,
         what: str,
-        destination: str = "auto"
+        target: str = "auto",
     ) -> Dict[str, Any]:
-        """Render visual content.
+        """Render visual content and send to Telegram.
 
         Args:
-            what: Content to show (e.g., "calendar", "priorities", "contact:alex")
-            destination: "auto", "telegram", or "dashboard"
+            what: Content to show (e.g., "calendar", "priorities", "contact:alex", "file:/path")
+            target: "owner" (DM), "group" (group chat), or "auto" (defaults to owner)
 
         Returns:
             Result dict with success status
         """
         try:
-            # Parse what parameter
             content_type, param = self._parse_what(what)
 
-            # Auto-detect destination if needed
-            if destination == "auto":
-                destination = self._detect_destination()
+            # Resolve target to chat_id
+            chat_id = _resolve_chat_id(target)
+            if chat_id is None:
+                target_desc = "TELEGRAM_GROUP_CHAT_ID" if target == "group" else "TELEGRAM_USER_ID"
+                return {"success": False, "error": f"{target_desc} not configured in .env"}
 
-            # Get appropriate renderer (file type doesn't need renderer)
+            target_name = "group" if target == "group" else "owner"
+
+            # Handle file sending
+            if content_type == "file":
+                return await self._send_file(param, chat_id, target_name)
+
+            # Get renderer
             renderer = self.renderers.get(content_type)
-            if not renderer and content_type != "file":
-                return {
-                    "success": False,
-                    "error": f"Unknown content type: {content_type}"
-                }
+            if not renderer:
+                return {"success": False, "error": f"Unknown content type: {content_type}"}
 
-            # Fetch data based on content type
+            # Fetch data
             if content_type == "calendar":
                 data = self._fetch_calendar_events()
             elif content_type == "priorities":
                 data = self._fetch_priorities()
             elif content_type == "contact":
                 if not param:
-                    return {
-                        "success": False,
-                        "error": "Contact identifier required (e.g., 'contact:alex')"
-                    }
+                    return {"success": False, "error": "Contact identifier required (e.g., 'contact:alex')"}
                 data = self._fetch_contact(param)
                 if not data:
-                    return {
-                        "success": False,
-                        "error": f"Contact not found: {param}"
-                    }
-            elif content_type == "file":
-                # File sending - only for Telegram
-                if not param:
-                    return {
-                        "success": False,
-                        "error": "File path required (e.g., 'file:/path/to/doc.pdf')"
-                    }
+                    return {"success": False, "error": f"Contact not found: {param}"}
+            else:
+                return {"success": False, "error": f"Unknown content type: {content_type}"}
 
-                # Import Path for validation
-                from pathlib import Path
+            # Render as image
+            image_bytes = renderer.render_telegram(data)
 
-                # Validate file exists
-                file_path = Path(param)
-                if not file_path.exists():
-                    return {
-                        "success": False,
-                        "error": f"File not found: {param}"
-                    }
+            # Send to Telegram
+            telegram_service = await _get_telegram_service()
+            if not telegram_service:
+                return {"success": False, "error": "Telegram service not available"}
 
-                # Only telegram destination makes sense for files
-                if destination == "telegram":
-                    # Send via Telegram
-                    telegram_service = await _get_telegram_service()
+            success = await telegram_service.send_photo_to_chat(
+                chat_id=chat_id,
+                photo_bytes=image_bytes,
+                caption=None,
+            )
 
-                    if telegram_service:
-                        success = await telegram_service.send_document(
-                            file_path=str(file_path),
-                            caption=None
-                        )
-
-                        if success:
-                            return {
-                                "success": True,
-                                "rendered": "telegram",
-                                "message": f"Sent document '{file_path.name}' to Telegram"
-                            }
-                        else:
-                            return {
-                                "success": False,
-                                "error": "Failed to send document to Telegram"
-                            }
-                    else:
-                        return {
-                            "success": False,
-                            "error": "Telegram service not available"
-                        }
-                else:
-                    return {
-                        "success": False,
-                        "error": "File content type only supports 'telegram' destination"
-                    }
-
-            # Render based on destination (for calendar, priorities, contact)
-            if destination == "telegram":
-                # Render as image
-                image_bytes = renderer.render_telegram(data)
-
-                # Send via Telegram
-                telegram_service = await _get_telegram_service()
-
-                if telegram_service:
-                    success = await telegram_service.send_photo(
-                        photo_bytes=image_bytes,
-                        caption=None
-                    )
-
-                    if success:
-                        return {
-                            "success": True,
-                            "rendered": "telegram",
-                            "message": f"Sent {content_type} image to Telegram"
-                        }
-                    else:
-                        return {
-                            "success": False,
-                            "error": "Failed to send image to Telegram"
-                        }
-                else:
-                    return {
-                        "success": False,
-                        "error": "Telegram service not available"
-                    }
-
-            elif destination == "dashboard":
-                # Render as component data
-                component_data = renderer.render_dashboard(data)
-
+            if success:
                 return {
                     "success": True,
-                    "rendered": "dashboard",
-                    "data": component_data
+                    "rendered": "telegram",
+                    "target": target_name,
+                    "message": f"Sent {content_type} image to Telegram ({target_name})",
                 }
-
             else:
-                return {
-                    "success": False,
-                    "error": f"Unknown destination: {destination}"
-                }
+                return {"success": False, "error": "Failed to send image to Telegram"}
 
         except Exception as e:
             logger.exception(f"Error in show_content: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _send_file(self, param: Optional[str], chat_id: int, target_name: str) -> Dict[str, Any]:
+        """Send a file to Telegram."""
+        if not param:
+            return {"success": False, "error": "File path required (e.g., 'file:/path/to/doc.pdf')"}
+
+        from pathlib import Path
+        file_path = Path(param)
+        if not file_path.exists():
+            return {"success": False, "error": f"File not found: {param}"}
+
+        telegram_service = await _get_telegram_service()
+        if not telegram_service:
+            return {"success": False, "error": "Telegram service not available"}
+
+        success = await telegram_service.send_document_to_chat(
+            chat_id=chat_id,
+            file_path=str(file_path),
+            caption=None,
+        )
+
+        if success:
             return {
-                "success": False,
-                "error": str(e)
+                "success": True,
+                "rendered": "telegram",
+                "target": target_name,
+                "message": f"Sent document '{file_path.name}' to Telegram ({target_name})",
             }
+        else:
+            return {"success": False, "error": "Failed to send document to Telegram"}
 
 
 # Global instance
@@ -366,15 +300,15 @@ def get_show_service() -> ShowService:
     return _show_service
 
 
-async def show_content(what: str, destination: str = "auto") -> Dict[str, Any]:
+async def show_content(what: str, target: str = "auto") -> Dict[str, Any]:
     """Convenience function for showing content.
 
     Args:
         what: Content to show
-        destination: Where to render
+        target: "owner", "group", or "auto"
 
     Returns:
         Result dict
     """
     service = get_show_service()
-    return await service.show_content(what, destination)
+    return await service.show_content(what, target)

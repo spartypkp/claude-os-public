@@ -57,6 +57,8 @@ MAX_MESSAGE_LENGTH = 4096
 # Config from environment
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AUTHORIZED_USER_ID = os.getenv("TELEGRAM_USER_ID")
+GROUP_CHAT_ID = os.getenv("TELEGRAM_GROUP_CHAT_ID")
+AUTHORIZED_USERS = os.getenv("TELEGRAM_AUTHORIZED_USERS", "")
 
 
 class TelegramService:
@@ -70,6 +72,20 @@ class TelegramService:
         self.application: Optional[Application] = None
         self._stop_event = asyncio.Event()
         self._transcript_task: Optional[asyncio.Task] = None
+
+        # Group chat support
+        self.group_chat_id = int(GROUP_CHAT_ID) if GROUP_CHAT_ID else None
+        # Build authorized users set — always includes the owner
+        self.authorized_users: set[int] = set()
+        if self.authorized_user_id:
+            self.authorized_users.add(self.authorized_user_id)
+        if AUTHORIZED_USERS:
+            for uid in AUTHORIZED_USERS.split(","):
+                uid = uid.strip()
+                if uid:
+                    self.authorized_users.add(int(uid))
+        # Username cache: user_id -> display name (for MCP tool responses)
+        self.username_cache: Dict[int, str] = {}
 
         # Initialize services for command handlers
         self.storage = SystemStorage(settings.db_path)
@@ -187,15 +203,34 @@ class TelegramService:
             return
 
         user_id = update.message.from_user.id
+        chat_type = update.message.chat.type
         message_text = update.message.text
 
         # Authentication check
-        if user_id != self.authorized_user_id:
-            logger.warning(f"Unauthorized Telegram user attempted access: {user_id}")
-            await update.message.reply_text(
-                "⚠️ Unauthorized. This bot is private."
-            )
+        if not self._is_authorized(update):
+            logger.warning(f"Unauthorized Telegram user attempted access: user_id={user_id}, chat_id={update.message.chat_id}, chat_type={chat_type}")
+            # Only reply in private chats — don't spam groups
+            if chat_type == "private":
+                await update.message.reply_text(
+                    "⚠️ Unauthorized. This bot is private."
+                )
             return
+
+        # Cache username for MCP tool use
+        from_user = update.message.from_user
+        username = from_user.username or from_user.first_name or str(user_id)
+        self.username_cache[user_id] = username
+
+        # Log inbound message for context recovery
+        self._log_message(
+            chat_id=update.message.chat_id,
+            chat_type=update.message.chat.type,
+            chat_title=update.message.chat.title,
+            user_id=user_id,
+            username=username,
+            text=message_text,
+            direction="inbound",
+        )
 
         logger.info(f"Received Telegram message: {message_text[:100]}...")
 
@@ -221,12 +256,21 @@ class TelegramService:
             )
             return
 
+        # Build source tag with username and chat context
+        username = self.username_cache[user_id]
+        chat_type = update.message.chat.type
+        if chat_type == "private":
+            source = f"Telegram @{username}"
+        else:
+            group_name = update.message.chat.title or "group"
+            source = f"Telegram @{username} ({group_name})"
+
         # Inject into Chief's tmux pane with Telegram source tag
         success = inject_message(
             target=chief_session.tmux_pane,
             message=message_text,
             submit=True,
-            source="Telegram"
+            source=source
         )
 
         if success:
@@ -247,13 +291,15 @@ class TelegramService:
             return
 
         user_id = update.message.from_user.id
+        chat_type = update.message.chat.type
 
         # Authentication check
-        if user_id != self.authorized_user_id:
+        if not self._is_authorized(update):
             logger.warning(f"Unauthorized Telegram user attempted to send photo: {user_id}")
-            await update.message.reply_text(
-                "⚠️ Unauthorized. This bot is private."
-            )
+            if chat_type == "private":
+                await update.message.reply_text(
+                    "⚠️ Unauthorized. This bot is private."
+                )
             return
 
         try:
@@ -294,12 +340,17 @@ class TelegramService:
             else:
                 message = f"I received a photo: {photo_path}"
 
+            # Build source tag with username
+            from_user = update.message.from_user
+            username = from_user.username or from_user.first_name or str(user_id)
+            source = f"Telegram @{username}"
+
             # Inject into Chief's tmux pane
             success = inject_message(
                 target=chief_session.tmux_pane,
                 message=message,
                 submit=True,
-                source="Telegram"
+                source=source
             )
 
             if success:
@@ -325,13 +376,15 @@ class TelegramService:
             return
 
         user_id = update.message.from_user.id
+        chat_type = update.message.chat.type
 
         # Authentication check
-        if user_id != self.authorized_user_id:
+        if not self._is_authorized(update):
             logger.warning(f"Unauthorized Telegram user attempted to share location: {user_id}")
-            await update.message.reply_text(
-                "⚠️ Unauthorized. This bot is private."
-            )
+            if chat_type == "private":
+                await update.message.reply_text(
+                    "⚠️ Unauthorized. This bot is private."
+                )
             return
 
         try:
@@ -353,12 +406,17 @@ class TelegramService:
             # Build message for Chief
             message = f"[Location shared] Latitude: {latitude}, Longitude: {longitude}"
 
+            # Build source tag with username
+            from_user = update.message.from_user
+            username = from_user.username or from_user.first_name or str(user_id)
+            source = f"Telegram @{username}"
+
             # Inject into Chief's tmux pane
             success = inject_message(
                 target=chief_session.tmux_pane,
                 message=message,
                 submit=True,
-                source="Telegram"
+                source=source
             )
 
             if success:
@@ -586,7 +644,7 @@ class TelegramService:
         query = update.callback_query
         await query.answer()  # Acknowledge the callback
 
-        if not query.from_user.id == self.authorized_user_id:
+        if query.from_user.id not in self.authorized_users:
             return
 
         try:
@@ -786,20 +844,54 @@ class TelegramService:
             logger.error(f"Error parsing Google Maps URL: {e}")
             return None
 
+    @property
+    def _outbound_chat_id(self) -> int:
+        """Where to send auto-forwarded transcript — always owner DM."""
+        return self.authorized_user_id
+
+    def _is_authorized(self, update: Update) -> bool:
+        """Check if user is authorized in this chat context.
+
+        Private chats: only the owner.
+        Group chats: must be the configured group AND user in authorized set.
+        """
+        msg = update.message or (update.callback_query.message if update.callback_query else None)
+        if not msg:
+            return False
+
+        user_id = (update.message.from_user.id if update.message
+                   else update.callback_query.from_user.id)
+        chat_type = msg.chat.type  # "private", "group", "supergroup"
+
+        if chat_type == "private":
+            return user_id == self.authorized_user_id
+        else:
+            # Group/supergroup — must be the configured group with an authorized user
+            return (
+                self.group_chat_id is not None
+                and msg.chat_id == self.group_chat_id
+                and user_id in self.authorized_users
+            )
+
     def _check_auth(self, update: Update) -> bool:
-        """Check if user is authorized. Send error message if not."""
+        """Check if user is authorized for command handlers. Sends error on failure."""
         if not update.message:
             return False
 
+        if self._is_authorized(update):
+            return True
+
+        chat_type = update.message.chat.type
         user_id = update.message.from_user.id
-        if user_id != self.authorized_user_id:
-            logger.warning(f"Unauthorized Telegram user attempted command: {user_id}")
+        logger.warning(f"Unauthorized Telegram user attempted command: {user_id}")
+
+        # Only reply in private chats — don't spam groups
+        if chat_type == "private":
             asyncio.create_task(
                 update.message.reply_text("⚠️ Unauthorized. This bot is private.")
             )
-            return False
 
-        return True
+        return False
 
     def _get_emoji_indicator(self, text: str) -> str:
         """Determine emoji indicator based on message content.
@@ -980,7 +1072,7 @@ class TelegramService:
             for i, chunk in enumerate(chunks):
                 try:
                     await self.application.bot.send_message(
-                        chat_id=self.authorized_user_id,
+                        chat_id=self._outbound_chat_id,
                         text=chunk,
                         parse_mode=ParseMode.HTML
                     )
@@ -997,7 +1089,7 @@ class TelegramService:
             logger.error(f"Error forwarding to Telegram: {e}")
 
     async def send_photo(self, photo_bytes: bytes, caption: str = None):
-        """Send a photo to the authorized user.
+        """Send a photo to the authorized user (owner DM).
 
         Args:
             photo_bytes: PNG image as bytes
@@ -1006,22 +1098,34 @@ class TelegramService:
         Returns:
             True if sent successfully, False otherwise
         """
-        if not self.application or not self.authorized_user_id:
+        return await self.send_photo_to_chat(self._outbound_chat_id, photo_bytes, caption)
+
+    async def send_photo_to_chat(self, chat_id: int, photo_bytes: bytes, caption: str = None) -> bool:
+        """Send a photo to a specific chat (group or DM).
+
+        Args:
+            chat_id: Telegram chat ID to send to
+            photo_bytes: PNG image as bytes
+            caption: Optional caption text
+
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        if not self.application:
             logger.warning("Cannot send photo - Telegram not initialized")
             return False
 
         try:
-            # Send photo
             await self.application.bot.send_photo(
-                chat_id=self.authorized_user_id,
+                chat_id=chat_id,
                 photo=photo_bytes,
                 caption=caption,
                 parse_mode=ParseMode.HTML if caption else None
             )
-            logger.info("Photo sent to Telegram successfully")
+            logger.info(f"Photo sent to chat {chat_id} successfully")
             return True
         except Exception as e:
-            logger.error(f"Error sending photo to Telegram: {e}")
+            logger.error(f"Error sending photo to chat {chat_id}: {e}")
             return False
 
     async def send_document(
@@ -1029,7 +1133,7 @@ class TelegramService:
         file_path: str,
         caption: Optional[str] = None
     ) -> bool:
-        """Send a document to Telegram.
+        """Send a document to the authorized user (owner DM).
 
         Args:
             file_path: Path to file on filesystem
@@ -1038,34 +1142,117 @@ class TelegramService:
         Returns:
             True if sent successfully, False otherwise
         """
-        if not self.authorized_user_id:
-            logger.warning("No authorized user configured")
+        return await self.send_document_to_chat(self._outbound_chat_id, file_path, caption)
+
+    async def send_document_to_chat(
+        self,
+        chat_id: int,
+        file_path: str,
+        caption: Optional[str] = None
+    ) -> bool:
+        """Send a document to a specific chat (group or DM).
+
+        Args:
+            chat_id: Telegram chat ID to send to
+            file_path: Path to file on filesystem
+            caption: Optional caption for the document
+
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        if not self.application:
+            logger.warning("Cannot send document - Telegram not initialized")
             return False
 
         try:
-            # Verify file exists
             path = Path(file_path)
             if not path.exists():
                 logger.error(f"File not found: {file_path}")
                 return False
 
-            # Read file
             with open(file_path, 'rb') as f:
                 document_bytes = f.read()
 
-            # Send document
             await self.application.bot.send_document(
-                chat_id=self.authorized_user_id,
+                chat_id=chat_id,
                 document=document_bytes,
                 filename=path.name,
                 caption=caption,
                 parse_mode=ParseMode.HTML if caption else None
             )
-            logger.info(f"Document sent to Telegram successfully: {path.name}")
+            logger.info(f"Document sent to chat {chat_id}: {path.name}")
             return True
         except Exception as e:
-            logger.error(f"Error sending document to Telegram: {e}")
+            logger.error(f"Error sending document to chat {chat_id}: {e}")
             return False
+
+    async def send_to_chat(self, chat_id: int, text: str) -> bool:
+        """Send a message to a specific chat (group or DM).
+
+        Used by the MCP tool for explicit message routing.
+
+        Args:
+            chat_id: Telegram chat ID to send to
+            text: Message text (markdown converted to HTML)
+
+        Returns:
+            True if sent successfully
+        """
+        if not self.application:
+            logger.warning("Cannot send - Telegram not initialized")
+            return False
+
+        try:
+            html_text = self._markdown_to_html(text)
+            chunks = self._chunk_message(html_text)
+
+            for i, chunk in enumerate(chunks):
+                await self.application.bot.send_message(
+                    chat_id=chat_id,
+                    text=chunk,
+                    parse_mode=ParseMode.HTML
+                )
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(0.1)
+
+            logger.info(f"Sent message to chat {chat_id} ({len(chunks)} chunks)")
+
+            # Log outbound for context recovery
+            self._log_message(
+                chat_id=chat_id,
+                chat_type="group" if chat_id != self.authorized_user_id else "private",
+                chat_title=None,
+                user_id=0,  # bot
+                username="claude",
+                text=text,
+                direction="outbound",
+            )
+
+            return True
+        except Exception as e:
+            logger.error(f"Error sending to chat {chat_id}: {e}")
+            return False
+
+    def _log_message(
+        self,
+        chat_id: int,
+        chat_type: str,
+        chat_title: Optional[str],
+        user_id: int,
+        username: str,
+        text: str,
+        direction: str,
+    ):
+        """Log a Telegram message for context recovery."""
+        try:
+            self.storage.execute(
+                """INSERT INTO telegram_messages
+                   (chat_id, chat_type, chat_title, user_id, username, message_text, direction)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (chat_id, chat_type, chat_title, user_id, username, text, direction),
+            )
+        except Exception as e:
+            logger.error(f"Failed to log telegram message: {e}")
 
     def _get_chief_session(self):
         """Get Chief's current session."""

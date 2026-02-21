@@ -5,28 +5,20 @@ Provides semantic message types, target resolution, and centralized injection lo
 
 Message Format Standard
 -----------------------
-All injected messages follow this format:
+All injected messages follow the [SYSTEM:TYPE] format:
 
-    [CLAUDE OS SYS: CATEGORY]: Title or brief description
+    [SYSTEM:WARNING] Title or brief description
 
     Body paragraphs explaining what's happening and why.
 
-    **Action required:**
-
-    1. Step one
-    2. Step two
-
-    Closing reassurance or context.
-
-Categories:
+Types:
 - WARNING: Context warnings, reset warnings (urgent attention needed)
-- NOTIFICATION: Worker completions, status updates (informational)
+- NOTIFY: Worker completions, status updates (informational)
 - ACTION: Mission resets, forced actions (system will act)
 - INFO: Memory checks, reminders (guidance, not urgent)
 
 This format:
-- Establishes authority ("CLAUDE OS SYS")
-- Clear categorization
+- Clear categorization via prefix
 - Works in all terminals (no emoji dependency)
 - Scannable and machine-parseable
 """
@@ -158,7 +150,7 @@ class MessagingService:
         if not target:
             return False
 
-        message = f"[{_timestamp()}] [CLAUDE OS SYS: NOTIFICATION]: Workers complete\n\n{summary or 'Check worker() status for reports'}"
+        message = f"[{_timestamp()}] [SYSTEM:NOTIFY]: Workers complete\n\n{summary or 'Check worker() status for reports'}"
         return self.send(
             message,
             type=MessageType.NOTIFICATION,
@@ -172,7 +164,7 @@ class MessagingService:
             return False
 
         minute_label = "minute" if minutes == 1 else "minutes"
-        message = f"""[{_timestamp()}] [CLAUDE OS SYS: WARNING]: Context reset in {minutes} {minute_label}
+        message = f"""[{_timestamp()}] [SYSTEM:WARNING]: Context reset in {minutes} {minute_label}
 
 Your context window is filling up. You have {minutes} {minute_label} to prepare for reset.
 
@@ -196,7 +188,7 @@ A fresh session will spawn and continue your work seamlessly."""
         target = MessageTarget.by_role("chief")
 
         minute_label = "minute" if minutes == 1 else "minutes"
-        message = f"""[{_timestamp()}] [CLAUDE OS SYS: ACTION]: Mission reset in {minutes} {minute_label}
+        message = f"""[{_timestamp()}] [SYSTEM:ACTION]: Mission reset in {minutes} {minute_label}
 
 A critical mission needs this window. Your session will be force-reset.
 
@@ -223,7 +215,7 @@ Your work continues in a fresh Chief session after the mission."""
         target = MessageTarget.by_role("chief")
         short_id = session_id[:8] if session_id else "unknown"
 
-        message = f"[{_timestamp()}] [CLAUDE OS SYS: NOTIFICATION]: {role.title()} {short_id} complete\n\n{summary}"
+        message = f"[{_timestamp()}] [SYSTEM:NOTIFY]: {role.title()} {short_id} complete\n\n{summary}"
 
         return self.send(
             message,
@@ -242,7 +234,7 @@ Your work continues in a fresh Chief session after the mission."""
             # Fallback to Chief window if session not found
             target = MessageTarget.by_role("chief")
 
-        message = f"[{_timestamp()}] [CLAUDE OS SYS: NOTIFICATION]: {title}\n\n{body}"
+        message = f"[{_timestamp()}] [SYSTEM:NOTIFY]: {title}\n\n{body}"
 
         return self.send(
             message,

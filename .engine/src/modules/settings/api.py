@@ -29,11 +29,10 @@ AVAILABLE_MODELS = [
 DEFAULT_MODELS = {
     "chief": "opus",
     "builder": "sonnet",
-    "writer": "sonnet",
-    "researcher": "sonnet",
-    "curator": "sonnet",
+    "deep-work": "sonnet",
     "project": "sonnet",
     "idea": "sonnet",
+    "worker": "sonnet",
 }
 
 MODEL_SETTING_PREFIX = "model_"

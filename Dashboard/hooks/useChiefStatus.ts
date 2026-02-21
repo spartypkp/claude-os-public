@@ -14,8 +14,7 @@ import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChiefQuery } from './queries/useChiefQuery';
 import { queryKeys } from '@/lib/queryClient';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { API_BASE } from '@/lib/api';
 
 export interface ChiefStatus {
   session_exists: boolean;

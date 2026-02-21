@@ -23,8 +23,7 @@ import { eventToQueryKeys } from '@/lib/queryClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
-// API base URL
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { API_BASE } from '@/lib/api';
 
 interface EventStreamContextValue {
 	/** Whether SSE is currently connected */

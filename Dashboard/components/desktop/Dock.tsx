@@ -3,42 +3,36 @@
 import { getAppRootPath, getApps } from '@/lib/appRegistry';
 import { useWindowStore, type CoreAppType, type WindowState } from '@/store/windowStore';
 import {
+	BarChart3,
 	Calendar,
 	FileText,
+	FolderGit2,
 	FolderOpen,
 	Mail,
 	MessageCircle,
-	Monitor,
 	Settings,
-	UserCog,
 	Users,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Import app manifests to trigger registration
-import '@/app/reading-list/manifest';
+import '@/app/ember/manifest';
+import '@/app/job-search/manifest';
+import '@/app/release/manifest';
+import '@/app/training-will/manifest';
+import '@/app/turbine/manifest';
 
 // ==========================================
 // CONSTANTS
 // ==========================================
 
+import { API_BASE } from '@/lib/api';
+import { useEmailBadgeQuery } from '@/hooks/queries';
+
 const BASE_ICON_SIZE = 48;
 const MAX_ICON_SIZE = 64;
 const MAGNIFICATION_RANGE = 120; // pixels - how far the effect extends
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
-
-// ==========================================
-// CLAUDE LOGO SVG
-// ==========================================
-
-function ClaudeLogo({ className = 'w-6 h-6' }: { className?: string; }) {
-	return (
-		<svg className={className} viewBox="0 0 16 16" fill="currentColor">
-			<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
-		</svg>
-	);
-}
 
 // ==========================================
 // TYPES
@@ -54,6 +48,8 @@ interface DockItem {
 	/** If set, opens as a window on Desktop instead of navigating */
 	appWindow?: CoreAppType;
 	isRunning?: boolean;
+	/** Red notification badge number (bottom-right corner) */
+	badge?: number;
 }
 
 // ==========================================
@@ -64,14 +60,6 @@ interface DockItem {
 // Per spec: Finder, Calendar, Contacts, Widgets, Settings
 // All Core Apps open as windows on Desktop by default
 const CORE_APPS: DockItem[] = [
-	{
-		id: 'desktop',
-		name: 'Desktop',
-		icon: <Monitor className="w-6 h-6" />,
-		type: 'app',
-		gradient: 'from-slate-400 to-slate-600',
-		route: '/desktop',
-	},
 	{
 		id: 'finder',
 		name: 'Claude Finder',
@@ -112,14 +100,21 @@ const CORE_APPS: DockItem[] = [
 		gradient: 'from-[#DA7756] to-[#C15F3C]',
 		appWindow: 'messages',
 	},
-	// Missions removed - system deleted
 	{
-		id: 'roles',
-		name: 'Claude Roles',
-		icon: <UserCog className="w-6 h-6" />,
+		id: 'projects',
+		name: 'Projects',
+		icon: <FolderGit2 className="w-6 h-6" />,
 		type: 'app',
-		gradient: 'from-indigo-400 to-indigo-600',
-		appWindow: 'roles',
+		gradient: 'from-cyan-400 to-teal-600',
+		appWindow: 'projects',
+	},
+	{
+		id: 'analytics',
+		name: 'Observatory',
+		icon: <BarChart3 className="w-6 h-6" />,
+		type: 'app',
+		gradient: 'from-violet-400 to-purple-600',
+		appWindow: 'analytics',
 	},
 	{
 		id: 'settings',
@@ -229,6 +224,22 @@ const DockIcon = React.memo(function DockIcon({ item, scale, onClick, onMouseEnt
           shadow-sm
         " />
 			)}
+
+			{/* Notification badge */}
+			{item.badge != null && item.badge > 0 && (
+				<div className="
+					absolute -bottom-0.5 -right-0.5
+					min-w-[18px] h-[18px] px-1
+					rounded-full bg-red-500
+					text-white text-[10px] font-bold
+					flex items-center justify-center
+					leading-none
+					shadow-md
+					pointer-events-none
+				">
+					{item.badge > 99 ? '99+' : item.badge}
+				</div>
+			)}
 		</div>
 	);
 });
@@ -265,6 +276,10 @@ export function Dock() {
 	// Get custom apps from registry (memoized)
 	const customApps = useMemo(() => getCustomApps(), []);
 
+	// Email triage badge count
+	const { data: emailBadgeData } = useEmailBadgeQuery();
+	const emailTriageCount = emailBadgeData?.unread_count ?? 0;
+
 	// Combine all apps (for magnification calculation)
 	const allApps = useMemo(() => {
 		// Add isRunning based on:
@@ -277,8 +292,9 @@ export function Dock() {
 				: app.route
 					? pathname?.startsWith(app.route)
 					: false,
+			badge: app.id === 'email' ? emailTriageCount : undefined,
 		}));
-	}, [pathname, windows, customApps]);
+	}, [pathname, windows, customApps, emailTriageCount]);
 
 	const dockItems = useMemo(() => {
 		return allApps;
@@ -406,7 +422,8 @@ export function Dock() {
 				case 'settings': return <Settings className="w-5 h-5" />;
 	
 				case 'email': return <Mail className="w-5 h-5" />;
-				case 'roles': return <Users className="w-5 h-5" />;
+				case 'analytics': return <BarChart3 className="w-5 h-5" />;
+				case 'projects': return <FolderGit2 className="w-5 h-5" />;
 			}
 		}
 		return <FileText className="w-5 h-5" />;
@@ -422,6 +439,8 @@ export function Dock() {
 				case 'settings': return 'from-slate-500 to-slate-700';
 	
 				case 'email': return 'from-sky-400 to-blue-600';
+				case 'analytics': return 'from-violet-400 to-purple-600';
+				case 'projects': return 'from-cyan-400 to-teal-600';
 			}
 		}
 		return 'from-gray-400 to-gray-600';

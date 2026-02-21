@@ -153,7 +153,7 @@ async def system_health():
     """Comprehensive system health check."""
     # Import app dynamically to avoid circular imports
     import sys
-    src_path = Path(__file__).resolve().parents[2]
+    src_path = settings.src_dir
     if str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
     from app import app
@@ -650,7 +650,7 @@ async def get_about():
         "version": "4.0.0",
         "description": "Your life, rendered as a desktop you can touch.",
         "repository": "life-specifications",
-        "author": "Your Name",
+        "author": "Claude OS",
         "ai_partner": "Claude (Anthropic)",
         "built_with": [
             "Next.js 15",

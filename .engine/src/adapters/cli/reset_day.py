@@ -59,13 +59,16 @@ def ensure_archive_dir(archive_date):
 def check_already_archived(archive_dir):
     """Check if archive already exists (idempotency check).
 
+    Checks for ANY contents in the archive directory, not just daily.md.
+    This prevents the case where the first run archived conversations but
+    skipped TODAY.md, then a second run passes the daily.md check and
+    overwrites the archived conversations.
+
     Returns: True if already archived (abort), False if safe to proceed
     """
-    daily_file = archive_dir / "daily.md"
-
-    if daily_file.exists():
+    if archive_dir.exists() and any(archive_dir.iterdir()):
         print(f"❌ Archive already exists for this date")
-        print(f"   {daily_file.relative_to(BASE_PATH)} already exists")
+        print(f"   {archive_dir.relative_to(BASE_PATH)} has existing contents")
         print(f"\n   Aborting to prevent data loss.")
         print(f"   If you need to re-run, manually delete the archive first:")
         print(f"   rm -rf {archive_dir.relative_to(BASE_PATH)}")

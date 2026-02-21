@@ -153,11 +153,11 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 Custom apps keep their components within `app/[app-name]/`:
 
 ```
-app/my-app/
+app/job-search/
 ├── page.tsx
 ├── components/       # App-specific components
-│   ├── MainView.tsx
-│   └── DetailCard.tsx
+│   ├── JobPrepView.tsx
+│   └── PipelineCard.tsx
 └── ...
 ```
 

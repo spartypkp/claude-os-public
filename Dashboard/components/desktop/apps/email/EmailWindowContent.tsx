@@ -1,734 +1,1455 @@
 'use client';
 
-import { useChatPanel } from '@/components/context/ChatPanelContext';
-import { API_BASE, finderCreateFile } from '@/lib/api';
-import { queryKeys } from '@/lib/queryClient';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-	AlertTriangle,
-	Archive,
+	Activity,
+	ArrowUp,
+	Brain,
+	Check,
+	CheckCheck,
 	ChevronDown,
 	ChevronRight,
-	ExternalLink,
-	FileText,
+	Clock,
+	Filter,
 	Inbox,
-	Info,
 	Loader2,
 	Mail,
 	RefreshCw,
 	Search,
-	Send,
-	Settings,
-	Trash2
+	X,
+	Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useWindowStore } from '@/store/windowStore';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { API_BASE } from '@/lib/api';
+import { ChatButton } from '@/components/shared/ChatButton';
+import { SenderCard } from './SenderCard';
 
-// Claude icon SVG component
-function ClaudeIcon({ className = "w-4 h-4" }: { className?: string; }) {
-	return (
-		<svg className={className} viewBox="0 0 16 16" fill="currentColor">
-			<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
-		</svg>
-	);
+// ==========================================
+// TYPES
+// ==========================================
+
+interface ClassifiedEmail {
+	id: string;
+	message_id: string;
+	account_id: string;
+	category: Category;
+	summary: string | null;
+	briefing: string | null;
+	reasoning: string | null;
+	display_name: string | null;
+	sender: string | null;
+	subject: string | null;
+	preview: string | null;
+	processing_time_ms: number | null;
+	received_at: string | null;
+	classified_at: string | null;
+	suggested_actions?: string[];
+	handled?: boolean;
 }
 
-// Mini Claude badge
-function ClaudeBadgeMini() {
+interface RecentClassification {
+	message_id: string;
+	category: string;
+	summary: string | null;
+	display_name: string | null;
+	sender: string | null;
+	subject: string | null;
+	processing_time_ms: number | null;
+	classified_at: string | null;
+}
+
+interface PendingItem {
+	message_id: string;
+	account_id: string;
+	received_at: string | null;
+	queued_at: string | null;
+}
+
+interface PipelineStatus {
+	total_tracked: number;
+	classified: number;
+	pending: number;
+	action_needed_count: number;
+	category_breakdown: Record<string, number>;
+	avg_processing_ms: number | null;
+	throughput_last_hour: number;
+	error_count: number;
+	max_workers: number;
+	recent_classifications: RecentClassification[];
+	pending_queue: PendingItem[];
+}
+
+type Category = 'action_needed' | 'heads_up' | 'fyi' | 'noise';
+type ViewMode = 'inbox' | 'activity';
+type InboxFilter = 'triage' | 'all';
+
+const ALL_CATEGORIES: Category[] = ['action_needed', 'heads_up', 'fyi', 'noise'];
+const DEFAULT_ACTIVE: Category[] = ['action_needed', 'heads_up', 'fyi'];
+const PAGE_SIZE = 200;
+const PIPELINE_POLL_MS = 8000;
+
+// ==========================================
+// CONSTANTS
+// ==========================================
+
+const CATEGORY_CONFIG: Record<Category, {
+	color: string; bg: string; border: string; label: string;
+	accent: string; dot: string;
+}> = {
+	action_needed: {
+		color: 'text-red-400', bg: 'bg-red-500/12', border: 'border-red-500/30',
+		label: 'Action', accent: 'border-l-red-400', dot: 'bg-red-400',
+	},
+	heads_up: {
+		color: 'text-amber-400', bg: 'bg-amber-500/12', border: 'border-amber-500/30',
+		label: 'Heads Up', accent: 'border-l-amber-400', dot: 'bg-amber-400',
+	},
+	fyi: {
+		color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20',
+		label: 'FYI', accent: 'border-l-blue-400/40', dot: 'bg-blue-400',
+	},
+	noise: {
+		color: 'text-zinc-500', bg: 'bg-zinc-500/8', border: 'border-zinc-600/20',
+		label: 'Noise', accent: 'border-l-zinc-700', dot: 'bg-zinc-600',
+	},
+};
+
+// ==========================================
+// HELPERS
+// ==========================================
+
+function formatRelativeTime(dateStr: string): string {
+	const date = new Date(dateStr);
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffMins = Math.floor(diffMs / 60000);
+	const diffHours = Math.floor(diffMs / 3600000);
+
+	if (diffMins < 1) return 'now';
+	if (diffMins < 60) return `${diffMins}m`;
+	if (diffHours < 24) return `${diffHours}h`;
+
+	const isToday = date.toDateString() === now.toDateString();
+	if (isToday) return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+	const yesterday = new Date(now);
+	yesterday.setDate(yesterday.getDate() - 1);
+	if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+
+	return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatFullDate(dateStr: string): string {
+	return new Date(dateStr).toLocaleDateString('en-US', {
+		weekday: 'short', month: 'short', day: 'numeric',
+		hour: 'numeric', minute: '2-digit', hour12: true,
+	});
+}
+
+function getDateGroup(dateStr: string | null): string {
+	if (!dateStr) return 'Older';
+	const date = new Date(dateStr);
+	const now = new Date();
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const yesterday = new Date(today);
+	yesterday.setDate(today.getDate() - 1);
+	const thisWeek = new Date(today);
+	thisWeek.setDate(today.getDate() - 7);
+
+	if (date >= today) return 'Today';
+	if (date >= yesterday) return 'Yesterday';
+	if (date >= thisWeek) return 'This Week';
+	return 'Older';
+}
+
+function extractSenderName(sender: string | null): string {
+	if (!sender) return 'Unknown';
+	const match = sender.match(/^(.+?)\s*</);
+	if (match) return match[1].trim().replace(/"/g, '');
+	if (sender.includes('@')) return sender.split('@')[0];
+	return sender;
+}
+
+function extractSenderEmail(sender: string | null): string {
+	if (!sender) return '';
+	const match = sender.match(/<(.+?)>/);
+	if (match) return match[1];
+	return sender;
+}
+
+function accountShortName(email: string): string {
+	// will@diamondquarters.com → "Work"
+	// WillDiamond3@gmail.com → "Gmail"
+	// wdiamond@contoural.com → "Contoural"
+	// willdiamond.assistant@gmail.com → "Claude"
+	const lower = email.toLowerCase();
+	if (lower.includes('diamondquarters')) return 'Work';
+	if (lower.includes('contoural')) return 'Contoural';
+	if (lower.includes('assistant')) return 'Claude';
+	if (lower.includes('gmail')) return 'Gmail';
+	// Fallback: domain without TLD
+	const domain = email.split('@')[1]?.split('.')[0];
+	return domain ? domain.charAt(0).toUpperCase() + domain.slice(1) : '?';
+}
+
+function formatProcessingTime(ms: number | null): string {
+	if (!ms) return '';
+	if (ms < 1000) return `${ms}ms`;
+	return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function groupByDate(emails: ClassifiedEmail[]): { label: string; emails: ClassifiedEmail[] }[] {
+	const groups = new Map<string, ClassifiedEmail[]>();
+	const order: string[] = [];
+
+	for (const email of emails) {
+		const group = getDateGroup(email.received_at || email.classified_at);
+		if (!groups.has(group)) {
+			groups.set(group, []);
+			order.push(group);
+		}
+		groups.get(group)!.push(email);
+	}
+
+	return order.map(label => ({ label, emails: groups.get(label)! }));
+}
+
+// ==========================================
+// MAIN COMPONENT
+// ==========================================
+
+export function EmailWindowContent() {
+	const [view, setView] = useState<ViewMode>('inbox');
+	const [inboxFilter, setInboxFilter] = useState<InboxFilter>('triage');
+	const [activeCategories, setActiveCategories] = useState<Set<Category>>(new Set(DEFAULT_ACTIVE));
+	const [searchQuery, setSearchQuery] = useState('');
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+
+	const [classifications, setClassifications] = useState<ClassifiedEmail[]>([]);
+	const [classTotal, setClassTotal] = useState(0);
+	const [classOffset, setClassOffset] = useState(0);
+	const [triageCounts, setTriageCounts] = useState<Record<string, number>>({});
+	const [totalUnhandled, setTotalUnhandled] = useState(0);
+	const [handlingIds, setHandlingIds] = useState<Set<string>>(new Set());
+
+	const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
+	const [accountMap, setAccountMap] = useState<Record<string, string>>({}); // id → short name
+
+	const [loading, setLoading] = useState(true);
+	const [loadingMore, setLoadingMore] = useState(false);
+	const [refreshing, setRefreshing] = useState(false);
+
+	const [emailBody, setEmailBody] = useState<string | null>(null);
+	const [loadingBody, setLoadingBody] = useState(false);
+
+	const [newCount, setNewCount] = useState(0);
+	const latestClassifiedRef = useRef<string | null>(null);
+	const suppressNewRef = useRef(false);
+
+	// ── Category toggle ──
+
+	const toggleCategory = useCallback((cat: Category) => {
+		setActiveCategories(prev => {
+			const next = new Set(prev);
+			if (next.has(cat)) {
+				if (next.size > 1) next.delete(cat);
+			} else {
+				next.add(cat);
+			}
+			return next;
+		});
+	}, []);
+
+	// ── Loaders ──
+
+	const loadPipeline = useCallback(async () => {
+		try {
+			const res = await fetch(`${API_BASE}/api/email/pipeline/status`);
+			if (res.ok) {
+				const data: PipelineStatus = await res.json();
+				setPipeline(data);
+
+				// Detect new classifications for banner
+				if (data.recent_classifications?.length > 0) {
+					const latest = data.recent_classifications[0].classified_at;
+					if (latest && latestClassifiedRef.current && latest > latestClassifiedRef.current && !suppressNewRef.current) {
+						const newOnes = data.recent_classifications.filter(
+							(c: RecentClassification) => c.classified_at && c.classified_at > latestClassifiedRef.current!
+						).length;
+						if (newOnes > 0) setNewCount(prev => prev + newOnes);
+					}
+					if (latest) latestClassifiedRef.current = latest;
+				}
+			}
+		} catch { /* non-fatal */ }
+	}, []);
+
+	const loadClassifications = useCallback(async (
+		opts: { reset?: boolean; search?: string; fromOffset?: number; filter?: InboxFilter } = {}
+	) => {
+		const { reset = false, search, fromOffset, filter } = opts;
+		const effectiveFilter = filter ?? inboxFilter;
+		const effectiveOffset = reset ? 0 : (fromOffset ?? classOffset);
+		if (reset) setLoading(true); else setLoadingMore(true);
+		try {
+			if (effectiveFilter === 'triage') {
+				// Triage mode — single page, no offset/pagination
+				const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+				const res = await fetch(`${API_BASE}/api/email/classifications/triage?${params}`);
+				if (res.ok) {
+					const data = await res.json();
+					setClassifications(data.classifications);
+					setClassTotal(data.total_unhandled);
+					setTriageCounts(data.counts_by_category || {});
+					setTotalUnhandled(data.total_unhandled);
+					setClassOffset(data.classifications.length);
+					if (data.classifications.length > 0) {
+						const first = data.classifications[0];
+						latestClassifiedRef.current = first.classified_at || first.received_at;
+					}
+					if (reset) setNewCount(0);
+				}
+			} else {
+				// All mode — paginated
+				const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(effectiveOffset) });
+				if (search) params.set('search', search);
+
+				const res = await fetch(`${API_BASE}/api/email/classifications?${params}`);
+				if (res.ok) {
+					const data = await res.json();
+					if (reset) {
+						setClassifications(data.classifications);
+						if (data.classifications.length > 0) {
+							const first = data.classifications[0];
+							latestClassifiedRef.current = first.classified_at || first.received_at;
+						}
+					} else {
+						setClassifications(prev => [...prev, ...data.classifications]);
+					}
+					setClassTotal(data.total);
+					setClassOffset(effectiveOffset + data.classifications.length);
+					if (reset) setNewCount(0);
+				}
+			}
+		} catch { /* non-fatal */ }
+		finally { setLoading(false); setLoadingMore(false); }
+	}, [classOffset, inboxFilter]);
+
+	const loadEmailBody = useCallback(async (messageId: string, accountId: string) => {
+		setLoadingBody(true);
+		try {
+			const res = await fetch(`${API_BASE}/api/email/messages/${messageId}?account=${encodeURIComponent(accountId)}`);
+			if (res.ok) {
+				const data = await res.json();
+				setEmailBody(data.content || data.html_content || null);
+			}
+		} catch { setEmailBody(null); }
+		finally { setLoadingBody(false); }
+	}, []);
+
+	const handleMarkHandled = useCallback(async (messageId: string, accountId?: string) => {
+		setHandlingIds(prev => new Set(prev).add(messageId));
+		try {
+			const params = accountId ? `?account=${encodeURIComponent(accountId)}` : '';
+			const res = await fetch(`${API_BASE}/api/email/classifications/${messageId}/handle${params}`, {
+				method: 'POST',
+			});
+			if (res.ok) {
+				if (inboxFilter === 'triage') {
+					// Remove from list immediately
+					setClassifications(prev => prev.filter(c => c.message_id !== messageId));
+					setTotalUnhandled(prev => Math.max(0, prev - 1));
+				} else {
+					// Update handled flag in place
+					setClassifications(prev => prev.map(c =>
+						c.message_id === messageId ? { ...c, handled: true } : c
+					));
+				}
+				// Clear selection if this was selected
+				setSelectedId(prev => {
+					const match = classifications.find(c => c.message_id === messageId);
+					return match && prev === match.id ? null : prev;
+				});
+			}
+		} catch { /* non-fatal */ }
+		finally {
+			setHandlingIds(prev => {
+				const next = new Set(prev);
+				next.delete(messageId);
+				return next;
+			});
+		}
+	}, [inboxFilter, classifications]);
+
+	const handleMarkAllHandled = useCallback(async () => {
+		const unhandled = classifications.filter(c => !c.handled);
+		if (unhandled.length === 0) return;
+		const messageIds = unhandled.map(c => c.message_id);
+		try {
+			const res = await fetch(`${API_BASE}/api/email/classifications/handle-batch`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ message_ids: messageIds }),
+			});
+			if (res.ok) {
+				if (inboxFilter === 'triage') {
+					setClassifications([]);
+					setTotalUnhandled(0);
+					setTriageCounts({});
+				} else {
+					setClassifications(prev => prev.map(c => ({ ...c, handled: true })));
+				}
+				setSelectedId(null);
+			}
+		} catch { /* non-fatal */ }
+	}, [classifications, inboxFilter]);
+
+	const handleRefresh = useCallback(() => {
+		setRefreshing(true);
+		suppressNewRef.current = true;
+		setNewCount(0);
+		Promise.all([
+			loadClassifications({ reset: true, search: searchQuery, filter: inboxFilter }),
+			loadPipeline(),
+		]).finally(() => {
+			setRefreshing(false);
+			setNewCount(0);
+			suppressNewRef.current = false;
+		});
+	}, [searchQuery, inboxFilter, loadClassifications, loadPipeline]);
+
+	// ── Effects ──
+
+	useEffect(() => {
+		loadClassifications({ reset: true });
+		loadPipeline();
+		// Fetch accounts for display labels
+		fetch(`${API_BASE}/api/email/accounts/full`)
+			.then(r => r.ok ? r.json() : null)
+			.then(data => {
+				if (!data?.accounts) return;
+				const map: Record<string, string> = {};
+				for (const a of data.accounts) {
+					if (a.id && a.email) map[a.id] = a.email;
+				}
+				setAccountMap(map);
+			})
+			.catch(() => {});
+	}, []);
+
+	// Reload when inbox filter changes
+	useEffect(() => {
+		setSelectedId(null);
+		loadClassifications({ reset: true, filter: inboxFilter });
+	}, [inboxFilter]);
+
+	// Keep triage count updated even when not in triage view
+	useEffect(() => {
+		const loadTriageCount = async () => {
+			try {
+				const res = await fetch(`${API_BASE}/api/email/classifications/triage?limit=1`);
+				if (res.ok) {
+					const data = await res.json();
+					setTotalUnhandled(data.total_unhandled);
+					setTriageCounts(data.counts_by_category || {});
+				}
+			} catch { /* non-fatal */ }
+		};
+		// Poll triage count less frequently when not in triage view
+		if (inboxFilter !== 'triage') {
+			loadTriageCount();
+			const interval = setInterval(loadTriageCount, 30000);
+			return () => clearInterval(interval);
+		}
+	}, [inboxFilter]);
+
+	// Pipeline polling
+	useEffect(() => {
+		const interval = setInterval(loadPipeline, PIPELINE_POLL_MS);
+		return () => clearInterval(interval);
+	}, [loadPipeline]);
+
+	// Debounced search
+	const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+	useEffect(() => {
+		if (searchTimeout.current) clearTimeout(searchTimeout.current);
+		searchTimeout.current = setTimeout(() => {
+			setClassOffset(0);
+			loadClassifications({ reset: true, search: searchQuery });
+		}, 300);
+		return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
+	}, [searchQuery]);
+
+	// ── Derived data ──
+
+	const filteredEmails = useMemo(() =>
+		classifications.filter(c => activeCategories.has(c.category as Category)),
+		[classifications, activeCategories]
+	);
+
+	const dateGroups = useMemo(() => groupByDate(filteredEmails), [filteredEmails]);
+
+	const selectedItem = useMemo(() => {
+		if (!selectedId) return null;
+		return classifications.find(c => c.id === selectedId) || null;
+	}, [selectedId, classifications]);
+
+	useEffect(() => {
+		if (selectedItem) {
+			setEmailBody(null);
+			loadEmailBody(selectedItem.message_id, selectedItem.account_id);
+		}
+	}, [selectedItem?.id]);
+
+	const categoryCounts = useMemo(() => {
+		if (inboxFilter === 'triage' && Object.keys(triageCounts).length > 0) {
+			return triageCounts;
+		}
+		const counts: Record<string, number> = {};
+		for (const c of classifications) {
+			counts[c.category] = (counts[c.category] || 0) + 1;
+		}
+		return counts;
+	}, [classifications, inboxFilter, triageCounts]);
+
+	// ==========================================
+	// RENDER
+	// ==========================================
+
+	if (loading && classifications.length === 0) {
+		return (
+			<div className="flex items-center justify-center h-full bg-[var(--surface-base)]">
+				<div className="flex flex-col items-center gap-3">
+					<Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
+					<span className="text-xs text-[var(--text-muted)]">Loading emails...</span>
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		<div className="w-4 h-4 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center flex-shrink-0" title="Claude's Account">
-			<ClaudeIcon className="w-2.5 h-2.5 text-white" />
+		<div className="flex flex-col h-full bg-[var(--surface-base)]">
+			{/* ── Toolbar ── */}
+			<div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border-subtle)]">
+				{/* View toggle: Triage | All | Activity */}
+				<div className="flex items-center gap-0.5 mr-2 p-0.5 bg-[var(--surface-accent)] rounded-md">
+					<button
+						onClick={() => { setView('inbox'); setInboxFilter('triage'); }}
+						className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded transition-all ${
+							view === 'inbox' && inboxFilter === 'triage'
+								? 'bg-[var(--surface-base)] text-[var(--text-primary)] shadow-sm'
+								: 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+						}`}
+					>
+						<Filter className="w-3 h-3" />
+						Triage
+						{totalUnhandled > 0 && (
+							<span className="text-[10px] font-semibold text-orange-400 tabular-nums">
+								{totalUnhandled}
+							</span>
+						)}
+					</button>
+					<button
+						onClick={() => { setView('inbox'); setInboxFilter('all'); }}
+						className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded transition-all ${
+							view === 'inbox' && inboxFilter === 'all'
+								? 'bg-[var(--surface-base)] text-[var(--text-primary)] shadow-sm'
+								: 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+						}`}
+					>
+						<Inbox className="w-3 h-3" />
+						All
+					</button>
+					<button
+						onClick={() => setView('activity')}
+						className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded transition-all ${
+							view === 'activity'
+								? 'bg-[var(--surface-base)] text-[var(--text-primary)] shadow-sm'
+								: 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+						}`}
+					>
+						<Activity className="w-3 h-3" />
+						Activity
+						{pipeline && pipeline.pending > 0 && (
+							<span className="flex items-center gap-0.5 text-[10px] text-amber-400 font-medium">
+								<span className="relative flex h-1.5 w-1.5">
+									<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+									<span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
+								</span>
+								{pipeline.pending}
+							</span>
+						)}
+					</button>
+				</div>
+
+				{/* Category filters (inbox only) */}
+				{view === 'inbox' && (
+					<>
+						{ALL_CATEGORIES.map(cat => {
+							const count = categoryCounts[cat] || 0;
+							const cfg = CATEGORY_CONFIG[cat];
+							const active = activeCategories.has(cat);
+
+							return (
+								<button
+									key={cat}
+									onClick={() => toggleCategory(cat)}
+									className={`flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md transition-all ${
+										active
+											? `${cfg.bg} ${cfg.color} ring-1 ring-inset ${cfg.border}`
+											: `${cfg.color} opacity-35 hover:opacity-60`
+									}`}
+								>
+									<div className={`w-1.5 h-1.5 rounded-full transition-all ${active ? cfg.dot : `${cfg.dot} opacity-50`}`} />
+									{cfg.label}
+									{count > 0 && (
+										<span className="tabular-nums text-[10px] opacity-60">{count}</span>
+									)}
+								</button>
+							);
+						})}
+					</>
+				)}
+
+				<div className="flex-1" />
+
+				{/* Mark all handled (triage only) */}
+				{view === 'inbox' && inboxFilter === 'triage' && totalUnhandled > 0 && (
+					<button
+						onClick={handleMarkAllHandled}
+						className="flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md text-[var(--text-muted)] hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+						title="Mark all as handled"
+					>
+						<CheckCheck className="w-3 h-3" />
+						Clear all
+					</button>
+				)}
+
+				{/* Search (inbox only) */}
+				{view === 'inbox' && (
+					<div className="relative">
+						<Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+						<input
+							type="text"
+							value={searchQuery}
+							onChange={e => setSearchQuery(e.target.value)}
+							placeholder="Search..."
+							className="w-40 pl-7 pr-6 py-1 text-xs bg-[var(--surface-accent)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-strong)] transition-colors"
+						/>
+						{searchQuery && (
+							<button
+								onClick={() => setSearchQuery('')}
+								className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+							>
+								<X className="w-3 h-3" />
+							</button>
+						)}
+					</div>
+				)}
+
+				<button
+					onClick={handleRefresh}
+					disabled={refreshing}
+					className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-accent)] transition-colors"
+					title="Refresh"
+				>
+					<RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+				</button>
+			</div>
+
+			{/* ── Content ── */}
+			{view === 'activity' ? (
+				<ActivityView pipeline={pipeline} accountMap={accountMap} />
+			) : (
+				<div className="flex-1 flex flex-col min-h-0">
+					{/* New emails banner */}
+					{newCount > 0 && (
+						<button
+							onClick={handleRefresh}
+							className="flex-shrink-0 flex items-center justify-center gap-2 px-3 py-1.5 bg-sky-500/10 border-b border-sky-500/20 text-xs text-sky-400 hover:bg-sky-500/15 transition-colors"
+						>
+							<ArrowUp className="w-3 h-3" />
+							{newCount} new email{newCount !== 1 ? 's' : ''} classified
+						</button>
+					)}
+
+					<div className="flex-1 flex min-h-0">
+						{/* ── Email List ── */}
+						<div className={`flex-shrink-0 overflow-y-auto transition-[width] duration-200 ${
+							selectedItem ? 'w-[320px] border-r border-[var(--border-subtle)]' : 'w-full'
+						}`}>
+							{filteredEmails.length === 0 ? (
+								<EmptyState searchActive={!!searchQuery} />
+							) : selectedItem ? (
+								<div>
+									{filteredEmails.map(item => (
+										<EmailRowCompact
+											key={item.id}
+											item={item}
+											selected={selectedId === item.id}
+											onSelect={() => setSelectedId(item.id)}
+											accountLabel={accountMap[item.account_id]}
+											onHandle={handleMarkHandled}
+											handling={handlingIds.has(item.message_id)}
+										/>
+									))}
+									{classifications.length < classTotal && (
+										<LoadMoreButton loading={loadingMore} onClick={() => loadClassifications({ search: searchQuery })} />
+									)}
+								</div>
+							) : (
+								<div>
+									{dateGroups.map(group => (
+										<div key={group.label}>
+											<DateGroupHeader label={group.label} />
+											{group.emails.map(item => (
+												<EmailRowFull
+													key={item.id}
+													item={item}
+													onSelect={() => setSelectedId(item.id)}
+													accountLabel={accountMap[item.account_id]}
+													onHandle={handleMarkHandled}
+													handling={handlingIds.has(item.message_id)}
+												/>
+											))}
+										</div>
+									))}
+									{classifications.length < classTotal && (
+										<LoadMoreButton loading={loadingMore} onClick={() => loadClassifications({ search: searchQuery })} />
+									)}
+								</div>
+							)}
+						</div>
+
+						{/* ── Detail Panel ── */}
+						{selectedItem && (
+							<div className="flex-1 overflow-y-auto min-w-0">
+								<DetailPanel
+									item={selectedItem}
+									emailBody={emailBody}
+									loadingBody={loadingBody}
+									onClose={() => setSelectedId(null)}
+									accountLabel={accountMap[selectedItem.account_id]}
+									onHandle={handleMarkHandled}
+									handling={handlingIds.has(selectedItem.message_id)}
+								/>
+							</div>
+						)}
+					</div>
+
+					{/* ── Processing Bar (compact, bottom) ── */}
+					{pipeline && pipeline.pending > 0 && (
+						<ProcessingBar pipeline={pipeline} />
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
 
-interface EmailMessage {
-	id: string;
-	subject: string;
-	sender: string;
-	sender_name?: string;
-	date_received: string;
-	is_read: boolean;
-	is_flagged: boolean;
-	mailbox: string;
-	account: string;
-	content?: string;
-	snippet?: string;
-	recipients?: string[];
-}
+// ==========================================
+// EMPTY STATE
+// ==========================================
 
-interface Mailbox {
-	id: string;
-	name: string;
-	account: string;
-	unread_count: number;
-}
+const EmptyState = memo(function EmptyState({ searchActive }: { searchActive: boolean }) {
+	return (
+		<div className="flex flex-col items-center justify-center h-full py-16">
+			<div className="w-10 h-10 rounded-full bg-[var(--surface-accent)] flex items-center justify-center mb-3">
+				{searchActive ? (
+					<Search className="w-4 h-4 text-[var(--text-muted)]" />
+				) : (
+					<Inbox className="w-4 h-4 text-[var(--text-muted)]" />
+				)}
+			</div>
+			<p className="text-xs text-[var(--text-muted)]">
+				{searchActive ? 'No emails match your search' : 'No emails in selected categories'}
+			</p>
+			<p className="text-[10px] text-[var(--text-muted)] mt-1 opacity-60">
+				{searchActive ? 'Try a different query' : 'Adjust filters to see more'}
+			</p>
+		</div>
+	);
+});
 
-interface EmailAccount {
-	id: string;
-	name: string;
-	email: string;
-	provider: string;
-	can_read: boolean;
-	can_send: boolean;
-	can_draft: boolean;
-	is_claude_account: boolean;
-}
+// ==========================================
+// DATE GROUP HEADER
+// ==========================================
 
-type MailboxView = 'INBOX' | 'Sent' | 'Archive' | 'Trash' | 'Drafts' | 'Spam';
-type MailboxKey = MailboxView;
+const DateGroupHeader = memo(function DateGroupHeader({ label }: { label: string }) {
+	return (
+		<div className="sticky top-0 z-10 px-3 py-1.5 bg-[var(--surface-base)]/95 backdrop-blur-sm border-b border-[var(--border-subtle)]">
+			<span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+				{label}
+			</span>
+		</div>
+	);
+});
 
-const MAILBOX_CONFIG: Record<MailboxKey, { icon: React.ReactNode; label: string; }> = {
-	INBOX: { icon: <Inbox className="w-4 h-4" />, label: 'Inbox' },
-	Sent: { icon: <Send className="w-4 h-4" />, label: 'Sent' },
-	Archive: { icon: <Archive className="w-4 h-4" />, label: 'Archive' },
-	Trash: { icon: <Trash2 className="w-4 h-4" />, label: 'Trash' },
-	Drafts: { icon: <FileText className="w-4 h-4" />, label: 'Drafts' },
-	Spam: { icon: <AlertTriangle className="w-4 h-4" />, label: 'Spam' },
-};
+// ==========================================
+// EMAIL ROW — Full width (no detail panel)
+// ==========================================
 
-// Account color palette (coral-based)
-const ACCOUNT_COLORS = [
-	'bg-[#DA7756]',
-	'bg-emerald-500',
-	'bg-violet-500',
-	'bg-amber-500',
-	'bg-cyan-500',
-	'bg-rose-500',
-];
-
-function getAccountColor(index: number): string {
-	return ACCOUNT_COLORS[index % ACCOUNT_COLORS.length];
-}
-
-/**
- * Claude-branded Email app - View-focused with Claude integration.
- * 
- * Purpose: Browse and read emails, then engage Claude for any actions.
- * - No compose UI (drafts open in Mail.app/browser)
- * - "Talk to Claude" is the primary action
- * - Claude Activity section shows queue + sent history
- */
-export function EmailWindowContent() {
-	const { isOpen: chatPanelOpen, toggleVisibility } = useChatPanel();
-	const queryClient = useQueryClient();
-
-	// UI state (not cached)
-	const [selectedMessage, setSelectedMessage] = useState<EmailMessage | null>(null);
-	const [selectedMailbox, setSelectedMailbox] = useState<string>('INBOX');
-	const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-	const [loadingMessage, setLoadingMessage] = useState(false);
-	const [searchQuery, setSearchQuery] = useState('');
-	const [messageLimit, setMessageLimit] = useState(100);
-	const [showAccountsSection, setShowAccountsSection] = useState(true);
-	const [showAccountInfo, setShowAccountInfo] = useState(false);
-	const { openAppWindow } = useWindowStore();
-
-	// === React Query hooks (cached data) ===
-
-	// Accounts - cached globally
-	const { data: accounts = [] } = useQuery<EmailAccount[]>({
-		queryKey: queryKeys.emailAccounts,
-		queryFn: async () => {
-			const response = await fetch(`${API_BASE}/api/email/accounts/full`);
-			if (!response.ok) throw new Error('Failed to fetch accounts');
-			const data = await response.json();
-			return Array.isArray(data) ? data : data.accounts || [];
-		},
-		staleTime: 5 * 60 * 1000, // 5 minutes
-	});
-
-	useEffect(() => {
-		if (!selectedAccount && accounts.length > 0) {
-			setSelectedAccount(accounts[0].id);
-		}
-	}, [accounts, selectedAccount]);
-
-	useEffect(() => {
-		if (selectedAccount) {
-			setSelectedMailbox('INBOX');
-		}
-	}, [selectedAccount]);
-
-	// Mailboxes - cached per account
-	const { data: mailboxes = [] } = useQuery<Mailbox[]>({
-		queryKey: [...queryKeys.emailMailboxes, selectedAccount],
-		queryFn: async () => {
-			const url = selectedAccount
-				? `${API_BASE}/api/email/mailboxes?account=${encodeURIComponent(selectedAccount)}`
-				: `${API_BASE}/api/email/mailboxes`;
-			const response = await fetch(url);
-			if (!response.ok) throw new Error('Failed to fetch mailboxes');
-			const data = await response.json();
-			return Array.isArray(data) ? data : data.mailboxes || [];
-		},
-		enabled: !!selectedAccount,
-		staleTime: 60 * 1000, // 1 minute
-	});
-
-	// Messages - cached per mailbox + account
-	const { data: messages = [], isLoading: loading, error: messagesError } = useQuery<EmailMessage[]>({
-		queryKey: [...queryKeys.emailMessages(selectedMailbox), selectedAccount, messageLimit],
-		queryFn: async () => {
-			let url = `${API_BASE}/api/email/messages?mailbox=${encodeURIComponent(selectedMailbox)}&limit=${messageLimit}`;
-			if (selectedAccount) {
-				url += `&account=${encodeURIComponent(selectedAccount)}`;
-			}
-			const response = await fetch(url);
-			if (!response.ok) throw new Error('Failed to fetch messages');
-			const data = await response.json();
-			return Array.isArray(data) ? data : data.messages || [];
-		},
-		enabled: !!selectedAccount && !searchQuery,
-		staleTime: 0, // Always fetch fresh to avoid cache issues
-		refetchOnMount: true,
-	});
-
-	// Search results (not cached long)
-	const { data: searchResults = [], isLoading: searchLoading } = useQuery<EmailMessage[]>({
-		queryKey: ['email', 'search', searchQuery, selectedAccount],
-		queryFn: async () => {
-			let url = `${API_BASE}/api/email/search?query=${encodeURIComponent(searchQuery)}&limit=50`;
-			if (selectedAccount) {
-				url += `&account=${encodeURIComponent(selectedAccount)}`;
-			}
-			const response = await fetch(url);
-			if (!response.ok) throw new Error('Search failed');
-			const data = await response.json();
-			return Array.isArray(data) ? data : data.messages || [];
-		},
-		enabled: !!searchQuery && !!selectedAccount,
-		staleTime: 10 * 1000, // 10 seconds
-	});
-
-	// Unread count comes from mailbox data (no separate query needed)
-
-	// Derived: which messages to display and loading state
-	const displayMessages = searchQuery ? searchResults : messages;
-	const isLoadingMessages = searchQuery ? searchLoading : loading;
-	const error = messagesError ? 'Unable to load messages. Make sure Mail.app is running.' : null;
-	const selectedAccountInfo = accounts.find(a => a.id === selectedAccount);
-	const selectedAccountLabel = selectedAccountInfo?.name || 'Select account';
-	const selectedAccountEmail = selectedAccountInfo?.email || '';
-	const selectedAccountIndex = accounts.findIndex(a => a.id === selectedAccount);
-	const selectedAccountColor = selectedAccountIndex >= 0 ? getAccountColor(selectedAccountIndex) : 'bg-gray-300';
-	const standardMailboxes = Object.keys(MAILBOX_CONFIG) as MailboxKey[];
-	const dynamicMailboxes = mailboxes
-		.filter((mb) => !standardMailboxes.includes(mb.name as MailboxKey))
-		.sort((a, b) => a.name.localeCompare(b.name));
-
-	useEffect(() => {
-		setMessageLimit(100);
-	}, [selectedMailbox, selectedAccount, searchQuery]);
-
-	const sortedMessages = useMemo(() => {
-		return [...displayMessages].sort((a, b) => {
-			const aTime = new Date(a.date_received || 0).getTime();
-			const bTime = new Date(b.date_received || 0).getTime();
-			return bTime - aTime;
-		});
-	}, [displayMessages]);
-
-	// Fetch single message with content
-	const fetchMessage = useCallback(async (messageId: string, mailbox: string, account?: string) => {
-		setLoadingMessage(true);
-		try {
-			let url = `${API_BASE}/api/email/messages/${messageId}?mailbox=${encodeURIComponent(mailbox)}`;
-			if (account) {
-				url += `&account=${encodeURIComponent(account)}`;
-			}
-			const response = await fetch(url);
-			if (!response.ok) throw new Error('Failed to fetch message');
-			const data = await response.json();
-			setSelectedMessage(data);
-		} catch (err) {
-			console.error('Message fetch error:', err);
-		} finally {
-			setLoadingMessage(false);
-		}
-	}, []);
-
-	// Clear selected message when switching views
-	useEffect(() => {
-		setSelectedMessage(null);
-	}, [selectedMailbox, selectedAccount]);
-
-	// Refresh handler
-	const handleRefresh = useCallback(() => {
-		queryClient.invalidateQueries({ queryKey: queryKeys.email });
-	}, [queryClient]);
-
-	// Handle message selection
-	const handleMessageSelect = (message: EmailMessage) => {
-		if (selectedMessage?.id === message.id) {
-			setSelectedMessage(null);
-		} else {
-			fetchMessage(message.id, message.mailbox, message.account);
-			if (!message.is_read) {
-				markAsRead(message.id, message.mailbox, message.account);
-			}
-		}
-	};
-
-	// Mark message as read
-	const markAsRead = async (messageId: string, mailbox: string, account?: string) => {
-		try {
-			let url = `${API_BASE}/api/email/messages/${messageId}/read?mailbox=${encodeURIComponent(mailbox)}`;
-			if (account) {
-				url += `&account=${encodeURIComponent(account)}`;
-			}
-			await fetch(url, { method: 'POST' });
-			// Invalidate to refetch with updated read status
-			queryClient.invalidateQueries({ queryKey: queryKeys.email });
-		} catch (err) {
-			console.error('Failed to mark as read:', err);
-		}
-	};
-
-	// Talk to Claude about this email
-	const handleTalkToClaude = async () => {
-		if (!selectedMessage) return;
-
-		// Find the account info
-		const account = accounts.find(a => a.id === selectedMessage.account || a.email === selectedMessage.account);
-		const accountLabel = account?.name || selectedMessage.account;
-
-		// Build context markdown
-		const emailContext = `# Email Context
-
-**From:** ${selectedMessage.sender_name ? `${selectedMessage.sender_name} <${selectedMessage.sender}>` : selectedMessage.sender}
-**To:** ${accountLabel}
-**Subject:** ${selectedMessage.subject || '(no subject)'}
-**Date:** ${formatFullDate(selectedMessage.date_received)}
-
----
-
-${selectedMessage.content || '(no content)'}
-`;
-
-		// Save to working/ folder
-		const timestamp = Date.now();
-		const safeName = (selectedMessage.subject || 'email').replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30);
-		const filename = `email-${safeName}-${timestamp}.md`;
-
-		try {
-			await finderCreateFile(`working/${filename}`, emailContext);
-
-			// Dispatch attach-to-chat event
-			window.dispatchEvent(new CustomEvent('attach-to-chat', {
-				detail: { path: `Desktop/working/${filename}` }
-			}));
-
-			// Make sure Claude panel is visible (only toggle if closed)
-			if (!chatPanelOpen) {
-				toggleVisibility();
-			}
-		} catch (err) {
-			console.error('Failed to create email context file:', err);
-			// Fallback: just show panel
-			if (!chatPanelOpen) {
-				toggleVisibility();
-			}
-		}
-	};
-
-	// Format date for display
-	const formatDate = (dateStr: string) => {
-		try {
-			const date = new Date(dateStr);
-			const now = new Date();
-			const isToday = date.toDateString() === now.toDateString();
-
-			if (isToday) {
-				return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-			}
-			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-		} catch {
-			return dateStr;
-		}
-	};
-
-	// Format full date for message detail
-	const formatFullDate = (dateStr: string) => {
-		try {
-			const date = new Date(dateStr);
-			return date.toLocaleString('en-US', {
-				weekday: 'short',
-				month: 'short',
-				day: 'numeric',
-				year: 'numeric',
-				hour: 'numeric',
-				minute: '2-digit',
-			});
-		} catch {
-			return dateStr;
-		}
-	};
-
-	// Open Mail.app settings
-	const openMailSettings = () => {
-		window.open('x-apple.systempreferences:com.apple.Internet-Accounts', '_blank');
-	};
+const EmailRowFull = memo(function EmailRowFull({
+	item,
+	onSelect,
+	accountLabel,
+	onHandle,
+	handling,
+}: {
+	item: ClassifiedEmail;
+	onSelect: () => void;
+	accountLabel?: string;
+	onHandle?: (messageId: string, accountId?: string) => void;
+	handling?: boolean;
+}) {
+	const name = item.display_name || extractSenderName(item.sender);
+	const email = extractSenderEmail(item.sender);
+	const cfg = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.fyi;
+	const time = formatRelativeTime(item.received_at || item.classified_at || '');
 
 	return (
-		<div className="flex h-full bg-[#F5F5F5] dark:bg-[#1e1e1e] select-none" data-testid="email-app">
-			{/* Sidebar - Claude OS branded */}
-			<div className="w-52 flex-shrink-0 bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl border-r border-[#D1D1D1] dark:border-[#3a3a3a] flex flex-col overflow-hidden">
-				{/* Claude OS branding header */}
-				<div className="px-3 py-2.5 border-b border-[#D1D1D1] dark:border-[#3a3a3a]">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-2">
-							<div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-sm">
-								<Mail className="w-4 h-4 text-white" />
-							</div>
-							<div>
-								<div className="text-[11px] font-semibold text-[#DA7756]">Claude Mail</div>
-								<div className="text-[9px] text-[#8E8E93]">Claude OS</div>
-							</div>
+		<div
+			className={`w-full text-left flex border-b border-[var(--border-subtle)] hover:bg-[var(--surface-accent)] transition-colors group`}
+		>
+			{/* Left accent bar */}
+			<div className={`w-[3px] flex-shrink-0 ${cfg.dot}`} />
+
+			<button onClick={onSelect} className="flex-1 min-w-0 flex gap-3 px-3 py-2.5 text-left">
+				{/* Left: sender + summary */}
+				<div className="flex-1 min-w-0">
+					<div className="flex items-center gap-2">
+						<span className={`text-[13px] font-semibold truncate ${item.handled ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+							{name}
+						</span>
+						{item.display_name && email && (
+							<span className="text-[10px] text-[var(--text-muted)] truncate">
+								{email}
+							</span>
+						)}
+						<span className={`flex-shrink-0 text-[9px] font-medium ${cfg.color}`}>
+							{cfg.label}
+						</span>
+						{item.handled && (
+							<Check className="w-3 h-3 text-emerald-500/40 flex-shrink-0" />
+						)}
+					</div>
+					<div className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed line-clamp-2">
+						{item.summary || item.subject || '(no subject)'}
+					</div>
+				</div>
+
+				{/* Right: account + time */}
+				<div className="flex-shrink-0 text-right pt-0.5">
+					{accountLabel && (
+						<div className="text-[9px] text-[var(--text-muted)] opacity-50">
+							{accountLabel}
 						</div>
+					)}
+					<div className="text-[10px] text-[var(--text-muted)] tabular-nums">
+						{time}
+					</div>
+				</div>
+			</button>
+
+			{onHandle && !item.handled && (
+				<button
+					onClick={() => onHandle(item.message_id, item.account_id)}
+					disabled={handling}
+					className="opacity-0 group-hover:opacity-100 flex-shrink-0 px-2 flex items-center text-[var(--text-muted)] hover:text-emerald-400 transition-all"
+					title="Mark as handled"
+				>
+					{handling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+				</button>
+			)}
+		</div>
+	);
+});
+
+// ==========================================
+// EMAIL ROW — Compact (detail panel open)
+// ==========================================
+
+const EmailRowCompact = memo(function EmailRowCompact({
+	item,
+	selected,
+	onSelect,
+	accountLabel,
+	onHandle,
+	handling,
+}: {
+	item: ClassifiedEmail;
+	selected: boolean;
+	onSelect: () => void;
+	accountLabel?: string;
+	onHandle?: (messageId: string, accountId?: string) => void;
+	handling?: boolean;
+}) {
+	const name = item.display_name || extractSenderName(item.sender);
+	const cfg = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.fyi;
+	const time = formatRelativeTime(item.received_at || item.classified_at || '');
+
+	return (
+		<div
+			className={`w-full text-left flex border-b border-[var(--border-subtle)] transition-colors group ${
+				selected
+					? 'bg-[var(--surface-accent)]'
+					: 'hover:bg-[var(--surface-accent)]/50'
+			}`}
+		>
+			{/* Left accent bar — always shows classification color */}
+			<div className={`w-[3px] flex-shrink-0 ${selected ? cfg.dot : `${cfg.dot} opacity-60`}`} />
+
+			<button onClick={onSelect} className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-2 text-left">
+				<div className="flex-1 min-w-0">
+					<div className="flex items-center justify-between gap-2">
+						<span className={`text-xs truncate ${selected ? 'font-semibold text-[var(--text-primary)]' : 'font-medium text-[var(--text-secondary)]'}`}>
+							{name}
+						</span>
+						<div className="flex items-center gap-1.5 flex-shrink-0">
+							{accountLabel && (
+								<span className="text-[9px] text-[var(--text-muted)] opacity-50">
+									{accountLabel}
+								</span>
+							)}
+							<span className="text-[10px] text-[var(--text-muted)] tabular-nums">
+								{time}
+							</span>
+						</div>
+					</div>
+					<div className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+						{item.summary || item.subject || '(no subject)'}
+					</div>
+				</div>
+			</button>
+
+			{onHandle && !item.handled && (
+				<button
+					onClick={(e) => { e.stopPropagation(); onHandle(item.message_id, item.account_id); }}
+					disabled={handling}
+					className="opacity-0 group-hover:opacity-100 flex-shrink-0 px-2 flex items-center text-[var(--text-muted)] hover:text-emerald-400 transition-all"
+					title="Mark as handled"
+				>
+					{handling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+				</button>
+			)}
+		</div>
+	);
+});
+
+// ==========================================
+// LOAD MORE
+// ==========================================
+
+const LoadMoreButton = memo(function LoadMoreButton({
+	loading,
+	onClick,
+}: {
+	loading: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<button
+			onClick={onClick}
+			disabled={loading}
+			className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-accent)]/50 transition-colors"
+		>
+			{loading ? (
+				<Loader2 className="w-3.5 h-3.5 animate-spin" />
+			) : (
+				'Load more'
+			)}
+		</button>
+	);
+});
+
+// ==========================================
+// DETAIL PANEL
+// ==========================================
+
+function DetailPanelInner({
+	item,
+	emailBody,
+	loadingBody,
+	onClose,
+	accountLabel,
+	onHandle,
+	handling,
+}: {
+	item: ClassifiedEmail;
+	emailBody: string | null;
+	loadingBody: boolean;
+	onClose: () => void;
+	accountLabel?: string;
+	onHandle?: (messageId: string, accountId?: string) => void;
+	handling?: boolean;
+}) {
+	const cfg = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.fyi;
+	const senderName = item.display_name || extractSenderName(item.sender);
+	const senderEmail = extractSenderEmail(item.sender);
+	const [classificationOpen, setClassificationOpen] = useState(true);
+	const [emailContentOpen, setEmailContentOpen] = useState(false);
+
+	// Extract a plain-text preview from emailBody HTML for collapsed view
+	const emailPreview = useMemo(() => {
+		if (!emailBody) return item.preview || '';
+		const tmp = document.createElement('div');
+		tmp.innerHTML = emailBody;
+		const text = tmp.textContent || tmp.innerText || '';
+		return text.slice(0, 200).trim();
+	}, [emailBody, item.preview]);
+
+	return (
+		<div className="flex flex-col h-full">
+			{/* ── 1. Metadata (fixed) ── */}
+			<div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-[var(--border-subtle)]">
+				<div className="flex items-start justify-between gap-3 mb-2">
+					<h2 className="text-sm font-semibold text-[var(--text-primary)] leading-snug flex-1 min-w-0">
+						{item.subject || '(no subject)'}
+					</h2>
+					<div className="flex items-center gap-0.5 flex-shrink-0">
+						{onHandle && !item.handled && (
+							<button
+								onClick={() => onHandle(item.message_id, item.account_id)}
+								disabled={handling}
+								className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+								title="Mark as handled"
+							>
+								{handling ? (
+									<Loader2 className="w-3 h-3 animate-spin" />
+								) : (
+									<Check className="w-3 h-3" />
+								)}
+								Handled
+							</button>
+						)}
+						{item.handled && (
+							<span className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-emerald-500/50">
+								<Check className="w-3 h-3" />
+								Handled
+							</span>
+						)}
+						<ChatButton
+							message={`From: ${senderName} <${senderEmail}> — ${item.subject}\n${item.summary || ''}\nTo read: email("read", message_id="${item.message_id}", account="${item.account_id}")`}
+							app="Email"
+							size="sm"
+						/>
 						<button
-							onClick={() => openAppWindow('settings')}
-							className="p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-							title="Settings"
+							onClick={onClose}
+							className="p-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors"
+							title="Close"
 						>
-							<Settings className="w-4 h-4 text-[#8E8E93]" />
+							<X className="w-3.5 h-3.5 text-[var(--text-muted)]" />
 						</button>
 					</div>
 				</div>
 
-				<div className="flex-1 overflow-auto">
-					{/* Accounts Section */}
-					<div className="px-2 pt-3">
-						<div className="w-full flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-							<button
-								onClick={() => setShowAccountsSection(!showAccountsSection)}
-								className="flex items-center gap-1 hover:text-[#6E6E73]"
-							>
-								{showAccountsSection ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-								Accounts
-							</button>
-							<button
-								onClick={() => setShowAccountInfo(!showAccountInfo)}
-								className="ml-auto p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
-								title="Account info"
-							>
-								<Info className="w-3 h-3" />
-							</button>
-						</div>
-
-						{showAccountInfo && (
-							<div className="mx-2 mt-2 p-2.5 bg-[#DA7756]/10 border border-[#DA7756]/30 rounded-lg text-xs">
-								<p className="text-[#1D1D1F] dark:text-[#E5E5E5] mb-2">
-									Accounts are managed in macOS Mail.app or System Settings.
-								</p>
-								<button onClick={openMailSettings} className="flex items-center gap-1 text-[#DA7756] hover:underline">
-									<ExternalLink className="w-3 h-3" />
-									Open Internet Accounts
-								</button>
-							</div>
-						)}
-
-					{showAccountsSection && (
-						<nav className="mt-1 space-y-0.5">
-							{accounts.map((account, index) => (
-								<button
-									key={account.id}
-									onClick={() => { setSelectedAccount(account.id); }}
-									className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${selectedAccount === account.id
-											? 'bg-[#DA7756] text-white'
-											: 'text-[#1D1D1F] dark:text-[#E5E5E5] hover:bg-black/5 dark:hover:bg-white/10'
-										}`}
-								>
-										{account.is_claude_account ? (
-											<div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center">
-												<ClaudeIcon className="w-3 h-3 text-white" />
-											</div>
-										) : (
-											<div className={`w-5 h-5 rounded-full ${getAccountColor(index)} flex items-center justify-center`}>
-												<span className="text-[10px] font-medium text-white">{account.name.charAt(0).toUpperCase()}</span>
-											</div>
-										)}
-										<span className="flex-1 text-left truncate" title={account.email}>{account.name}</span>
-										{account.is_claude_account && selectedAccount !== account.id && <ClaudeBadgeMini />}
-									</button>
-								))}
-
-								{accounts.length === 0 && (
-									<p className="px-2 py-2 text-[11px] text-[#8E8E93] italic">No accounts found</p>
-								)}
-							</nav>
-						)}
-					</div>
-
-					{/* Mailboxes Section */}
-					<div className="px-2 pt-4">
-						<div className="px-2 py-1 text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">Mailboxes</div>
-						<nav className="mt-1 space-y-0.5">
-							{(Object.keys(MAILBOX_CONFIG) as MailboxKey[]).map((mailbox) => {
-								const config = MAILBOX_CONFIG[mailbox];
-								const isSelected = selectedMailbox === mailbox;
-								const mbData = mailboxes.find(m => m.name === mailbox);
-								const unread = mbData?.unread_count || 0;
-
-								return (
-									<button
-										key={mailbox}
-										onClick={() => { setSelectedMailbox(mailbox); }}
-										className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${isSelected ? 'bg-[#DA7756] text-white' : 'text-[#1D1D1F] dark:text-[#E5E5E5] hover:bg-black/5 dark:hover:bg-white/10'
-											}`}
-									>
-										<span className={isSelected ? 'text-white' : 'text-[#DA7756]'}>{config.icon}</span>
-										<span className="flex-1 text-left font-medium">{config.label}</span>
-										{unread > 0 && (
-											<span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${isSelected ? 'bg-white/20 text-white' : 'bg-[#DA7756]/15 text-[#DA7756]'
-												}`}>{unread}</span>
-										)}
-									</button>
-								);
-							})}
-						</nav>
-
-						{dynamicMailboxes.length > 0 && (
-							<div className="mt-3">
-								<div className="px-2 py-1 text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">Folders</div>
-								<nav className="mt-1 space-y-0.5">
-									{dynamicMailboxes.map((mailbox) => {
-										const isSelected = selectedMailbox === mailbox.name;
-										return (
-											<button
-												key={mailbox.id}
-												onClick={() => setSelectedMailbox(mailbox.name)}
-												className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${isSelected ? 'bg-[#DA7756] text-white' : 'text-[#1D1D1F] dark:text-[#E5E5E5] hover:bg-black/5 dark:hover:bg-white/10'
-													}`}
-											>
-												<span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/70' : 'bg-[#DA7756]/50'}`} />
-												<span className="flex-1 text-left truncate">{mailbox.name}</span>
-												{mailbox.unread_count > 0 && (
-													<span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${isSelected ? 'bg-white/20 text-white' : 'bg-[#DA7756]/15 text-[#DA7756]'
-														}`}>{mailbox.unread_count}</span>
-												)}
-											</button>
-										);
-									})}
-								</nav>
-							</div>
-						)}
-					</div>
-				</div>
-			</div>
-
-			{/* Message List */}
-			<div className="w-80 flex-shrink-0 border-r border-[#D1D1D1] dark:border-[#3a3a3a] flex flex-col bg-white dark:bg-[#1e1e1e]">
-				{/* Search & Toolbar */}
-				<div className="flex items-center gap-2 px-3 py-2 border-b border-[#E5E5E5] dark:border-[#333]">
-					<div className="relative flex-1">
-						<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93]" />
-						<input
-							type="text"
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							placeholder={selectedAccount ? `Search ${selectedAccountLabel}` : "Select an account"}
-							disabled={!selectedAccount}
-							className="w-full pl-9 pr-3 py-1.5 text-sm bg-[#F5F5F5] dark:bg-[#333] border-0 rounded-md focus:outline-none focus:ring-2 focus:ring-[#DA7756]/50 disabled:opacity-50"
-						/>
-					</div>
-					<button onClick={handleRefresh} className="p-1.5 rounded hover:bg-[#F5F5F5] dark:hover:bg-[#333] transition-colors" title="Refresh">
-						<RefreshCw className="w-4 h-4 text-[#8E8E93]" />
-					</button>
-				</div>
-				<div className="px-3 py-2 border-b border-[#E5E5E5] dark:border-[#333] bg-white dark:bg-[#1e1e1e]">
-					<div className="flex items-center gap-2">
-						<div className={`w-2.5 h-2.5 rounded-full ${selectedAccount ? selectedAccountColor : 'bg-gray-300'}`} />
-						<div className="min-w-0">
-							<p className="text-xs font-medium text-[#1D1D1F] dark:text-white truncate">
-								{selectedAccountLabel}
-							</p>
-							{selectedAccountEmail && (
-								<p className="text-[11px] text-[#8E8E93] truncate">{selectedAccountEmail}</p>
-							)}
-						</div>
-					</div>
-				</div>
-
-				{/* Header */}
-				<div className="px-3 py-2 border-b border-[#E5E5E5] dark:border-[#333] bg-[#FAFAFA] dark:bg-[#252526]">
-					<div className="flex items-center justify-between">
-						<h3 className="font-semibold text-[#1D1D1F] dark:text-white text-sm">
-							{MAILBOX_CONFIG[selectedMailbox as MailboxKey]?.label || selectedMailbox}
-						</h3>
-						<span className="text-[10px] text-[#8E8E93] font-medium truncate max-w-[140px]" title={selectedAccountLabel}>
-							{selectedAccountLabel}
-						</span>
-					</div>
-				</div>
-
-				{/* List Content */}
-				<div className="flex-1 overflow-auto">
-					{isLoadingMessages ? (
-						<div className="flex items-center justify-center h-full">
-							<Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
-						</div>
-					) : error ? (
-						<div className="flex flex-col items-center justify-center h-full text-[#8E8E93] px-4 text-center">
-							<Mail className="w-10 h-10 mb-2 opacity-30" />
-							<p className="text-sm">{error}</p>
-							<button onClick={handleRefresh} className="mt-3 text-sm text-[#DA7756] hover:underline">Try again</button>
-						</div>
-					) : displayMessages.length === 0 ? (
-						<div className="flex flex-col items-center justify-center h-full text-[#8E8E93]">
-							<Inbox className="w-10 h-10 mb-2 opacity-30" />
-							<p className="text-sm">No messages</p>
-							{selectedAccount && (
-								<p className="text-xs mt-1">in {MAILBOX_CONFIG[selectedMailbox as MailboxKey]?.label || selectedMailbox}</p>
-							)}
-						</div>
-					) : (
-						<div className="divide-y divide-[#E5E5E5] dark:divide-[#2a2a2a]">
-							{sortedMessages.map((message) => {
-								const account = accounts.find(a => a.email === message.account || a.id === message.account);
-								const accountIndex = accounts.findIndex(a => a.email === message.account || a.id === message.account);
-								const isClaudeEmail = account?.is_claude_account;
-								const isSentMailbox = message.mailbox.toLowerCase().startsWith('sent');
-								const recipients = message.recipients || [];
-								const recipientLabel = recipients.length > 1
-									? `${recipients[0]} +${recipients.length - 1}`
-									: recipients[0];
-								const primaryLabel = isSentMailbox && recipientLabel
-									? `To: ${recipientLabel}`
-									: (message.sender_name || message.sender);
-
-								return (
-									<button
-										key={message.id}
-										onClick={() => handleMessageSelect(message)}
-										className={`w-full text-left px-3 py-2.5 transition-colors ${selectedMessage?.id === message.id
-											? 'bg-[#DA7756]/10 border-l-2 border-l-[#DA7756]'
-											: 'hover:bg-[#F5F5F5] dark:hover:bg-[#2a2a2a] border-l-2 border-l-transparent'
-											}`}
-									>
-										<div className="flex items-baseline justify-between gap-2 mb-1">
-											<span className={`text-xs ${message.is_read ? 'text-[#8E8E93]' : 'font-medium text-[#1D1D1F] dark:text-white'}`}>
-												{primaryLabel || 'Unknown Sender'}
-											</span>
-											<span className="text-[10px] text-[#8E8E93] flex-shrink-0">{formatDate(message.date_received)}</span>
-										</div>
-										<p className={`text-sm truncate ${message.is_read ? 'text-[#6E6E73] dark:text-[#8e8e93]' : 'font-semibold text-[#1D1D1F] dark:text-white'}`}>
-											{message.subject || '(no subject)'}
-										</p>
-										{message.snippet && (
-											<p className="text-xs text-[#8E8E93] truncate mt-0.5">
-												{message.snippet}
-											</p>
-										)}
-									</button>
-								);
-							})}
-							{!searchQuery && displayMessages.length >= messageLimit && (
-								<div className="px-3 py-3">
-									<button
-										onClick={() => setMessageLimit((prev) => prev + 100)}
-										className="w-full text-xs font-medium text-[#DA7756] hover:text-[#C15F3C] border border-[#DA7756]/30 hover:border-[#DA7756]/60 rounded-md py-1.5 transition-colors"
-									>
-										Load more
-									</button>
-								</div>
-							)}
-						</div>
+				<div className="flex items-center gap-2">
+					<span className="text-xs font-medium text-[var(--text-primary)]">{senderName}</span>
+					{senderEmail && (
+						<span className="text-[10px] text-[var(--text-muted)] truncate">{senderEmail}</span>
 					)}
 				</div>
-
-				{/* Status bar */}
-				<div className="px-3 py-1.5 border-t border-[#E5E5E5] dark:border-[#333] text-[11px] text-[#8E8E93] bg-[#FAFAFA] dark:bg-[#252526]">
-					<>{displayMessages.length} {displayMessages.length === 1 ? 'message' : 'messages'}{selectedAccount && ` in ${accounts.find(a => a.id === selectedAccount)?.name || selectedAccount}`}</>
+				<div className="flex items-center gap-2 mt-0.5">
+					<span className="text-[10px] text-[var(--text-muted)] tabular-nums">
+						{formatFullDate(item.received_at || item.classified_at || '')}
+					</span>
+					{accountLabel && (
+						<>
+							<span className="text-[var(--text-muted)] opacity-30">·</span>
+							<span className="text-[10px] text-[var(--text-muted)] opacity-60">{accountLabel}</span>
+						</>
+					)}
 				</div>
 			</div>
 
-			{/* Message Preview */}
-			<div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#1e1e1e]">
-				{loadingMessage ? (
-					<div className="flex-1 flex items-center justify-center">
-						<Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+			{/* ── 2. Classification (collapsible, takes most space when open) ── */}
+			<div className={`flex-shrink-0 border-b border-[var(--border-subtle)] bg-[var(--surface-accent)]/30 ${
+				classificationOpen ? 'flex-1 min-h-0 flex flex-col' : ''
+			}`}>
+				{/* Header — always visible, clickable */}
+				<button
+					onClick={() => setClassificationOpen(prev => !prev)}
+					className="flex items-center gap-2 w-full px-5 py-2.5 hover:bg-[var(--surface-accent)]/50 transition-colors"
+				>
+					{classificationOpen
+						? <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+						: <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
+					}
+					<Brain className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+					<span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+						Classification
+					</span>
+					<span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
+						{cfg.label}
+					</span>
+					{item.processing_time_ms && (
+						<span className="text-[9px] text-[var(--text-muted)] ml-auto tabular-nums">
+							{formatProcessingTime(item.processing_time_ms)}
+						</span>
+					)}
+				</button>
+
+				{classificationOpen ? (
+					/* Expanded: scrollable content */
+					<div className="flex-1 overflow-y-auto min-h-0 px-5 pb-3">
+						{item.summary && (
+							<div className="text-xs text-[var(--text-secondary)] leading-relaxed mb-1.5 prose prose-invert prose-xs max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0">
+								<ReactMarkdown remarkPlugins={[remarkGfm]}>{item.summary}</ReactMarkdown>
+							</div>
+						)}
+
+						{(item.briefing || item.reasoning) && (
+							<div className="text-[11px] text-[var(--text-tertiary)] leading-relaxed prose prose-invert prose-xs max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_strong]:text-[var(--text-secondary)]">
+								<ReactMarkdown remarkPlugins={[remarkGfm]}>{(item.briefing || item.reasoning)!}</ReactMarkdown>
+							</div>
+						)}
+
+						{/* Suggested actions */}
+						{item.suggested_actions && item.suggested_actions.length > 0 && (
+							<div className="mt-3 pt-2 border-t border-[var(--border-subtle)]">
+								<div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+									Suggested Actions
+								</div>
+								<ul className="space-y-1">
+									{item.suggested_actions.map((action, i) => (
+										<li key={i} className="flex items-start gap-2 text-[11px] text-[var(--text-secondary)] leading-relaxed">
+											<span className="text-[var(--text-muted)] mt-0.5">&#8226;</span>
+											{action}
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
+
+						{/* Sender card inline */}
+						{senderEmail && <SenderCard senderEmail={senderEmail} />}
 					</div>
-				) : selectedMessage ? (
-					<>
-						{/* Message Header with Talk to Claude */}
-						<div className="px-6 py-4 border-b border-[#E5E5E5] dark:border-[#333]">
-							{/* Talk to Claude Button - Primary CTA */}
-							<button
-								onClick={handleTalkToClaude}
-								className="w-full flex items-center justify-center gap-2 px-4 py-3 mb-4 bg-gradient-to-b from-[#DA7756] to-[#C15F3C] hover:from-[#E8856A] hover:to-[#DA7756] text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
-							>
-								<div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-									<ClaudeIcon className="w-3 h-3 text-white" />
-								</div>
-								Talk to Claude about this email
-							</button>
-
-							<h2 className="text-xl font-semibold text-[#1D1D1F] dark:text-white mb-3">{selectedMessage.subject || '(no subject)'}</h2>
-							<div className="flex items-start justify-between gap-4">
-								<div className="flex items-start gap-3">
-									{accounts.find(a => a.is_claude_account && (a.email === selectedMessage.account || a.id === selectedMessage.account)) ? (
-										<div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center">
-											<ClaudeIcon className="w-6 h-6 text-white" />
-										</div>
-									) : (
-										<div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-medium ${getAccountColor(accounts.findIndex(a => a.email === selectedMessage.account || a.id === selectedMessage.account))}`}>
-											{(selectedMessage.sender_name || selectedMessage.sender).charAt(0).toUpperCase()}
-										</div>
-									)}
-									<div>
-										{(() => {
-											const isSentMailbox = selectedMessage.mailbox.toLowerCase().startsWith('sent');
-											const recipientList = selectedMessage.recipients || [];
-											const primaryLine = isSentMailbox && recipientList.length > 0
-												? `To: ${recipientList.join(', ')}`
-												: (selectedMessage.sender_name || selectedMessage.sender);
-											const secondaryLine = isSentMailbox
-												? `From: ${selectedAccountEmail || selectedAccountLabel}`
-												: selectedMessage.sender;
-
-											return (
-												<>
-													<p className="font-medium text-[#1D1D1F] dark:text-white">{primaryLine}</p>
-													<p className="text-sm text-[#8E8E93]">{secondaryLine}</p>
-													{!isSentMailbox && recipientList.length > 0 && (
-														<p className="text-sm text-[#8E8E93] mt-1">To: {recipientList.join(', ')}</p>
-													)}
-												</>
-											);
-										})()}
-									</div>
-								</div>
-								<div className="text-right flex-shrink-0">
-									<p className="text-sm text-[#8E8E93]">{formatFullDate(selectedMessage.date_received)}</p>
-									{selectedMessage.account && (
-										<p className="text-xs text-[#8E8E93] mt-1">via {accounts.find(a => a.id === selectedMessage.account || a.email === selectedMessage.account)?.name || selectedMessage.account}</p>
-									)}
-								</div>
-							</div>
-						</div>
-
-						{/* Message Body */}
-						<div className="flex-1 overflow-auto px-6 py-4">
-							<div className="max-w-3xl">
-								<pre className="whitespace-pre-wrap font-sans text-[#1D1D1F] dark:text-[#E5E5E5] text-[15px] leading-relaxed">
-									{selectedMessage.content || '(no content)'}
-								</pre>
-							</div>
-						</div>
-					</>
 				) : (
-					<div className="flex-1 flex flex-col items-center justify-center text-[#8E8E93]">
-						<div className="w-20 h-20 rounded-full bg-[#DA7756]/10 flex items-center justify-center mb-4">
-							<Mail className="w-10 h-10 text-[#DA7756] opacity-50" />
-						</div>
-						<p className="text-lg font-medium text-[#6E6E73] dark:text-[#8e8e93]">No Message Selected</p>
-						<p className="text-sm mt-1 text-[#8E8E93]">Choose a message to read</p>
+					/* Collapsed: summary preview */
+					<div className="px-5 pb-2.5 text-xs text-[var(--text-muted)] line-clamp-2 leading-relaxed">
+						{item.summary || '(no summary)'}
+					</div>
+				)}
+			</div>
+
+			{/* ── 3. Email content (collapsible, defaults closed) ── */}
+			<div className={`flex-shrink-0 ${
+				emailContentOpen ? 'flex-1 min-h-0 flex flex-col' : ''
+			}`}>
+				{/* Header — always visible, clickable */}
+				<button
+					onClick={() => setEmailContentOpen(prev => !prev)}
+					className="flex items-center gap-2 w-full px-5 py-2.5 border-b border-[var(--border-subtle)] hover:bg-[var(--surface-accent)]/50 transition-colors"
+				>
+					{emailContentOpen
+						? <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+						: <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
+					}
+					<Mail className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+					<span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+						Email Content
+					</span>
+					{loadingBody && (
+						<Loader2 className="w-3 h-3 animate-spin text-[var(--text-muted)] ml-auto" />
+					)}
+				</button>
+
+				{emailContentOpen ? (
+					/* Expanded: scrollable content */
+					<div className="flex-1 overflow-y-auto min-h-0 px-5 py-4">
+						{loadingBody ? (
+							<div className="flex items-center gap-2 text-xs text-[var(--text-muted)] py-4">
+								<Loader2 className="w-3.5 h-3.5 animate-spin" />
+								Loading email...
+							</div>
+						) : emailBody ? (
+							<div
+								className="text-[13px] text-[var(--text-secondary)] leading-relaxed prose prose-invert prose-sm max-w-none [&_a]:text-sky-400 [&_img]:max-w-full [&_img]:h-auto [&_table]:text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:py-1 [&_pre]:bg-[var(--surface-accent)] [&_pre]:rounded-md [&_pre]:p-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border-subtle)] [&_blockquote]:pl-3 [&_blockquote]:text-[var(--text-muted)]"
+								dangerouslySetInnerHTML={{ __html: emailBody }}
+							/>
+						) : item.preview ? (
+							<div className="text-xs text-[var(--text-tertiary)] leading-relaxed whitespace-pre-wrap">
+								{item.preview}
+							</div>
+						) : (
+							<div className="flex flex-col items-center py-8">
+								<Mail className="w-5 h-5 text-[var(--text-muted)] opacity-40 mb-2" />
+								<span className="text-xs text-[var(--text-muted)]">No content available</span>
+							</div>
+						)}
+					</div>
+				) : (
+					/* Collapsed: text preview */
+					<div className="px-5 py-2.5 text-xs text-[var(--text-muted)] line-clamp-2 leading-relaxed border-b border-[var(--border-subtle)]">
+						{emailPreview || '(no content)'}
 					</div>
 				)}
 			</div>
 		</div>
 	);
 }
+
+const DetailPanel = memo(DetailPanelInner);
+
+// ==========================================
+// PROCESSING BAR (compact, bottom of inbox)
+// ==========================================
+
+const ProcessingBar = memo(function ProcessingBar({ pipeline }: { pipeline: PipelineStatus }) {
+	const progress = pipeline.total_tracked > 0
+		? Math.round((pipeline.classified / pipeline.total_tracked) * 100)
+		: 100;
+
+	const etaMin = pipeline.avg_processing_ms && pipeline.max_workers > 0
+		? Math.ceil((pipeline.pending / pipeline.max_workers) * (pipeline.avg_processing_ms / 1000 / 60))
+		: null;
+
+	return (
+		<div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--surface-accent)]/50">
+			<div className="h-0.5 bg-[var(--surface-accent)]">
+				<div
+					className="h-full bg-amber-400/60 transition-all duration-1000 ease-out"
+					style={{ width: `${progress}%` }}
+				/>
+			</div>
+			<div className="flex items-center gap-2 px-3 py-1.5 text-[10px] text-[var(--text-muted)]">
+				<Loader2 className="w-3 h-3 animate-spin text-amber-400 flex-shrink-0" />
+				<span>Classifying {pipeline.pending} email{pipeline.pending !== 1 ? 's' : ''}</span>
+				<span className="opacity-40">·</span>
+				<span>{pipeline.max_workers} workers</span>
+				{etaMin !== null && (
+					<>
+						<span className="opacity-40">·</span>
+						<span>~{etaMin} min</span>
+					</>
+				)}
+				<span className="ml-auto tabular-nums">{progress}%</span>
+			</div>
+		</div>
+	);
+});
+
+// ==========================================
+// ACTIVITY VIEW (replaces Pipeline)
+// ==========================================
+
+const ActivityView = memo(function ActivityView({ pipeline, accountMap }: { pipeline: PipelineStatus | null; accountMap: Record<string, string> }) {
+	if (!pipeline) {
+		return (
+			<div className="flex items-center justify-center h-full">
+				<Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
+			</div>
+		);
+	}
+
+	const isProcessing = pipeline.pending > 0;
+	const progress = pipeline.total_tracked > 0
+		? Math.round((pipeline.classified / pipeline.total_tracked) * 100)
+		: 100;
+
+	return (
+		<div className="flex-1 overflow-y-auto">
+			{/* ── Stats strip ── */}
+			<div className="flex items-center gap-4 px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-accent)]/30">
+				<StatPill
+					icon={<Brain className="w-3 h-3" />}
+					value={pipeline.classified}
+					label="classified"
+					accent="text-sky-400"
+				/>
+				<StatPill
+					icon={<Clock className="w-3 h-3" />}
+					value={pipeline.avg_processing_ms ? `${(pipeline.avg_processing_ms / 1000).toFixed(1)}s` : '\u2014'}
+					label="avg"
+					accent="text-violet-400"
+				/>
+				<StatPill
+					icon={<Zap className="w-3 h-3" />}
+					value={pipeline.throughput_last_hour}
+					label="last hour"
+					accent="text-emerald-400"
+				/>
+				{isProcessing && (
+					<StatPill
+						icon={<Loader2 className="w-3 h-3 animate-spin" />}
+						value={pipeline.pending}
+						label="queued"
+						accent="text-amber-400"
+					/>
+				)}
+
+				{/* Category breakdown (inline) */}
+				<div className="ml-auto flex items-center gap-2">
+					{Object.entries(pipeline.category_breakdown).map(([cat, count]) => {
+						const cfg = CATEGORY_CONFIG[cat as Category] || CATEGORY_CONFIG.fyi;
+						return (
+							<div key={cat} className="flex items-center gap-1" title={`${cfg.label}: ${count}`}>
+								<div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+								<span className="text-[10px] text-[var(--text-muted)] tabular-nums">{count}</span>
+							</div>
+						);
+					})}
+				</div>
+			</div>
+
+			{/* ── Progress (when processing) ── */}
+			{isProcessing && (
+				<div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+					<div className="flex items-center justify-between text-[11px] mb-1.5">
+						<span className="text-[var(--text-muted)]">Classification progress</span>
+						<span className="text-[var(--text-secondary)] tabular-nums">{progress}%</span>
+					</div>
+					<div className="h-1 bg-[var(--surface-accent)] rounded-full overflow-hidden">
+						<div
+							className="h-full bg-amber-400/60 rounded-full transition-all duration-1000"
+							style={{ width: `${progress}%` }}
+						/>
+					</div>
+					<div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-1">
+						<span>{pipeline.max_workers} workers</span>
+						<span className="opacity-40">·</span>
+						<span>{pipeline.pending} remaining</span>
+						{pipeline.avg_processing_ms && (
+							<>
+								<span className="opacity-40">·</span>
+								<span>~{Math.ceil((pipeline.pending / pipeline.max_workers) * (pipeline.avg_processing_ms / 1000 / 60))} min</span>
+							</>
+						)}
+					</div>
+				</div>
+			)}
+
+			{/* ── Pending queue (top when processing) ── */}
+			{pipeline.pending_queue.length > 0 && (
+				<div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+					<h3 className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+						<Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+						Queue ({pipeline.pending})
+					</h3>
+					<div className="space-y-0.5">
+						{pipeline.pending_queue.slice(0, 8).map((item, i) => {
+							const acctLabel = accountMap[item.account_id];
+							return (
+								<div
+									key={`${item.message_id}-${i}`}
+									className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors"
+								>
+									<div className="w-1.5 h-1.5 rounded-full bg-amber-500/40 flex-shrink-0 animate-pulse" />
+									<span className="text-[11px] text-[var(--text-secondary)] truncate flex-1 min-w-0">
+										Awaiting classification...
+									</span>
+									<div className="flex items-center gap-1.5 flex-shrink-0">
+										{acctLabel && (
+											<span className="text-[9px] text-[var(--text-muted)] opacity-50">
+												{acctLabel}
+											</span>
+										)}
+										<span className="text-[10px] text-[var(--text-muted)] tabular-nums">
+											{item.received_at ? formatRelativeTime(item.received_at) : '?'}
+										</span>
+									</div>
+								</div>
+							);
+						})}
+						{pipeline.pending > 8 && (
+							<div className="text-[10px] text-[var(--text-muted)] text-center py-1 opacity-60">
+								+{pipeline.pending - Math.min(pipeline.pending_queue.length, 8)} more
+							</div>
+						)}
+					</div>
+				</div>
+			)}
+
+			{/* ── Classification feed ── */}
+			<div className="px-4 py-3">
+				<h3 className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">
+					Recent Classifications
+				</h3>
+
+				{pipeline.recent_classifications.length === 0 ? (
+					<div className="flex flex-col items-center py-8">
+						<Activity className="w-5 h-5 text-[var(--text-muted)] opacity-40 mb-2" />
+						<span className="text-xs text-[var(--text-muted)]">No classifications yet</span>
+					</div>
+				) : (
+					<div className="space-y-0.5">
+						{pipeline.recent_classifications.map((item, i) => {
+							const cfg = CATEGORY_CONFIG[item.category as Category] || CATEGORY_CONFIG.fyi;
+							const name = item.display_name || extractSenderName(item.sender);
+
+							return (
+								<div
+									key={`${item.message_id}-${i}`}
+									className="flex overflow-hidden rounded-lg hover:bg-[var(--surface-accent)] transition-colors"
+								>
+									{/* Left accent bar — matches inbox */}
+									<div className={`w-[3px] flex-shrink-0 ${cfg.dot}`} />
+
+									<div className="flex items-center gap-2.5 flex-1 min-w-0 px-2.5 py-2">
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-2">
+												<span className="text-xs font-medium text-[var(--text-primary)] truncate">{name}</span>
+												<span className={`flex-shrink-0 text-[9px] font-medium ${cfg.color}`}>
+													{cfg.label}
+												</span>
+											</div>
+											<div className="text-[11px] text-[var(--text-muted)] truncate">
+												{item.summary || item.subject || '(no subject)'}
+											</div>
+										</div>
+
+										<div className="flex-shrink-0 text-right">
+											<div className="text-[10px] text-[var(--text-muted)] tabular-nums">
+												{item.classified_at ? formatRelativeTime(item.classified_at) : ''}
+											</div>
+											{item.processing_time_ms && (
+												<div className="text-[9px] text-[var(--text-muted)] opacity-60 tabular-nums">
+													{formatProcessingTime(item.processing_time_ms)}
+												</div>
+											)}
+										</div>
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				)}
+			</div>
+
+			{/* ── Errors ── */}
+			{pipeline.error_count > 0 && (
+				<div className="px-4 py-2 border-t border-[var(--border-subtle)] text-[10px] text-red-400/70 flex items-center gap-1.5">
+					<X className="w-3 h-3" />
+					{pipeline.error_count} classification errors
+				</div>
+			)}
+		</div>
+	);
+});
+
+// ==========================================
+// STAT PILL (inline, for Activity view)
+// ==========================================
+
+const StatPill = memo(function StatPill({
+	icon,
+	value,
+	label,
+	accent,
+}: {
+	icon: React.ReactNode;
+	value: string | number;
+	label: string;
+	accent: string;
+}) {
+	return (
+		<div className="flex items-center gap-1.5">
+			<span className={accent}>{icon}</span>
+			<span className="text-xs font-semibold text-[var(--text-primary)] tabular-nums">{value}</span>
+			<span className="text-[10px] text-[var(--text-muted)]">{label}</span>
+		</div>
+	);
+});
 
 export default EmailWindowContent;

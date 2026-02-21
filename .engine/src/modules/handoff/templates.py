@@ -15,13 +15,13 @@ Where is the conversation thread currently?
 Capture narrative flow, not bullet points. -->
 
 ## User State
-<!-- How is the user engaging? Energy level? Mode (focused work vs casual vs tired)?
+<!-- How is Will engaging? Energy level? Mode (focused work vs casual vs tired)?
 Stressed or relaxed? Scattered or locked in?
 Any emotional context that matters for how to engage? -->
 
 ## What Would Be Weird to Forget
 <!-- Relational context that creates continuity.
-Callbacks, jokes, commitments the user made, things they mentioned in passing.
+Callbacks, jokes, commitments Will made, things he mentioned in passing.
 Promises Claude made that need follow-through.
 If the next Claude didn't know this, conversation would feel off. -->
 
@@ -37,9 +37,9 @@ This helps fresh Claude know what's new vs what was already there. -->
 - Relevant files: What files matter for continuing this work? (specs, code, docs)
 - Resume instruction: Clear directive for fresh Claude
   * "Continue autonomously: finish implementing X in file.py"
-  * "Wait for user: blocked on decision about Y"
+  * "Wait for Will: blocked on decision about Y"
   * "Idle: ready for next request"
-  * "Active conversation: User was asking about Z, continue that thread"
+  * "Active conversation: Will was asking about Z, continue that thread"
 -->
 """
 
@@ -50,15 +50,15 @@ SPECIALIST_INTERACTIVE_TEMPLATE = """# {role} Handoff - {timestamp}
 Current state of the work - concrete progress markers. -->
 
 ## Key Decisions & Context
-<!-- Important decisions made with the user during this session.
+<!-- Important decisions made with Will during this session.
 Technical choices, approach changes, tradeoffs discussed.
 Anything that would be weird for fresh Claude not to know. -->
 
 ## Resume Instructions
 <!-- Clear directive for fresh Claude:
 - Continue work: "Resume implementing X in file.py, next step is Y"
-- Wait for input: "Blocked on user's decision about Z"
-- Complete: "Task done, waiting for user's next request"
+- Wait for input: "Blocked on Will's decision about Z"
+- Complete: "Task done, waiting for Will's next request"
 Include relevant files needed to continue. -->
 """
 

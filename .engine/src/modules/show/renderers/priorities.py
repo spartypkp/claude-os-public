@@ -1,4 +1,4 @@
-"""Priorities renderer for visual priority displays."""
+"""Priorities renderer — dark theme with level-based accent colors."""
 
 from datetime import datetime
 from typing import Any, Dict, List
@@ -12,164 +12,111 @@ logger = logging.getLogger(__name__)
 class PrioritiesRenderer(BaseRenderer):
     """Renderer for priority lists."""
 
+    SECTION_HEADER_HEIGHT = 44
+    ITEM_CARD_HEIGHT = 52
+    ITEM_CARD_GAP = 8
+    SECTION_GAP = 20
+
+    LEVEL_COLORS = {
+        "critical": None,  # filled at render from self constants
+        "medium": None,
+        "low": None,
+    }
+
     def render_telegram(self, priorities: List[Dict[str, Any]]) -> bytes:
-        """Render priorities as PNG image for Telegram.
+        """Render priorities as a dark-themed PNG image."""
+        # Map level colors
+        level_colors = {
+            "critical": self.COLOR_CRITICAL,
+            "medium": self.COLOR_MEDIUM,
+            "low": self.COLOR_LOW,
+        }
 
-        Args:
-            priorities: List of priority items
+        # Group by level (uncompleted only)
+        groups = {}
+        for level in ("critical", "medium", "low"):
+            items = [p for p in priorities if p.get("level") == level and not p.get("completed")]
+            if items:
+                groups[level] = items
 
-        Returns:
-            PNG image as bytes
-        """
-        # Group priorities by level
-        critical = [p for p in priorities if p.get("level") == "critical" and not p.get("completed")]
-        medium = [p for p in priorities if p.get("level") == "medium" and not p.get("completed")]
-        low = [p for p in priorities if p.get("level") == "low" and not p.get("completed")]
-
-        # Calculate image height
+        # Calculate height
         header_height = 100
-        section_header_height = 50
-        item_height = 60
-        footer_height = 40
+        footer_height = 30
+        content_height = 0
 
-        total_height = header_height + footer_height
-        if critical:
-            total_height += section_header_height + (len(critical) * item_height)
-        if medium:
-            total_height += section_header_height + (len(medium) * item_height)
-        if low:
-            total_height += section_header_height + (len(low) * item_height)
+        if not groups:
+            content_height = 60
+        else:
+            for level, items in groups.items():
+                content_height += self.SECTION_HEADER_HEIGHT
+                content_height += len(items) * (self.ITEM_CARD_HEIGHT + self.ITEM_CARD_GAP)
+                content_height += self.SECTION_GAP
 
-        # Create image
+        total_height = header_height + content_height + footer_height
         img, draw = self._create_image(total_height)
 
-        # Draw header
-        self._draw_text_centered(
-            draw,
-            "📋 Today's Priorities",
-            self.PADDING,
-            self.fonts["title"],
-            self.COLOR_TEXT
-        )
-
-        # Draw date subtitle
+        # Header
         today = datetime.now().strftime("%A, %B %d")
-        self._draw_text_centered(
-            draw,
-            today,
-            self.PADDING + 45,
-            self.fonts["small"],
-            self.COLOR_TEXT_LIGHT
-        )
+        y = self._draw_header(draw, "Today's Priorities", today, self.PADDING)
 
-        # Draw priorities by level
-        y = header_height
-
-        if not critical and not medium and not low:
-            # No priorities
-            self._draw_text_centered(
-                draw,
-                "No priorities for today",
-                y + 30,
-                self.fonts["body"],
-                self.COLOR_TEXT_LIGHT
-            )
+        if not groups:
+            self._draw_empty_state(draw, "No priorities for today", y + 20)
         else:
-            if critical:
-                y = self._draw_priority_section(
-                    draw, critical, y, "🔴 Critical", self.COLOR_CRITICAL
-                )
+            for level, items in groups.items():
+                color = level_colors[level]
+                y = self._draw_section(draw, items, y, level.upper(), color)
+                y += self.SECTION_GAP
 
-            if medium:
-                y = self._draw_priority_section(
-                    draw, medium, y, "🟡 Medium", self.COLOR_MEDIUM
-                )
-
-            if low:
-                y = self._draw_priority_section(
-                    draw, low, y, "🟢 Low", self.COLOR_LOW
-                )
-
-        # Convert to PNG
         return self._to_png_bytes(img)
 
-    def _draw_priority_section(
+    def _draw_section(
         self,
         draw,
         items: List[Dict[str, Any]],
         y: int,
-        title: str,
-        color: str
+        label: str,
+        color: str,
     ) -> int:
-        """Draw a priority section.
-
-        Args:
-            draw: ImageDraw object
-            items: Priority items
-            y: Y position
-            title: Section title
-            color: Section color
-
-        Returns:
-            New Y position after drawing section
-        """
-        # Draw section header
-        draw.text(
-            (self.PADDING, y + 15),
-            title,
-            font=self.fonts["heading"],
-            fill=color
+        """Draw a priority section with colored header bar and item cards."""
+        # Section header: colored bar + label
+        bar_y = y + 4
+        draw.rounded_rectangle(
+            (self.PADDING, bar_y, self.PADDING + 6, bar_y + 28),
+            radius=3,
+            fill=color,
         )
-        y += 50
+        draw.text(
+            (self.PADDING + 16, bar_y + 3),
+            label,
+            font=self.fonts["small"],
+            fill=color,
+        )
+        y += self.SECTION_HEADER_HEIGHT
 
-        # Draw items
+        # Item cards
         for item in items:
             content = item.get("content", "")
             completed = item.get("completed", False)
 
-            # Determine checkbox emoji
-            checkbox = "✅" if completed else "☐"
-
-            # Draw item card
             card_x1 = self.PADDING
             card_x2 = self.WIDTH - self.PADDING
-            card_y1 = y + 5
-            card_y2 = y + 55
+            card_y1 = y
+            card_y2 = y + self.ITEM_CARD_HEIGHT
 
-            # Light background
-            self._draw_rounded_rect(
-                draw,
-                (card_x1, card_y1, card_x2, card_y2),
-                radius=8,
-                fill="#F9FAFB",
-                outline="#E5E7EB",
-                width=1
-            )
+            self._draw_accent_card(draw, (card_x1, card_y1, card_x2, card_y2), color)
 
-            # Draw checkbox and content
-            text = f"{checkbox}  {content[:70]}"  # Truncate long content
+            # Checkbox
+            text_x = card_x1 + self.ACCENT_BAR_WIDTH + self.CARD_PADDING + 4
+            checkbox = "\u2713" if completed else "\u25A1"
+            text_color = self.COLOR_TEXT_DIM if completed else self.COLOR_TEXT
+
             draw.text(
-                (card_x1 + 15, card_y1 + 18),
-                text,
+                (text_x, card_y1 + 16),
+                f"{checkbox}  {content[:70]}",
                 font=self.fonts["body"],
-                fill=self.COLOR_TEXT if not completed else self.COLOR_TEXT_LIGHT
+                fill=text_color,
             )
 
-            y += 60
+            y += self.ITEM_CARD_HEIGHT + self.ITEM_CARD_GAP
 
         return y
-
-    def render_dashboard(self, priorities: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Render priorities as component data for Dashboard.
-
-        Args:
-            priorities: List of priority items
-
-        Returns:
-            Component data dict
-        """
-        return {
-            "type": "priorities",
-            "items": priorities,
-            "date": datetime.now().isoformat()
-        }

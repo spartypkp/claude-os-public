@@ -23,7 +23,7 @@ const TOOL_CATEGORIES = {
       name: 'Read',
       icon: FileText,
       color: 'var(--color-cyan)',
-      mockInput: { file_path: '/path/to/claude-os/Desktop/TODAY.md' },
+      mockInput: { file_path: '/Users/s/Projects/life/Desktop/TODAY.md' },
       mockResult: '1\t---\n2\ttype: memory\n3\t---\n4\t\n5\t# Today\n6\t\n7\t*Monday, January 13, 2026*',
     },
     {
@@ -31,7 +31,7 @@ const TOOL_CATEGORIES = {
       icon: FilePlus,
       color: 'var(--color-warning)',
       mockInput: {
-        file_path: '/path/to/claude-os/Desktop/conversations/new-feature.md',
+        file_path: '/Users/s/Projects/life/Desktop/working/new-feature.md',
         content: '# New Feature\n\nBuilding a preview page for all tool types...'
       },
       mockResult: 'File written successfully',
@@ -41,7 +41,7 @@ const TOOL_CATEGORIES = {
       icon: FileEdit,
       color: 'var(--color-warning)',
       mockInput: {
-        file_path: '/path/to/claude-os/Dashboard/components/ToolChip.tsx',
+        file_path: '/Users/s/Projects/life/Dashboard/components/ToolChip.tsx',
         old_string: 'const collapsed = true',
         new_string: 'const collapsed = false'
       },
@@ -120,7 +120,7 @@ const TOOL_CATEGORIES = {
       color: '#14b8a6',
       mockInput: {
         operation: 'create',
-        instructions: 'Research company interview process and compile key insights'
+        instructions: 'Research Anthropic FDE interview process and compile key insights'
       },
       mockResult: JSON.stringify({ success: true, worker_id: 'abc12345-def6' }),
     },
@@ -132,7 +132,7 @@ const TOOL_CATEGORIES = {
         operation: 'search',
         query: 'Alex'
       },
-      mockResult: JSON.stringify({ success: true, contacts: [{ name: 'Jane Smith', company: 'Acme Corp' }] }),
+      mockResult: JSON.stringify({ success: true, contacts: [{ name: 'Alex Bricken', company: 'Anthropic' }] }),
     },
     {
       name: 'priority',
@@ -227,7 +227,7 @@ const TOOL_CATEGORIES = {
       color: '#a855f7',
       mockInput: {
         operation: 'add',
-        partner: 'Alex',
+        partner: 'Ethan',
         type: 'technical'
       },
       mockResult: JSON.stringify({ success: true, mock_id: 'mock-123' }),
@@ -376,12 +376,12 @@ const SYSTEM_MESSAGES = [
   {
     icon: '📋',
     summary: 'System reminder',
-    content: '<system-reminder>\nThis is a reminder about file discipline in Desktop/conversations/...',
+    content: '<system-reminder>\nThis is a reminder about file discipline in Desktop/working/...',
   },
   {
     icon: '⚡',
     summary: 'Skill: playwright-skill',
-    content: 'Base directory for this skill:\n$HOME/.claude/skills/playwright-skill\n\nARGUMENTS: --url http://localhost:3000',
+    content: 'Base directory for this skill:\n/Users/s/.claude/skills/playwright-skill\n\nARGUMENTS: --url http://localhost:3000',
   },
 ];
 

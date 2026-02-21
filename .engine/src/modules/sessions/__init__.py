@@ -9,14 +9,16 @@ Provides:
 
 from pathlib import Path
 
+from core.config import settings
+
 from .models import Session, SpawnResult
 from .repository import SessionRepository
 from .service import SessionService, get_session_folder, get_session_workers_folder
 
 
 # Default paths
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_DB_PATH = _REPO_ROOT / ".engine" / "data" / "db" / "system.db"
+_REPO_ROOT = settings.repo_root
+_DB_PATH = settings.db_path
 
 
 def get_session_service(db_path: Path = None, repo_root: Path = None) -> SessionService:

@@ -9,7 +9,8 @@ import {
 	finderList,
 	finderMove,
 	finderRename,
-	moveToTrash
+	moveToTrash,
+	openInMacOS
 } from '@/lib/api';
 import { getFileIconSpec } from '@/lib/fileTypes';
 import { getFolderColorClass } from '@/lib/folderCategories';
@@ -135,7 +136,7 @@ type ViewMode = 'list' | 'columns' | 'icons';
 interface FinderWindowContentProps {
 	/** Unique window ID for event targeting */
 	windowId: string;
-	/** Initial path to open (relative to Desktop/), e.g., "career" or "finance" */
+	/** Initial path to open (relative to Desktop/), e.g., "career" or "job-search" */
 	initialPath?: string;
 }
 
@@ -468,6 +469,16 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		}
 	}, [currentPath, loadDirectory]);
 
+	const handleOpenInMacOS = useCallback(async () => {
+		if (selectedItem) {
+			try {
+				await openInMacOS(`Desktop/${selectedItem}`);
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to open in macOS');
+			}
+		}
+	}, [selectedItem]);
+
 	// Context menu handler - uses global context menu system for consistency
 	const handleContextMenu = useCallback((e: React.MouseEvent, item: FileItem | null) => {
 		e.preventDefault();
@@ -525,17 +536,25 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 
 	const handleDragStart = useCallback((e: React.DragEvent, item: FileItem) => {
 		e.dataTransfer.setData('text/plain', item.path);
+		e.dataTransfer.setData('application/claude-file', item.path);
 		e.dataTransfer.effectAllowed = 'move';
 		setDragState({ item, overPath: null });
 	}, []);
 
 	const handleDragOver = useCallback((e: React.DragEvent, targetItem: FileItem | null) => {
-		e.preventDefault();
+		// Accept cross-view drags (from other Finder windows or Desktop)
+		const hasClaude = e.dataTransfer.types.includes('application/claude-file') || e.dataTransfer.types.includes('text/plain');
 
 		// Can only drop into folders
 		if (targetItem && (targetItem.type === 'folder' || targetItem.type === 'domain')) {
+			e.preventDefault();
 			e.dataTransfer.dropEffect = 'move';
 			setDragState(prev => prev ? { ...prev, overPath: targetItem.path } : null);
+		} else if (hasClaude) {
+			// Allow drag over non-folder areas so the browser doesn't block the drag
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'none';
+			setDragState(prev => prev ? { ...prev, overPath: null } : null);
 		} else {
 			e.dataTransfer.dropEffect = 'none';
 			setDragState(prev => prev ? { ...prev, overPath: null } : null);
@@ -554,7 +573,10 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (!dragState || dragState.item.path === targetItem.path) {
+		// Determine source path — from same-window drag state or cross-view dataTransfer
+		const sourcePath = dragState?.item.path || e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+
+		if (!sourcePath || sourcePath === targetItem.path) {
 			setDragState(null);
 			return;
 		}
@@ -566,14 +588,15 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		}
 
 		// Don't allow dropping a folder into itself
-		if (targetItem.path.startsWith(dragState.item.path + '/')) {
+		if (targetItem.path.startsWith(sourcePath + '/')) {
 			setDragState(null);
 			return;
 		}
 
 		try {
-			await finderMove(dragState.item.path, targetItem.path);
+			await finderMove(sourcePath, targetItem.path);
 			loadDirectory(currentPath);
+			window.dispatchEvent(new CustomEvent('refresh-desktop'));
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to move');
 		} finally {
@@ -583,6 +606,33 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 
 	const handleDragEnd = useCallback(() => {
 		setDragState(null);
+	}, []);
+
+	// Drop on Finder background — move file into current directory
+	const handleBackgroundDrop = useCallback(async (e: React.DragEvent) => {
+		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+		if (!sourcePath) return;
+		// Don't move if file is already in this directory
+		const sourceParent = sourcePath.split('/').slice(0, -1).join('/').replace(/^Desktop\/?/, '');
+		if (sourceParent === currentPath) return;
+		e.preventDefault();
+		e.stopPropagation();
+		try {
+			const destPath = currentPath || '';
+			await finderMove(sourcePath, destPath || '');
+			loadDirectory(currentPath);
+			window.dispatchEvent(new CustomEvent('refresh-desktop'));
+			toast.success(`Moved to ${currentPath || 'Desktop'}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Failed to move');
+		}
+	}, [currentPath, loadDirectory]);
+
+	const handleBackgroundDragOver = useCallback((e: React.DragEvent) => {
+		if (e.dataTransfer.types.includes('application/claude-file') || e.dataTransfer.types.includes('text/plain')) {
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+		}
 	}, []);
 
 	// =========================================
@@ -686,7 +736,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 	const currentFolderName = pathParts[pathParts.length - 1]?.name || 'Desktop';
 
 	return (
-		<div className="flex flex-col h-full bg-[var(--surface-base)] select-none">
+		<div data-testid="finder-app" className="flex flex-col h-full bg-[var(--surface-base)] select-none">
 			{/* Toolbar - macOS style */}
 			<div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-b from-[#E8E8E8] to-[#D4D4D4] dark:from-[#3d3d3d] dark:to-[#323232] border-b border-[#B8B8B8] dark:border-[#2a2a2a]">
 				{/* Navigation buttons */}
@@ -794,6 +844,14 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 						title="New File"
 					>
 						<FilePlus className="w-3.5 h-3.5 text-[#6E6E73] dark:text-[#8e8e93]" />
+					</button>
+					<button
+						onClick={handleOpenInMacOS}
+						disabled={!selectedItem}
+						className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+						title="Open in macOS"
+					>
+						<Monitor className="w-3.5 h-3.5 text-[#6E6E73] dark:text-[#8e8e93]" />
 					</button>
 				</div>
 			</div>
@@ -905,7 +963,11 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 				)}
 
 				{/* File list area */}
-				<div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-raised)]">
+				<div
+					className="flex-1 flex flex-col min-w-0 bg-[var(--surface-raised)]"
+					onDragOver={handleBackgroundDragOver}
+					onDrop={handleBackgroundDrop}
+				>
 					{loading ? (
 						<div className="flex-1 flex items-center justify-center">
 							<Loader2 className="w-6 h-6 animate-spin text-[#8E8E93]" />

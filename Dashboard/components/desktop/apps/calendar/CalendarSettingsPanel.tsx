@@ -270,9 +270,9 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 	};
 
 	const renderStatusIcon = (connected: boolean, error: string | null) => {
-		if (error) return <span title={error}><XCircle className="w-4 h-4 text-red-500" /></span>;
-		if (connected) return <span title="Connected"><CheckCircle className="w-4 h-4 text-green-500" /></span>;
-		return <span title="Not connected"><CircleDot className="w-4 h-4 text-yellow-500" /></span>;
+		if (error) return <span title={error}><XCircle className="w-4 h-4 text-[var(--color-error)]" /></span>;
+		if (connected) return <span title="Connected"><CheckCircle className="w-4 h-4 text-[var(--color-success)]" /></span>;
+		return <span title="Not connected"><CircleDot className="w-4 h-4 text-[var(--color-warning)]" /></span>;
 	};
 
 	const getProviderIcon = (type: string) => {
@@ -286,15 +286,15 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 	};
 
 	return (
-		<div className="absolute inset-0 bg-white/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm z-50 flex flex-col">
+		<div className="absolute inset-0 bg-[var(--surface-base)]/95 backdrop-blur-sm z-50 flex flex-col">
 			{/* Header */}
-			<div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-[#333]">
-				<h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+			<div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+				<h2 className="text-xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
 					<Settings className="w-5 h-5" /> Calendar Settings
 				</h2>
 				<button
 					onClick={onClose}
-					className="px-3 py-1.5 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#333] transition-colors"
+					className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-accent)] transition-colors"
 				>
 					Done
 				</button>
@@ -302,7 +302,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 
 			<div className="flex flex-1 overflow-hidden">
 				{/* Sidebar */}
-				<div className="w-48 border-r border-gray-200 dark:border-[#333] p-2">
+				<div className="w-48 border-r border-[var(--border-subtle)] p-2">
 					<nav className="space-y-1">
 						{[
 							{ id: 'accounts', label: 'Accounts', icon: User },
@@ -313,8 +313,8 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 								key={id}
 								onClick={() => setActiveTab(id as SettingsTab)}
 								className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 ${activeTab === id
-									? 'bg-blue-500 text-white'
-									: 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#333]'
+									? 'bg-[var(--color-primary)] text-white'
+									: 'text-[var(--text-secondary)] hover:bg-[var(--surface-accent)]'
 									}`}
 							>
 								<Icon className="w-4 h-4" /> {label}
@@ -324,15 +324,15 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 				</div>
 
 				{/* Content */}
-				<div className="flex-1 p-6 overflow-y-auto text-gray-900 dark:text-gray-100">
+				<div className="flex-1 p-6 overflow-y-auto text-[var(--text-primary)]">
 					{loading && (
 						<div className="flex items-center justify-center h-32">
-							<Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+							<Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
 						</div>
 					)}
 
 					{error && (
-						<div className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 p-3 rounded-md mb-4 text-sm flex items-center gap-2">
+						<div className="bg-[var(--color-error)]/10 text-[var(--color-error)] p-3 rounded-md mb-4 text-sm flex items-center gap-2">
 							<AlertCircle className="w-4 h-4" /> {error}
 						</div>
 					)}
@@ -343,26 +343,26 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 							<div className="flex items-center justify-between mb-4">
 								<div>
 									<h3 className="text-lg font-semibold">Calendar Accounts</h3>
-									<p className="text-sm text-gray-500 dark:text-gray-400">
+									<p className="text-sm text-[var(--text-muted)]">
 										Manage connected calendar providers
 									</p>
 								</div>
 								<button
 									onClick={() => setShowAddForm(true)}
-									className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+									className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[var(--color-primary)] text-white rounded-md hover:bg-[var(--color-primary-hover)]"
 								>
 									<Plus className="w-4 h-4" /> Add Account
 								</button>
 							</div>
 
 							{/* Apple Calendar hint */}
-							<div className="mb-4 p-3 bg-gray-50 dark:bg-[#2a2a2a] rounded-md text-sm">
-								<p className="text-gray-600 dark:text-gray-400">
+							<div className="mb-4 p-3 bg-[var(--surface-raised)] rounded-md text-sm">
+								<p className="text-[var(--text-muted)]">
 									<span className="font-medium">Apple Calendar</span> accounts are managed via macOS System Settings.
 								</p>
 								<button
 									onClick={openSystemPreferences}
-									className="inline-flex items-center gap-1 mt-1 text-blue-500 hover:underline"
+									className="inline-flex items-center gap-1 mt-1 text-[var(--color-primary)] hover:underline"
 								>
 									<ExternalLink className="w-3 h-3" /> Open Internet Accounts
 								</button>
@@ -370,7 +370,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 
 							{/* Add Account Form */}
 							{showAddForm && (
-								<div className="mb-6 p-4 border border-gray-200 dark:border-[#444] rounded-lg bg-gray-50 dark:bg-[#2a2a2a]">
+								<div className="mb-6 p-4 border border-[var(--border-subtle)] rounded-lg bg-[var(--surface-raised)]">
 									<h4 className="font-medium mb-3">Add Calendar Account</h4>
 
 									<div className="space-y-4">
@@ -380,7 +380,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 											<select
 												value={addProviderType}
 												onChange={(e) => setAddProviderType(e.target.value)}
-												className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+												className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 											>
 												<option value="">Select provider...</option>
 												<option value="google">Google Calendar</option>
@@ -396,7 +396,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 												value={addAccountName}
 												onChange={(e) => setAddAccountName(e.target.value)}
 												placeholder="e.g., Work Calendar"
-												className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+												className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 											/>
 										</div>
 
@@ -408,16 +408,16 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 												value={addAccountEmail}
 												onChange={(e) => setAddAccountEmail(e.target.value)}
 												placeholder="user@example.com"
-												className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+												className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 											/>
 										</div>
 
 										{/* Google Config */}
 										{addProviderType === 'google' && (
-											<div className="space-y-3 pt-3 border-t border-gray-200 dark:border-[#444]">
-												<p className="text-xs text-gray-500">
+											<div className="space-y-3 pt-3 border-t border-[var(--border-subtle)]">
+												<p className="text-xs text-[var(--text-muted)]">
 													Create OAuth2 credentials at{' '}
-													<a href="https://console.cloud.google.com" target="_blank" className="text-blue-500 hover:underline">
+													<a href="https://console.cloud.google.com" target="_blank" className="text-[var(--color-primary)] hover:underline">
 														Google Cloud Console
 													</a>
 												</p>
@@ -427,7 +427,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														type="text"
 														value={googleClientId}
 														onChange={(e) => setGoogleClientId(e.target.value)}
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													/>
 												</div>
 												<div>
@@ -436,7 +436,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														type="password"
 														value={googleClientSecret}
 														onChange={(e) => setGoogleClientSecret(e.target.value)}
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													/>
 												</div>
 												<div>
@@ -445,7 +445,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														type="password"
 														value={googleRefreshToken}
 														onChange={(e) => setGoogleRefreshToken(e.target.value)}
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													/>
 												</div>
 											</div>
@@ -453,13 +453,13 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 
 										{/* CalDAV Config */}
 										{addProviderType === 'caldav' && (
-											<div className="space-y-3 pt-3 border-t border-gray-200 dark:border-[#444]">
+											<div className="space-y-3 pt-3 border-t border-[var(--border-subtle)]">
 												<div>
 													<label className="block text-sm font-medium mb-1">Preset (optional)</label>
 													<select
 														value={caldavPreset}
 														onChange={(e) => handleCaldavPresetChange(e.target.value)}
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													>
 														<option value="">Custom server</option>
 														{Object.entries(CALDAV_PRESETS).map(([key, preset]) => (
@@ -467,7 +467,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														))}
 													</select>
 													{caldavPreset && CALDAV_PRESETS[caldavPreset] && (
-														<p className="text-xs text-gray-500 mt-1">
+														<p className="text-xs text-[var(--text-muted)] mt-1">
 															{CALDAV_PRESETS[caldavPreset].description}
 														</p>
 													)}
@@ -481,7 +481,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 															value={caldavHost}
 															onChange={(e) => setCaldavHost(e.target.value)}
 															placeholder="your-server.com"
-															className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+															className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 														/>
 													</div>
 												)}
@@ -493,7 +493,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														value={caldavUsername}
 														onChange={(e) => setCaldavUsername(e.target.value)}
 														placeholder="user@example.com"
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													/>
 												</div>
 
@@ -503,7 +503,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														type="password"
 														value={caldavPassword}
 														onChange={(e) => setCaldavPassword(e.target.value)}
-														className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+														className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 													/>
 												</div>
 
@@ -515,13 +515,13 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 															value={caldavUrl}
 															onChange={(e) => setCaldavUrl(e.target.value)}
 															placeholder="https://caldav.example.com/calendars/user/"
-															className="w-full p-2 border border-gray-300 dark:border-[#555] rounded-md bg-white dark:bg-[#222] text-sm"
+															className="w-full p-2 border border-[var(--border-subtle)] rounded-md bg-[var(--surface-base)] text-sm"
 														/>
 													</div>
 												)}
 
 												{caldavPreset && caldavUsername && (
-													<div className="p-2 bg-gray-100 dark:bg-[#333] rounded text-xs font-mono break-all">
+													<div className="p-2 bg-[var(--surface-accent)] rounded text-xs font-mono break-all">
 														{buildCaldavUrl()}
 													</div>
 												)}
@@ -535,14 +535,14 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 													setShowAddForm(false);
 													setAddProviderType('');
 												}}
-												className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#333] rounded-md"
+												className="px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-accent)] rounded-md"
 											>
 												Cancel
 											</button>
 											<button
 												onClick={handleAddAccount}
 												disabled={!addProviderType || !addAccountName || loading}
-												className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
+												className="px-3 py-1.5 text-sm bg-[var(--color-primary)] text-white rounded-md hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
 											>
 												{loading ? 'Adding...' : 'Add Account'}
 											</button>
@@ -554,14 +554,14 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 							{/* Account List */}
 							<div className="space-y-3">
 								{accounts.length === 0 ? (
-									<p className="text-gray-500 italic text-center py-8">
+									<p className="text-[var(--text-muted)] italic text-center py-8">
 										No calendar accounts configured. Apple Calendar is used by default on macOS.
 									</p>
 								) : (
 									accounts.map((account) => (
 										<div
 											key={account.id}
-											className="flex items-center justify-between p-4 border border-gray-200 dark:border-[#444] rounded-lg bg-white dark:bg-[#2a2a2a]"
+											className="flex items-center justify-between p-4 border border-[var(--border-subtle)] rounded-lg bg-[var(--surface-raised)]"
 										>
 											<div className="flex items-center gap-3">
 												<span className="text-2xl">{getProviderIcon(account.provider_type)}</span>
@@ -570,25 +570,25 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														<span className="font-medium">{account.name}</span>
 														{renderStatusIcon(account.connected, account.error)}
 													</div>
-													<p className="text-sm text-gray-500 dark:text-gray-400">
+													<p className="text-sm text-[var(--text-muted)]">
 														{account.email || account.provider_type}
 														{account.last_sync && ` • Last sync: ${new Date(account.last_sync).toLocaleString()}`}
 													</p>
 													{account.error && (
-														<p className="text-xs text-red-500 mt-1">{account.error}</p>
+														<p className="text-xs text-[var(--color-error)] mt-1">{account.error}</p>
 													)}
 												</div>
 											</div>
 
 											<div className="flex items-center gap-2">
 												{account.is_primary ? (
-													<span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-full">
+													<span className="text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2 py-1 rounded-full">
 														Primary
 													</span>
 												) : (
 													<button
 														onClick={() => handleSetPrimaryAccount(account.id)}
-														className="px-2 py-1 text-xs text-blue-500 border border-blue-300 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+														className="px-2 py-1 text-xs text-[var(--color-primary)] border border-[var(--color-primary)]/30 rounded hover:bg-[var(--color-primary)]/10"
 													>
 														Set Primary
 													</button>
@@ -596,7 +596,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 												{account.provider_type !== 'apple' && (
 													<button
 														onClick={() => handleRemoveAccount(account.id)}
-														className="p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded"
+														className="p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error-dim)] rounded"
 														title="Remove Account"
 													>
 														<Trash2 className="w-4 h-4" />
@@ -614,7 +614,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 					{!loading && activeTab === 'providers' && (
 						<div>
 							<h3 className="text-lg font-semibold mb-2">Calendar Providers</h3>
-							<p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+							<p className="text-sm text-[var(--text-muted)] mb-4">
 								Available calendar integration methods
 							</p>
 
@@ -622,16 +622,16 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 								{providers.map((provider) => (
 									<div
 										key={provider.type}
-										className="p-4 border border-gray-200 dark:border-[#444] rounded-lg bg-white dark:bg-[#2a2a2a]"
+										className="p-4 border border-[var(--border-subtle)] rounded-lg bg-[var(--surface-raised)]"
 									>
 										<div className="flex items-center justify-between mb-2">
 											<div className="flex items-center gap-2">
 												<span className="text-xl">{getProviderIcon(provider.type)}</span>
 												<h4 className="font-medium">{provider.name}</h4>
 												{provider.configured ? (
-													<CheckCircle className="w-4 h-4 text-green-500" />
+													<CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
 												) : (
-													<CircleDot className="w-4 h-4 text-gray-400" />
+													<CircleDot className="w-4 h-4 text-[var(--text-muted)]" />
 												)}
 											</div>
 											{provider.requires_config && !provider.configured && (
@@ -641,13 +641,13 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 														setShowAddForm(true);
 														setActiveTab('accounts');
 													}}
-													className="text-sm text-blue-500 hover:underline flex items-center gap-1"
+													className="text-sm text-[var(--color-primary)] hover:underline flex items-center gap-1"
 												>
 													Configure <ChevronRight className="w-3 h-3" />
 												</button>
 											)}
 										</div>
-										<p className="text-sm text-gray-600 dark:text-gray-400">
+										<p className="text-sm text-[var(--text-muted)]">
 											{provider.description}
 										</p>
 									</div>
@@ -662,13 +662,13 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 							<div className="flex items-center justify-between mb-4">
 								<div>
 									<h3 className="text-lg font-semibold">Your Calendars</h3>
-									<p className="text-sm text-gray-500 dark:text-gray-400">
+									<p className="text-sm text-[var(--text-muted)]">
 										Calendars from all connected accounts
 									</p>
 								</div>
 								<button
 									onClick={fetchSettings}
-									className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-[#333] rounded-md"
+									className="p-2 text-[var(--text-muted)] hover:bg-[var(--surface-accent)] rounded-md"
 									title="Refresh"
 								>
 									<RefreshCw className="w-4 h-4" />
@@ -677,14 +677,14 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 
 							<div className="space-y-2">
 								{calendars.length === 0 ? (
-									<p className="text-gray-500 italic text-center py-8">
+									<p className="text-[var(--text-muted)] italic text-center py-8">
 										No calendars found. Connect an account to see calendars.
 									</p>
 								) : (
 									calendars.map((cal) => (
 										<div
 											key={cal.id}
-											className="flex items-center gap-3 p-3 border border-gray-200 dark:border-[#444] rounded-lg bg-white dark:bg-[#2a2a2a]"
+											className="flex items-center gap-3 p-3 border border-[var(--border-subtle)] rounded-lg bg-[var(--surface-raised)]"
 										>
 											<div
 												className="w-4 h-4 rounded"
@@ -693,12 +693,12 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 											<div className="flex-1">
 												<span className="font-medium">{cal.name}</span>
 												{cal.primary && (
-													<span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+													<span className="ml-2 text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-1.5 py-0.5 rounded">
 														Primary
 													</span>
 												)}
 											</div>
-											<span className="text-xs text-gray-500">{cal.provider}</span>
+											<span className="text-xs text-[var(--text-muted)]">{cal.provider}</span>
 										</div>
 									))
 								)}

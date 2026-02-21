@@ -10,29 +10,47 @@ import {
 	isTeamMessage,
 	isTeamRequest,
 	isTaskNotification,
+	isContextMessage,
+	isCaptureMessage,
 	parseSpecialistNotification,
 	parseSpecialistReply,
 	parseTeamMessage,
 	parseTeamRequest,
 	parseTaskNotification,
+	parseContextPrefix,
+	parseCapturePrefix,
 	summarizeSystemMessage,
+	parseSystemPrefix,
 	normalizeMessageContent,
 } from '@/lib/systemMessages';
 import type { LucideIcon } from 'lucide-react';
 import type { HandoffPhase } from '@/hooks/useHandoffState';
 import {
+	AlertTriangle,
 	ArrowDown,
 	ArrowRight,
+	Bell,
 	Brain,
+	Bug,
+	Calendar,
 	Check,
 	ChevronDown,
 	ChevronRight,
+	Clock,
 	Copy,
 	ExternalLink,
+	Info,
+	Lightbulb,
 	Loader2,
+	Mail,
+	MessageCircle,
 	Monitor,
+	Play,
 	RefreshCw,
 	Send,
+	Timer,
+	User,
+	UserPlus,
 	X,
 	Zap,
 } from 'lucide-react';
@@ -81,16 +99,7 @@ interface Turn {
 	sessionMode?: string;
 }
 
-/**
- * Small inline Claude logo for chat labels
- */
-function ClaudeLogo({ className = "w-3 h-3" }: { className?: string; }) {
-	return (
-		<svg className={className} viewBox="0 0 16 16" fill="currentColor">
-			<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
-		</svg>
-	);
-}
+import { ClaudeLogo } from '@/components/ClaudePanel/ClaudeLogo';
 
 /**
  * Custom link component for ReactMarkdown - styled and opens in new tab
@@ -141,6 +150,32 @@ function formatToolName(toolName: string): string {
 	}
 	return toolName;
 }
+
+/**
+ * Map from Lucide icon key strings (returned by summarizeSystemMessage)
+ * to actual Lucide components.
+ */
+const SYSTEM_ICON_MAP: Record<string, LucideIcon> = {
+	'clock': Clock,
+	'timer': Timer,
+	'calendar': Calendar,
+	'alert-triangle': AlertTriangle,
+	'refresh-cw': RefreshCw,
+	'bell': Bell,
+	'zap': Zap,
+	'info': Info,
+	'arrow-right': ArrowRight,
+	'user-plus': UserPlus,
+	'check': Check,
+	'x-circle': X,
+	'play': Play,
+	'brain': Brain,
+	'arrow-down': ArrowDown,
+	'bug': Bug,
+	'lightbulb': Lightbulb,
+	'external-link': ExternalLink,
+	'message-circle': MessageCircle,
+};
 
 /**
  * Group events into turns. A turn = user message + all assistant events until next user message.
@@ -552,22 +587,97 @@ const UserMessage = memo(function UserMessage({ content, timestamp }: { content:
 });
 
 /**
- * System message - center aligned, compact, muted
- * For handoffs, wakes, worker notifications, session context
+ * Wake Divider — tiny inline timestamp, nearly invisible.
+ * Replaces the full pill treatment for WAKE messages.
+ */
+function WakeDivider({ timestamp }: { timestamp?: string }) {
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+		} catch { return ''; }
+	})() : '';
+
+	return (
+		<div className="flex items-center gap-3 my-1 px-4">
+			<div className="flex-1 h-px bg-[var(--border-subtle)] opacity-40" />
+			<div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] opacity-50">
+				<Clock className="w-2.5 h-2.5" />
+				{formattedTime && <span>{formattedTime}</span>}
+			</div>
+			<div className="flex-1 h-px bg-[var(--border-subtle)] opacity-40" />
+		</div>
+	);
+}
+
+/**
+ * Warning Message — amber/red accent for WARNING and FORCE-HANDOFF.
+ * Demands attention. Uses AlertTriangle icon.
+ */
+function WarningMessage({ content, timestamp }: { content: string; timestamp?: string }) {
+	const { summary } = summarizeSystemMessage(content);
+	const parsed = parseSystemPrefix(content);
+	const isForceHandoff = parsed?.type === 'FORCE-HANDOFF';
+	const color = isForceHandoff ? '#ef4444' : '#f59e0b';
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+		} catch { return ''; }
+	})() : '';
+
+	return (
+		<div className="flex justify-center my-2">
+			<div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"
+				style={{
+					color,
+					backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
+					border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
+				}}>
+				<AlertTriangle className="w-3 h-3" />
+				<span className="font-medium">{summary}</span>
+				{formattedTime && (
+					<span className="text-[10px] opacity-60 ml-1">{formattedTime}</span>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * System message — center aligned, compact, muted.
+ * For handoffs, wakes, worker notifications, session context.
+ *
+ * variant='plumbing' — extra muted for CRON, INFO, session plumbing.
  */
 function SystemMessage({
 	content,
 	isExpanded,
 	onToggle,
+	variant = 'default',
 }: {
 	content: string;
 	isExpanded?: boolean;
 	onToggle?: () => void;
+	variant?: 'default' | 'plumbing';
 }) {
-	const { icon, summary } = summarizeSystemMessage(content);
+	const { icon: iconKey, summary } = summarizeSystemMessage(content);
+	const IconComponent = SYSTEM_ICON_MAP[iconKey];
+
+	if (variant === 'plumbing') {
+		return (
+			<div className="flex justify-center my-1">
+				<div className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] text-[var(--text-muted)] opacity-50">
+					{IconComponent && <IconComponent className="w-2.5 h-2.5" />}
+					<span>{summary}</span>
+				</div>
+			</div>
+		);
+	}
 
 	return (
-		<div className="flex justify-center my-3">
+		<div className="flex justify-center my-2">
 			<div className="flex items-center gap-3 max-w-[90%]">
 				{/* Decorative line left */}
 				<div className="hidden sm:block flex-1 h-px bg-gradient-to-r from-transparent to-[var(--border-subtle)]" />
@@ -584,7 +694,11 @@ function SystemMessage({
 						transition-all duration-150
 					`}
 				>
-					<span className="text-sm">{icon}</span>
+					{IconComponent ? (
+						<IconComponent className="w-3 h-3" />
+					) : (
+						<span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" />
+					)}
 					<span className="font-medium">{summary}</span>
 					{onToggle && (
 						<ChevronDown
@@ -632,7 +746,7 @@ function SpecialistReport({ content, timestamp }: { content: string; timestamp?:
 	const shortId = sessionId.length > 20 ? sessionId.slice(0, 20) + '...' : sessionId;
 
 	return (
-		<div className="my-4">
+		<div className="my-3">
 			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3 max-w-[90%]">
 				{/* Header: role icon + name + status + time */}
 				<div className="flex items-center gap-2 mb-2">
@@ -707,7 +821,7 @@ function SpecialistReplyCard({ content, timestamp }: { content: string; timestam
 	})() : '';
 
 	return (
-		<div className="my-4">
+		<div className="my-3">
 			<div className="max-w-[90%]">
 				{/* Header: role icon + name + session ID */}
 				<div className="flex items-center gap-2 mb-1.5">
@@ -768,7 +882,7 @@ function TeamMessageCard({ content, timestamp }: { content: string; timestamp?: 
 	})() : '';
 
 	return (
-		<div className="my-4">
+		<div className="my-3">
 			<div className="max-w-[90%]">
 				{/* Header: source → target with role icons */}
 				<div className="flex items-center gap-2 mb-1.5">
@@ -797,7 +911,7 @@ function TeamMessageCard({ content, timestamp }: { content: string; timestamp?: 
 				</div>
 
 				{/* Message bubble */}
-				<div className="ml-7 rounded-lg border border-[#8b5cf6]/15 bg-[#8b5cf6]/5 px-3 py-2">
+				<div className="ml-7 rounded-lg border border-[#da7756]/15 bg-[#da7756]/5 px-3 py-2">
 					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
 						{message}
 					</p>
@@ -834,8 +948,8 @@ function TeamRequestCard({ content, timestamp }: { content: string; timestamp?: 
 	})() : '';
 
 	return (
-		<div className="my-4">
-			<div className="rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/5 p-3 max-w-[90%]">
+		<div className="my-3">
+			<div className="rounded-lg border border-[#da7756]/20 bg-[#da7756]/5 p-3 max-w-[90%]">
 				{/* Header: requesting role + badge */}
 				<div className="flex items-center gap-2 mb-2">
 					<div
@@ -847,7 +961,7 @@ function TeamRequestCard({ content, timestamp }: { content: string; timestamp?: 
 					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
 						{reqConfig.label}
 					</span>
-					<span className="flex items-center gap-0.5 text-[10px] font-medium text-[#8b5cf6] bg-[#8b5cf6]/10 px-1.5 py-0.5 rounded-full">
+					<span className="flex items-center gap-0.5 text-[10px] font-medium text-[#da7756] bg-[#da7756]/10 px-1.5 py-0.5 rounded-full">
 						Spawn Request
 					</span>
 					{formattedTime && (
@@ -901,7 +1015,7 @@ function TaskNotificationCard({ content, timestamp }: { content: string; timesta
 	const cleanSummary = summary.replace(/^Agent "/, '"');
 
 	return (
-		<div className="my-4">
+		<div className="my-3">
 			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] max-w-[90%] overflow-hidden">
 				{/* Header — always visible */}
 				<button
@@ -964,6 +1078,113 @@ function TaskNotificationCard({ content, timestamp }: { content: string; timesta
 						</div>
 					</div>
 				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Context Card — renders [CONTEXT:App] messages from AttachToChat.
+ * Visually distinct from user/system messages: left-aligned, app-tinted accent.
+ */
+function ContextCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const parsed = parseContextPrefix(content);
+	if (!parsed) return <SystemMessage content={content} />;
+
+	const { app, body } = parsed;
+
+	const appConfig: Record<string, { icon: typeof Mail; color: string }> = {
+		Email: { icon: Mail, color: '#3b82f6' },
+		Calendar: { icon: Calendar, color: '#f59e0b' },
+		Contact: { icon: User, color: '#8b5cf6' },
+		Project: { icon: Zap, color: '#10b981' },
+	};
+	const config = appConfig[app] || { icon: ExternalLink, color: '#6b7280' };
+	const AppIcon = config.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+		} catch { return ''; }
+	})() : '';
+
+	return (
+		<div className="my-2">
+			<div className="max-w-[90%]">
+				{/* Header: app icon + badge */}
+				<div className="flex items-center gap-2 mb-1.5">
+					<div
+						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+						style={{ backgroundColor: `color-mix(in srgb, ${config.color} 12%, transparent)` }}
+					>
+						<AppIcon className="w-3.5 h-3.5" style={{ color: config.color }} />
+					</div>
+					<span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
+						style={{ color: config.color, backgroundColor: `color-mix(in srgb, ${config.color} 10%, transparent)` }}>
+						{app}
+					</span>
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+
+				{/* Context body */}
+				<div className="ml-7 rounded-lg border px-3 py-2"
+					style={{ borderColor: `color-mix(in srgb, ${config.color} 15%, transparent)`, backgroundColor: `color-mix(in srgb, ${config.color} 5%, transparent)` }}>
+					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+						{body}
+					</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Capture Card — renders [CAPTURE:TYPE] messages (drop, bug, idea, dump).
+ * Type-specific accent colors.
+ */
+function CaptureCard({ content, timestamp }: { content: string; timestamp?: string }) {
+	const parsed = parseCapturePrefix(content);
+	if (!parsed) return <SystemMessage content={content} />;
+
+	const { type, body } = parsed;
+
+	const typeConfig: Record<string, { icon: typeof Bug; color: string; label: string }> = {
+		BUG: { icon: Bug, color: '#ef4444', label: 'Bug' },
+		IDEA: { icon: Lightbulb, color: '#8b5cf6', label: 'Idea' },
+		DROP: { icon: ArrowDown, color: '#6b7280', label: 'Drop' },
+		DUMP: { icon: Zap, color: '#6b7280', label: 'Brain Dump' },
+	};
+	const config = typeConfig[type] || { icon: Zap, color: '#6b7280', label: type };
+	const TypeIcon = config.icon;
+
+	const formattedTime = timestamp ? (() => {
+		try {
+			const date = new Date(timestamp);
+			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+		} catch { return ''; }
+	})() : '';
+
+	return (
+		<div className="my-2">
+			<div
+				className="rounded-lg border-l-2 px-3 py-2 max-w-[90%]"
+				style={{ borderLeftColor: config.color, backgroundColor: `color-mix(in srgb, ${config.color} 5%, transparent)` }}
+			>
+				<div className="flex items-center gap-2">
+					<TypeIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: config.color }} />
+					<span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: config.color }}>
+						{config.label}
+					</span>
+					{formattedTime && (
+						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
+					)}
+				</div>
+				<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed mt-1 whitespace-pre-wrap">
+					{body}
+				</p>
 			</div>
 		</div>
 	);
@@ -1570,17 +1791,30 @@ function TurnBlock({
 	// Check if user message is actually a system injection
 	const userContent = normalizeMessageContent(turn.userMessage?.content || '');
 	const isSystem = turn.userMessage && isSystemMessage(userContent);
-	const isSpecialistComplete = isSystem && isSpecialistNotification(userContent);
-	const isReply = isSystem && !isSpecialistComplete && isSpecialistReply(userContent);
-	const isTeamMsg = isSystem && !isSpecialistComplete && !isReply && isTeamMessage(userContent);
-	const isTeamReq = isSystem && !isSpecialistComplete && !isReply && !isTeamMsg && isTeamRequest(userContent);
-	const isTaskNotif = isSystem && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && isTaskNotification(userContent);
+	const isContextMsg = isSystem && isContextMessage(userContent);
+	const isCaptureMsg = isSystem && !isContextMsg && isCaptureMessage(userContent);
+	const isSpecialistComplete = isSystem && !isContextMsg && !isCaptureMsg && isSpecialistNotification(userContent);
+	const isReply = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && isSpecialistReply(userContent);
+	const isTeamMsg = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && isTeamMessage(userContent);
+	const isTeamReq = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && isTeamRequest(userContent);
+	const isTaskNotif = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && isTaskNotification(userContent);
+
+	// Type-aware system message routing (WAKE, WARNING, plumbing)
+	const isGenericSystem = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && !isTaskNotif;
+	const systemParsed = isGenericSystem ? parseSystemPrefix(userContent) : null;
+	const isWake = systemParsed?.type === 'WAKE';
+	const isWarning = !!(systemParsed && (systemParsed.type === 'WARNING' || systemParsed.type === 'FORCE-HANDOFF'));
+	const isPlumbingMsg = !!(systemParsed && ['CRON', 'INFO', 'LATE', 'HANDOFF'].includes(systemParsed.type));
 
 	return (
 		<div className="mb-5" onClick={onFocus}>
-			{/* User message, Specialist report, Specialist reply, Team message, Team request, Task notification, or System message */}
+			{/* User message routing — type-specific renderers for system injections */}
 			{turn.userMessage && (
-				isSpecialistComplete ? (
+				isContextMsg ? (
+					<ContextCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isCaptureMsg ? (
+					<CaptureCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isSpecialistComplete ? (
 					<SpecialistReport content={userContent} timestamp={turn.userMessage.timestamp} />
 				) : isReply ? (
 					<SpecialistReplyCard content={userContent} timestamp={turn.userMessage.timestamp} />
@@ -1590,6 +1824,12 @@ function TurnBlock({
 					<TeamRequestCard content={userContent} timestamp={turn.userMessage.timestamp} />
 				) : isTaskNotif ? (
 					<TaskNotificationCard content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isWake ? (
+					<WakeDivider timestamp={turn.userMessage.timestamp} />
+				) : isWarning ? (
+					<WarningMessage content={userContent} timestamp={turn.userMessage.timestamp} />
+				) : isPlumbingMsg ? (
+					<SystemMessage content={userContent} variant="plumbing" />
 				) : isSystem ? (
 					<SystemMessage content={userContent} />
 				) : (

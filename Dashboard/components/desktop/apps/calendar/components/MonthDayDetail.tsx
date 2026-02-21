@@ -1,11 +1,12 @@
 'use client';
 
-import { X, Pencil, Trash2 } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { CalendarEvent } from '@/lib/types';
 import {
   ProcessedEvent,
   eventSpansDate,
   getEventColor,
+  getCalendarColor,
   formatTime,
   parseTags,
 } from '../utils/calendarUtils';
@@ -24,7 +25,6 @@ interface MonthDayDetailProps {
 
 /**
  * Month day detail slide-over panel.
- * Shows all events for a specific day in month view.
  */
 export function MonthDayDetail({
   date,
@@ -37,7 +37,6 @@ export function MonthDayDetail({
   onOpenDayView,
   onCreateEvent,
 }: MonthDayDetailProps) {
-  // Convert CalendarEvent to ProcessedEvent
   const toProcessedEvent = (event: CalendarEvent, idx: number): ProcessedEvent => {
     const colorClass = getEventColor(event, allCalendarNames);
     return {
@@ -63,148 +62,108 @@ export function MonthDayDetail({
   const allDayEvents = dayEvents.filter(e => e.all_day);
   const timedEvents = dayEvents.filter(e => !e.all_day);
 
+  const isToday = (() => {
+    const now = new Date();
+    return date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+  })();
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-      />
-      <div className="relative w-80 max-w-full bg-[var(--surface-raised)] shadow-2xl animate-slide-in flex flex-col">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-72 max-w-full bg-[var(--surface-raised)] shadow-2xl animate-slide-in flex flex-col">
+        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
           <div>
-            <div className="text-xs text-[var(--text-muted)] uppercase">
+            <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide">
               {date.toLocaleDateString('en-US', { weekday: 'long' })}
             </div>
-            <div className="text-lg font-semibold text-[var(--text-primary)]">
-              {date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            <div className="flex items-center gap-2">
+              <span className={`text-lg font-semibold ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--text-primary)]'}`}>
+                {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+              {isToday && (
+                <span className="text-[10px] font-medium text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded">
+                  Today
+                </span>
+              )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="btn btn-ghost btn-icon-sm"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                onCreateEvent(date, 9);
+                onClose();
+              }}
+              className="p-1.5 rounded hover:bg-[var(--surface-accent)] transition-colors"
+              title="New event"
+            >
+              <Plus className="w-4 h-4 text-[var(--text-secondary)]" />
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded hover:bg-[var(--surface-accent)] transition-colors">
+              <X className="w-4 h-4 text-[var(--text-muted)]" />
+            </button>
+          </div>
         </div>
 
-        <div className="p-4 flex-1 overflow-y-auto space-y-3">
+        {/* Events */}
+        <div className="p-3 flex-1 overflow-y-auto">
           {dayEvents.length === 0 ? (
-            <div className="text-sm text-[var(--text-muted)] text-center py-8">
-              No events for this day
+            <div className="text-[13px] text-[var(--text-muted)] text-center py-8">
+              No events
             </div>
           ) : (
-            <>
+            <div className="space-y-1">
               {/* All-day events */}
-              {allDayEvents.length > 0 && (
-                <div>
-                  <div className="text-[10px] uppercase text-[var(--text-muted)] mb-2">All day</div>
-                  <div className="space-y-1">
-                    {allDayEvents.map((event, idx) => {
-                      const processedEvent = toProcessedEvent(event, idx);
-                      const colorClass = processedEvent.colorClass;
-                      return (
-                        <div
-                          key={`allday-${idx}`}
-                          className={`w-full px-2 py-1 rounded text-xs ${colorClass.bg} ${colorClass.text} flex items-center justify-between gap-2`}
-                        >
-                          <button
-                            onClick={() => onSelectEvent(processedEvent)}
-                            className="flex-1 text-left truncate hover:brightness-110"
-                          >
-                            {event.summary}
-                          </button>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => onEditEvent(processedEvent)}
-                              className="btn btn-ghost btn-icon-sm text-white/80 hover:text-white"
-                              title="Edit event"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => onDeleteEvent(processedEvent)}
-                              className="btn btn-ghost btn-icon-sm text-white/80 hover:text-white"
-                              title="Delete event"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {allDayEvents.map((event, idx) => {
+                const processed = toProcessedEvent(event, idx);
+                const calColor = event.calendar_name
+                  ? getCalendarColor(event.calendar_name, allCalendarNames)
+                  : null;
+                return (
+                  <button
+                    key={`allday-${idx}`}
+                    onClick={() => onSelectEvent(processed)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors flex items-center gap-2"
+                  >
+                    {calColor && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${calColor.dot}`} />}
+                    <span className="text-[13px] text-[var(--text-primary)] truncate">{event.summary}</span>
+                    <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0 ml-auto">all day</span>
+                  </button>
+                );
+              })}
 
               {/* Timed events */}
-              {timedEvents.length > 0 && (
-                <div>
-                  <div className="text-[10px] uppercase text-[var(--text-muted)] mb-2">Scheduled</div>
-                  <div className="space-y-1">
-                    {timedEvents.map((event, idx) => {
-                      const processedEvent = toProcessedEvent(event, idx);
-                      const colorClass = processedEvent.colorClass;
-                      const startTime = formatTime(new Date(event.start_ts));
-                      const endTime = formatTime(new Date(event.end_ts));
-
-                      return (
-                        <div
-                          key={`timed-${idx}`}
-                          className="w-full px-2 py-1 rounded text-xs border border-[var(--border-subtle)] hover:bg-[var(--surface-accent)] flex items-start justify-between gap-2"
-                        >
-                          <button
-                            onClick={() => onSelectEvent(processedEvent)}
-                            className="flex-1 text-left"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className={`w-2 h-2 rounded-full ${colorClass.bg}`} />
-                              <span className="text-[var(--text-primary)]">{event.summary}</span>
-                            </div>
-                            <div className="text-[10px] text-[var(--text-muted)] mt-1">
-                              {startTime} - {endTime}
-                            </div>
-                          </button>
-                          <div className="flex items-center gap-1 pt-0.5">
-                            <button
-                              onClick={() => onEditEvent(processedEvent)}
-                              className="btn btn-ghost btn-icon-sm"
-                              title="Edit event"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => onDeleteEvent(processedEvent)}
-                              className="btn btn-ghost btn-icon-sm text-[var(--color-error)]"
-                              title="Delete event"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
+              {timedEvents.map((event, idx) => {
+                const processed = toProcessedEvent(event, idx);
+                const calColor = event.calendar_name
+                  ? getCalendarColor(event.calendar_name, allCalendarNames)
+                  : null;
+                const startTimeStr = formatTime(new Date(event.start_ts));
+                return (
+                  <button
+                    key={`timed-${idx}`}
+                    onClick={() => onSelectEvent(processed)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors flex items-center gap-2"
+                  >
+                    {calColor && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${calColor.dot}`} />}
+                    <span className="text-[13px] text-[var(--text-primary)] truncate">{event.summary}</span>
+                    <span className="text-[11px] text-[var(--text-muted)] flex-shrink-0 ml-auto tabular-nums">{startTimeStr}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-2">
+        {/* Footer */}
+        <div className="px-4 py-2.5 border-t border-[var(--border-subtle)]">
           <button
             onClick={() => onOpenDayView(date)}
-            className="btn btn-ghost btn-sm"
+            className="text-[12px] text-[var(--color-primary)] hover:underline"
           >
-            Open day view
-          </button>
-          <button
-            onClick={() => {
-              onCreateEvent(date, 9);
-              onClose();
-            }}
-            className="btn btn-primary btn-sm"
-          >
-            New event
+            Open in day view
           </button>
         </div>
       </div>

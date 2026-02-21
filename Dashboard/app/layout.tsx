@@ -31,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="http://localhost:5001" />
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'} />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <Providers>

@@ -29,6 +29,7 @@ import {
 	Search,
 	Star,
 	Terminal,
+	TrendingUp,
 	Workflow,
 	Wrench,
 	Zap,
@@ -399,6 +400,29 @@ const toolConfigs: Record<string, ToolConfig> = {
 		},
 		showToolName: true,
 	},
+	day: {
+		icon: PenLine,
+		color: '#64748b',
+		category: 'system',
+		getOneLiner: (input) => {
+			const op = input.operation || '';
+			if (op === 'log') {
+				const desc = input.raw?.description ? String(input.raw.description) : '';
+				return desc ? truncate(desc, 55) : 'log';
+			}
+			if (op === 'priority') {
+				const content = input.raw?.content ? String(input.raw.content) : '';
+				const level = input.raw?.level ? String(input.raw.level) : '';
+				return content ? `${level ? level + ': ' : ''}${truncate(content, 40)}` : 'create priority';
+			}
+			if (op === 'complete') return `complete ${String(input.raw?.id || '')}`;
+			if (op === 'delete') return `delete ${String(input.raw?.id || '')}`;
+			if (op === 'priorities') return 'list priorities';
+			return op || 'day';
+		},
+		showToolName: true,
+	},
+	// Legacy: kept for old transcript rendering
 	timeline: {
 		icon: PenLine,
 		color: '#64748b',
@@ -429,6 +453,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 		},
 		showToolName: true,
 	},
+	// Legacy: kept for old transcript rendering (now team("reply"))
 	reply_to_chief: {
 		icon: MessageCircleReply,
 		color: 'var(--color-claude)',
@@ -440,6 +465,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 		showToolName: true,
 		chipLabel: 'REPLY',
 	},
+	// Legacy: kept for old transcript rendering (now telegram("show"))
 	show: {
 		icon: Eye,
 		color: '#3b82f6',
@@ -647,19 +673,38 @@ const toolConfigs: Record<string, ToolConfig> = {
 			return op || 'manage';
 		},
 	},
+	turbine: {
+		icon: TrendingUp,
+		color: '#f97316',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.operation || '';
+			const name = input.raw?.name ? String(input.raw.name) : '';
+			if (name) return `${op} ${truncate(name, 35)}`;
+			if (op === 'scoreboard') return 'strategy scoreboard';
+			if (op === 'market') return 'market analysis';
+			if (op === 'current') return 'active positions';
+			if (op === 'signals') return 'pending signals';
+			if (op === 'stats') return 'performance stats';
+			if (op === 'portfolio') return 'portfolio overview';
+			if (op === 'calibration') return 'calibration check';
+			return op || 'manage';
+		},
+	},
 	pet: {
 		icon: PawPrint,
 		color: '#f59e0b',
 		category: 'tool',
 		showToolName: true,
-		chipLabel: 'PET',
+		chipLabel: 'EMBER',
 		getOneLiner: (input) => {
 			const op = input.operation || '';
 			if (op === 'note' && input.raw?.message) return `note: ${truncate(String(input.raw.message), 30)}`;
-			if (op === 'status') return 'check on companion';
-			if (op === 'feed') return 'feed companion';
-			if (op === 'play') return 'play with companion';
-			if (op === 'history') return 'companion history';
+			if (op === 'status') return 'check on Ember';
+			if (op === 'feed') return 'feed Ember';
+			if (op === 'play') return 'play with Ember';
+			if (op === 'history') return 'Ember history';
 			return op || 'check';
 		},
 	},

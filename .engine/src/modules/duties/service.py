@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from core.storage import SystemStorage
 
-# Default timezone: Pacific - all duty times are Pacific
+# Will is in San Francisco - all duty times are Pacific
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
 

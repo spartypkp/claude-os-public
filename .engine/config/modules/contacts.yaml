@@ -1,0 +1,36 @@
+# Contacts configuration (direct-read Apple Contacts pattern)
+
+# Read settings
+read:
+  # Default limit for list operations
+  default_limit: 50
+  # Include contacts without phone/email
+  include_empty: false
+
+# Write settings
+write:
+  # Create contacts in Apple Contacts via AppleScript
+  # If false, contacts are local-only
+  sync_to_apple: true
+
+# Claude extension fields
+# These are stored locally, not in Apple Contacts
+extensions:
+  - relationship
+  - context_notes
+  - value_exchange
+  - description
+  - pinned
+  - tags
+
+# Tool metadata - used by watcher to populate SYSTEM-INDEX.md
+tools:
+  contact:
+    purpose: "Search, create, update, and enrich contacts"
+    who: "All roles"
+    when: "Looking up people mentioned, adding context after interactions, managing relationships"
+    usage: |
+      - Reads from Apple Contacts + local extensions
+      - Extended fields (relationship, context_notes, value_exchange) stored locally
+      - Always search when someone is mentioned - capture context
+    operations: "search, create, update, enrich, merge, list"

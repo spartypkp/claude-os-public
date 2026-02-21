@@ -11,9 +11,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import PlainTextResponse
 
 from core.config import settings
 from core.perf import record_route_latency
@@ -57,6 +56,16 @@ def _build_lifespan(testing: bool):
             except Exception as e:
                 logger.error(f"Account discovery failed: {e}")
 
+            # Initialize AccessService (after discovery so migration data is populated)
+            try:
+                from modules.accounts.access import init_access_service
+                from core.storage import SystemStorage as _AS
+
+                access_storage = _AS(settings.db_path)
+                init_access_service(access_storage)
+            except Exception as e:
+                logger.error(f"AccessService initialization failed: {e}")
+
             # Import background workers (lazy to avoid circular imports)
             from workers.watcher import start_watcher
             from workers.context_monitor import get_monitor
@@ -79,6 +88,20 @@ def _build_lifespan(testing: bool):
             usage_tracker = UsageTracker(usage_storage, poll_interval=600)
             await usage_tracker.start()
             set_tracker(usage_tracker)
+
+            # Start email classification pipeline
+            try:
+                from modules.email.pipeline import EmailPipeline
+                email_pipeline = EmailPipeline(str(settings.db_path), poll_interval=60)
+                pipeline_task = asyncio.create_task(
+                    email_pipeline.start(stop_event), name="email_pipeline"
+                )
+                app.state.email_pipeline = email_pipeline
+                app.state.pipeline_task = pipeline_task
+                logger.info("Email classification pipeline started")
+            except Exception as e:
+                logger.error(f"Email pipeline startup failed: {e}")
+                pipeline_task = None
 
             # Start Telegram service
             from adapters.telegram import TelegramService
@@ -110,7 +133,13 @@ def _build_lifespan(testing: bool):
             # Stop Telegram service gracefully
             await telegram_service.stop()
 
+            # Stop email pipeline gracefully
+            if hasattr(app.state, 'email_pipeline'):
+                app.state.email_pipeline.stop()
+
             all_tasks = [watcher_task, scheduler_task, monitor_task, today_sync_task]
+            if pipeline_task:
+                all_tasks.append(pipeline_task)
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*all_tasks, return_exceptions=True),
@@ -167,22 +196,6 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        """Ensure unhandled exceptions still return CORS headers.
-
-        FastAPI's ServerErrorMiddleware sits outside CORSMiddleware, so
-        unhandled 500s lose CORS headers. This handler catches them first
-        and includes the headers so the browser shows the real error.
-        """
-        response = PlainTextResponse("Internal Server Error", status_code=500)
-        origin = request.headers.get("origin")
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-        logger.exception(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-        return response
-
     # =============================================================================
     # HEALTH ENDPOINTS
     # =============================================================================
@@ -200,6 +213,7 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     from modules.sessions import api as sessions_api
     from modules.analytics import api as analytics_api
     from modules.accounts import api as accounts_api
+    from modules.accounts import services_api
     from modules.calendar import api as calendar_api
     from modules.contacts import api as contacts_api
     from modules.email import api as email_api
@@ -210,13 +224,18 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     from modules.settings import api as settings_api
     from modules.finder import api as finder_api
     from modules.system import api as system_api
+    from modules.job_search import api as job_search_api
+    from modules.training_will import api as training_will_api
+    from modules.ember import api as ember_api
     from modules.schedule import api as schedule_api
+    from modules.projects import api as projects_api
 
     # Core system
     app.include_router(sessions_api.router, prefix="/api/sessions")
     app.include_router(system_api.router, prefix="/api/system")
     app.include_router(analytics_api.router, prefix="/api/analytics")
     app.include_router(accounts_api.router, prefix="/api/accounts")
+    app.include_router(services_api.router, prefix="/api/services")
     app.include_router(settings_api.router, prefix="/api/settings")
 
     # Life domains
@@ -234,11 +253,10 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
     app.include_router(schedule_api.router, prefix="/api/schedule")
 
     # Custom apps
-    # Add your custom app routers here:
-    # from modules.my_app import api as my_app_api
-    # app.include_router(my_app_api.router, prefix="/api/my-app")
-    from modules.reading_list import api as reading_list_api
-    app.include_router(reading_list_api.router, prefix="/api/reading-list")
+    app.include_router(job_search_api.router, prefix="/api/job-search")
+    app.include_router(training_will_api.router, prefix="/api/training")
+    app.include_router(ember_api.router)
+    app.include_router(projects_api.router, prefix="/api/projects")
 
     return app
 

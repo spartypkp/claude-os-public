@@ -35,7 +35,8 @@ def emit_session_state_event(session_id: str, state: str):
     """
     try:
         import requests
-        url = "http://localhost:5001/api/sessions/notify-event"
+        port = os.environ.get("CLAUDE_OS_PORT", "5001")
+        url = f"http://localhost:{port}/api/sessions/notify-event"
         payload = {
             "event_type": "session.state",
             "session_id": session_id,

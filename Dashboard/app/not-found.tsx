@@ -48,6 +48,12 @@ export default function NotFound() {
           </div>
           <div className="flex flex-wrap gap-2 justify-center">
             <a
+              href="/job-search"
+              className="px-3 py-1.5 bg-[hsl(240,5%,9%)] hover:bg-[hsl(240,5%,12%)] border border-[hsl(240,3%,15%)] text-[hsl(240,5%,85%)] text-sm rounded transition-colors"
+            >
+              Job Search
+            </a>
+            <a
               href="/dev/tools"
               className="px-3 py-1.5 bg-[hsl(240,5%,9%)] hover:bg-[hsl(240,5%,12%)] border border-[hsl(240,3%,15%)] text-[hsl(240,5%,85%)] text-sm rounded transition-colors"
             >

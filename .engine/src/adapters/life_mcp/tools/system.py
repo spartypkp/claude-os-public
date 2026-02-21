@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 
 from fastmcp import FastMCP
 
+from core.config import settings
 from core.mcp_helpers import (
     PACIFIC,
     REPO_ROOT,
@@ -46,7 +47,7 @@ def _notify_backend_event(event_type: str, session_id: str, data: dict = None):
     import json as json_module
 
     try:
-        url = "http://localhost:5001/api/sessions/notify-event"
+        url = f"{settings.backend_url}/api/sessions/notify-event"
         payload = json_module.dumps({
             "event_type": event_type,
             "session_id": session_id,
@@ -86,17 +87,20 @@ def team(
     """Team orchestration (spawn, monitor, close team members). **Chief only.**
 
     Args:
-        operation: Operation - 'spawn', 'list', 'peek', 'close', 'message', 'subscribe'
+        operation: Operation - 'spawn', 'list', 'peek', 'close', 'message', 'subscribe', 'reply'
         id: Team member ID (required for peek, close, message, subscribe)
             Accepts either conversation_id (e.g., "0212-1607-builder-83d0349e")
             or session_id prefix (e.g., "7f0a578c") — resolves to active session automatically.
-        role: Session role for spawn - 'builder', 'writer', 'researcher', 'curator', 'project', 'idea'
+        role: Session role for spawn - use the slug (folder name under .claude/roles/).
+            Base roles: 'builder', 'writer', 'researcher', 'curator', 'project', 'idea'
+            Custom roles: 'job-search', 'trainer', 'money'
+            IMPORTANT: Use hyphens not spaces (e.g. 'job-search' not 'job search')
         spec_path: Path to spec file (REQUIRED for spawn) - Specialist flow starts at preparation
         max_iterations: Max specialist iterations before giving up (default 10)
         description: Status text for dashboard
         project_path: For 'project' role - path to target project
         lines: Number of lines to capture for peek (default 50)
-        message: Message text (required for message operation)
+        message: Message text (required for message and reply operations)
 
     Returns:
         Object with success status and operation-specific data
@@ -111,6 +115,7 @@ def team(
         team("message", id="abc12345", message="How's progress?")
         team("message", id="0212-1607-builder-83d0349e", message="Check the auth middleware too")
         team("subscribe", id="abc12345")
+        team("reply", message="Making progress, 60% done")
     """
     # Per-operation access control
     caller_role = get_current_session_role()
@@ -133,8 +138,10 @@ def team(
             return _team_message(id, message, caller_role)
         elif operation == "subscribe":
             return _team_subscribe(id)
+        elif operation == "reply":
+            return _team_reply(message)
         else:
-            return {"success": False, "error": f"Unknown operation: {operation}. Use spawn, list, peek, close, message, or subscribe."}
+            return {"success": False, "error": f"Unknown operation: {operation}. Use spawn, list, peek, close, message, subscribe, or reply."}
 
     except subprocess.TimeoutExpired:
         return {"success": False, "error": "Timeout during operation"}
@@ -180,7 +187,7 @@ def _team_spawn_request(caller_role: str, requested_role: Optional[str], spec_pa
         return {"success": False, "error": "role required for spawn request"}
 
     purpose = spec_path or "unspecified"
-    request_msg = f"[TEAM REQUEST: {caller_role.title()} wants {requested_role.title()} for \"{purpose}\"]"
+    request_msg = f"[SYSTEM:TEAM-REQUEST] {caller_role.title()} wants {requested_role.title()} for \"{purpose}\""
 
     # Find Chief's tmux pane
     with get_db() as conn:
@@ -439,7 +446,7 @@ def _team_message(id: Optional[str], message: Optional[str], caller_role: Option
     source = (caller_role or "unknown").title()
     target = r.title()
     conv_id = resolved.get("conversation_id", "")
-    formatted_msg = f"[TEAM \u2192 {target}] from {source} ({conv_id}): {message}"
+    formatted_msg = f"[SYSTEM:TEAM] from {source} ({conv_id}) \u2192 {target}: {message}"
 
     success = inject_message(tmux_pane, formatted_msg, submit=True)
 
@@ -471,7 +478,21 @@ def _team_subscribe(id: Optional[str]) -> Dict[str, Any]:
     full_id = resolved["session_id"]
     r = resolved.get("role") or "unknown"
 
+    # Validate that the subscribing session has a tmux_pane set
+    # (required for watcher to deliver replies)
     with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT tmux_pane FROM sessions WHERE session_id = ?",
+            (subscriber_session_id,)
+        )
+        subscriber_row = cursor.fetchone()
+        if not subscriber_row or not subscriber_row["tmux_pane"]:
+            return {
+                "success": False,
+                "error": "Your session has no tmux_pane set — reply delivery requires a tmux pane. "
+                         "This usually means the session wasn't started through the normal flow."
+            }
+
         conn.execute(
             "UPDATE sessions SET subscribed_by = ? WHERE session_id = ?",
             (subscriber_session_id, full_id)
@@ -484,27 +505,17 @@ def _team_subscribe(id: Optional[str]) -> Dict[str, Any]:
         "conversation_id": resolved.get("conversation_id"),
         "role": r,
         "subscribed_by": subscriber_session_id[:8],
-        "reminder": f"Subscribed. When {r} calls reply_to_chief(), you'll receive messages automatically."
+        "reminder": f"Subscribed. When {r} calls team(\"reply\"), you'll receive messages automatically."
     }
 
 
-@mcp.tool()
-def reply_to_chief(message: str) -> Dict[str, Any]:
-    """Reply to Chief from a specialist session.
-
-    Available to all sessions. Appends timestamped message to reply.txt in specialist workspace.
+def _team_reply(message: Optional[str]) -> Dict[str, Any]:
+    """Reply to Chief from any session. Appends timestamped message to reply.txt in specialist workspace.
     If Chief is subscribed, the watcher auto-injects the reply to Chief's pane.
-
-    Args:
-        message: Reply message content
-
-    Returns:
-        Object with success status and file path
-
-    Example:
-        reply_to_chief("Making progress, 60% done")
     """
-    # Get current session's conversation_id
+    if not message:
+        return {"success": False, "error": "message required for reply"}
+
     session_id = get_current_session_id()
     if not session_id:
         return {"success": False, "error": "Could not determine current session"}
@@ -578,7 +589,7 @@ def schedule(
         schedule("add", expression="*/15 * * * *", action="inject chief", payload="[WAKE]")
         schedule("add", expression="0 6 * * *", action="inject chief", payload="/morning-reset")
         schedule("add", expression="2026-02-13T16:00", action="inject chief",
-                 payload="Remind user to review docs")
+                 payload="Remind Will to review docs")
         schedule("add", expression="0 18 * * *", action="spawn researcher",
                  payload="Desktop/scheduled/news-brief-spec.md")
         schedule("add", expression="0 3 * * *", action="exec", payload="vacuum_database")
@@ -591,7 +602,7 @@ def schedule(
     import urllib.request
     import json as json_module
 
-    base_url = "http://localhost:5001/api/schedule"
+    base_url = f"{settings.backend_url}/api/schedule"
 
     try:
         if operation == "list":

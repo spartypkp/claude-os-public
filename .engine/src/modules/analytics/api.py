@@ -23,8 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analytics"])
 
 # Paths
-REPO_ROOT = Path(settings.repo_root) if hasattr(settings, 'repo_root') else Path(__file__).resolve().parents[4]
-DB_PATH = REPO_ROOT / ".engine" / "data" / "db" / "system.db"
+DB_PATH = settings.db_path
 
 # Store tracker instance (set during startup)
 _tracker: Optional[UsageTracker] = None
@@ -341,6 +340,490 @@ async def system_metrics():
         result["database"]["wal_size_bytes"] = wal_path.stat().st_size
 
     return result
+
+
+# ============================================
+# Specialist analytics endpoint
+# ============================================
+
+@router.get("/specialists")
+async def specialists_analytics(days: int = 30, role: Optional[str] = None):
+    """Specialist task metrics from the specialist_tasks view.
+
+    Returns pass rates, iteration counts, and durations by role.
+    """
+    def _load_specialists():
+        with get_db() as conn:
+            where_clause = "WHERE prep_started >= datetime('now', ? || ' days')"
+            params = [f"-{days}"]
+            if role:
+                where_clause += " AND role = ?"
+                params.append(role)
+
+            # Summary
+            row = conn.execute(f"""
+                SELECT
+                    COUNT(*) as total_tasks,
+                    SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passed_count,
+                    AVG(impl_iterations) as avg_iterations,
+                    AVG(total_duration_min) as avg_duration_min
+                FROM specialist_tasks
+                {where_clause}
+            """, params).fetchone()
+
+            total = row["total_tasks"] or 0
+            passed = row["passed_count"] or 0
+
+            # By role
+            rows = conn.execute(f"""
+                SELECT
+                    role,
+                    COUNT(*) as tasks,
+                    SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passed_count,
+                    AVG(impl_iterations) as avg_impl_iterations,
+                    AVG(total_duration_min) as avg_duration_min
+                FROM specialist_tasks
+                {where_clause}
+                GROUP BY role
+                ORDER BY tasks DESC
+            """, params).fetchall()
+
+            by_role = {}
+            for r in rows:
+                role_tasks = r["tasks"]
+                role_passed = r["passed_count"] or 0
+                by_role[r["role"]] = {
+                    "tasks": role_tasks,
+                    "passed": role_passed,
+                    "pass_rate": round(role_passed / role_tasks, 2) if role_tasks > 0 else None,
+                    "avg_impl_iterations": round(r["avg_impl_iterations"], 1) if r["avg_impl_iterations"] else None,
+                    "avg_duration_min": round(r["avg_duration_min"], 1) if r["avg_duration_min"] else None,
+                }
+
+            return {
+                "summary": {
+                    "total_tasks": total,
+                    "passed": passed,
+                    "pass_rate": round(passed / total, 2) if total > 0 else None,
+                    "avg_iterations": round(row["avg_iterations"], 1) if row["avg_iterations"] else None,
+                    "avg_duration_min": round(row["avg_duration_min"], 1) if row["avg_duration_min"] else None,
+                },
+                "by_role": by_role,
+                "days": days,
+            }
+
+    try:
+        return await _run_blocking(_load_specialists)
+    except Exception as e:
+        logger.error(f"Error getting specialist analytics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# File analytics endpoints (Observatory V2)
+# ============================================
+
+@router.get("/files")
+async def file_analytics(days: int = 30, limit: int = 30):
+    """File access analytics from tool_calls detail column.
+
+    Returns:
+    - top_read: Most-read files (bar chart data)
+    - top_written: Most-written/edited files
+    - rw_ratio: Read:Write ratio by directory
+    - by_role: File access patterns by session role
+    """
+    def _load_files():
+        with get_db() as conn:
+            date_filter = f"-{days}"
+
+            # Top read files
+            top_read = conn.execute("""
+                SELECT detail as file_path, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name = 'Read'
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY detail
+                ORDER BY count DESC
+                LIMIT ?
+            """, (date_filter, limit)).fetchall()
+
+            # Top written/edited files
+            top_written = conn.execute("""
+                SELECT detail as file_path, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name IN ('Write', 'Edit')
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY detail
+                ORDER BY count DESC
+                LIMIT ?
+            """, (date_filter, limit)).fetchall()
+
+            # R:W ratio by directory (top-level segments)
+            rw_rows = conn.execute("""
+                SELECT
+                    tool_name,
+                    detail as file_path
+                FROM tool_calls
+                WHERE tool_name IN ('Read', 'Write', 'Edit')
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+            """, (date_filter,)).fetchall()
+
+            dir_reads = defaultdict(int)
+            dir_writes = defaultdict(int)
+            for row in rw_rows:
+                path = row["file_path"]
+                # Extract directory: keep first 2 meaningful segments after repo root
+                parts = path.split('/')
+                # Find meaningful directory (skip base repo path segments)
+                meaningful = [p for p in parts if p and p not in ('Users', 'claude-os')]
+                dir_key = '/'.join(meaningful[:2]) if len(meaningful) >= 2 else (meaningful[0] if meaningful else 'root')
+                if row["tool_name"] == 'Read':
+                    dir_reads[dir_key] += 1
+                else:
+                    dir_writes[dir_key] += 1
+
+            all_dirs = set(dir_reads.keys()) | set(dir_writes.keys())
+            rw_ratio = []
+            for d in sorted(all_dirs, key=lambda x: dir_reads.get(x, 0) + dir_writes.get(x, 0), reverse=True)[:15]:
+                reads = dir_reads.get(d, 0)
+                writes = dir_writes.get(d, 0)
+                rw_ratio.append({
+                    "directory": d,
+                    "reads": reads,
+                    "writes": writes,
+                    "ratio": round(reads / writes, 1) if writes > 0 else None,
+                })
+
+            # File access by role
+            role_rows = conn.execute("""
+                SELECT
+                    s.role,
+                    tc.tool_name,
+                    COUNT(*) as count
+                FROM tool_calls tc
+                JOIN sessions s ON tc.session_id = s.session_id
+                WHERE tc.tool_name IN ('Read', 'Write', 'Edit')
+                  AND tc.detail IS NOT NULL
+                  AND tc.called_at >= datetime('now', ? || ' days')
+                GROUP BY s.role, tc.tool_name
+                ORDER BY count DESC
+            """, (date_filter,)).fetchall()
+
+            by_role = defaultdict(lambda: {"reads": 0, "writes": 0})
+            for row in role_rows:
+                role = row["role"] or "unknown"
+                if row["tool_name"] == 'Read':
+                    by_role[role]["reads"] += row["count"]
+                else:
+                    by_role[role]["writes"] += row["count"]
+
+            return (
+                [{"file": r["file_path"], "count": r["count"]} for r in top_read],
+                [{"file": r["file_path"], "count": r["count"]} for r in top_written],
+                rw_ratio,
+                dict(by_role),
+            )
+
+    top_read, top_written, rw_ratio, by_role = await _run_blocking(_load_files)
+
+    return {
+        "top_read": top_read,
+        "top_written": top_written,
+        "rw_ratio": rw_ratio,
+        "by_role": by_role,
+        "days": days,
+    }
+
+
+@router.get("/tool-details")
+async def tool_details_analytics(days: int = 30):
+    """Tool usage detail analytics from detail column.
+
+    Returns:
+    - mcp_operations: Operation frequency per MCP tool
+    - search_patterns: Most common Grep/Glob patterns
+    - bash_categories: Bash command categorization
+    - subagent_types: Task subagent type distribution
+    """
+    def _load_tool_details():
+        with get_db() as conn:
+            date_filter = f"-{days}"
+
+            # MCP operation frequency
+            mcp_rows = conn.execute("""
+                SELECT
+                    tool_name,
+                    detail as operation,
+                    COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name LIKE 'mcp__life__%'
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY tool_name, detail
+                ORDER BY count DESC
+            """, (date_filter,)).fetchall()
+
+            mcp_ops = defaultdict(list)
+            for row in mcp_rows:
+                # Strip the mcp__life__ prefix for display
+                short_name = row["tool_name"].replace("mcp__life__", "")
+                mcp_ops[short_name].append({
+                    "operation": row["operation"],
+                    "count": row["count"],
+                })
+
+            # Search patterns (Grep + Glob)
+            search_rows = conn.execute("""
+                SELECT
+                    tool_name,
+                    detail as pattern,
+                    COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name IN ('Grep', 'Glob')
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY tool_name, detail
+                ORDER BY count DESC
+                LIMIT 30
+            """, (date_filter,)).fetchall()
+
+            search_patterns = [
+                {"tool": r["tool_name"], "pattern": r["pattern"], "count": r["count"]}
+                for r in search_rows
+            ]
+
+            # Bash command categories
+            bash_rows = conn.execute("""
+                SELECT detail as command
+                FROM tool_calls
+                WHERE tool_name = 'Bash'
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+            """, (date_filter,)).fetchall()
+
+            categories = defaultdict(int)
+            for row in bash_rows:
+                cmd = row["command"].strip()
+                if cmd.startswith(('git ', 'gh ')):
+                    categories["git/github"] += 1
+                elif cmd.startswith(('npm ', 'npx ', 'node ', 'bun ')):
+                    categories["node/npm"] += 1
+                elif cmd.startswith(('python', 'pip ', 'pytest ')):
+                    categories["python"] += 1
+                elif cmd.startswith(('curl ', 'wget ')):
+                    categories["http"] += 1
+                elif cmd.startswith(('ls', 'cat ', 'find ', 'grep ', 'rg ')):
+                    categories["filesystem"] += 1
+                elif cmd.startswith(('sqlite3',)):
+                    categories["database"] += 1
+                elif cmd.startswith(('tmux ',)):
+                    categories["tmux"] += 1
+                elif cmd.startswith(('./', 'bash ', 'sh ')):
+                    categories["scripts"] += 1
+                else:
+                    categories["other"] += 1
+
+            bash_cats = [
+                {"category": k, "count": v}
+                for k, v in sorted(categories.items(), key=lambda x: x[1], reverse=True)
+            ]
+
+            # Subagent type distribution
+            subagent_rows = conn.execute("""
+                SELECT detail as subagent_type, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name = 'Task'
+                  AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY detail
+                ORDER BY count DESC
+            """, (date_filter,)).fetchall()
+
+            subagent_types = [
+                {"type": r["subagent_type"], "count": r["count"]}
+                for r in subagent_rows
+            ]
+
+            return dict(mcp_ops), search_patterns, bash_cats, subagent_types
+
+    mcp_operations, search_patterns, bash_categories, subagent_types = await _run_blocking(_load_tool_details)
+
+    return {
+        "mcp_operations": mcp_operations,
+        "search_patterns": search_patterns,
+        "bash_categories": bash_categories,
+        "subagent_types": subagent_types,
+        "days": days,
+    }
+
+
+@router.get("/insights")
+async def analytics_insights(days: int = 30):
+    """Auto-generated observations from analytics data.
+
+    Produces data-backed statements like:
+    - "Builder is your most-spawned role at 73%"
+    - "CLAUDE.md is read 4x more than any other file"
+    - "Specialists pass 87% on first try"
+    """
+    def _load_insights():
+        insights = []
+        with get_db() as conn:
+            date_filter = f"-{days}"
+
+            # 1. Most-spawned role
+            role_row = conn.execute("""
+                SELECT role, COUNT(*) as count,
+                       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM specialist_tasks
+                           WHERE prep_started >= datetime('now', ? || ' days')), 0) as pct
+                FROM specialist_tasks
+                WHERE prep_started >= datetime('now', ? || ' days')
+                GROUP BY role ORDER BY count DESC LIMIT 1
+            """, (date_filter, date_filter)).fetchone()
+            if role_row and role_row["count"] > 0:
+                insights.append({
+                    "category": "specialists",
+                    "icon": "users",
+                    "text": f"{role_row['role'].title()} is the most-spawned role at {int(role_row['pct'])}%",
+                    "value": role_row["count"],
+                })
+
+            # 2. Specialist pass rate
+            pass_row = conn.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passed
+                FROM specialist_tasks
+                WHERE prep_started >= datetime('now', ? || ' days')
+                  AND passed IS NOT NULL
+            """, (date_filter,)).fetchone()
+            if pass_row and pass_row["total"] > 0:
+                rate = round(pass_row["passed"] / pass_row["total"] * 100)
+                insights.append({
+                    "category": "specialists",
+                    "icon": "check",
+                    "text": f"Specialists pass {rate}% of the time ({pass_row['passed']}/{pass_row['total']} tasks)",
+                    "value": rate,
+                })
+
+            # 3. Most-read file
+            read_row = conn.execute("""
+                SELECT detail as file, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name = 'Read' AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY detail ORDER BY count DESC LIMIT 1
+            """, (date_filter,)).fetchone()
+            if read_row:
+                # Get second most-read for comparison
+                second_row = conn.execute("""
+                    SELECT COUNT(*) as count
+                    FROM tool_calls
+                    WHERE tool_name = 'Read' AND detail IS NOT NULL
+                      AND detail != ?
+                      AND called_at >= datetime('now', ? || ' days')
+                    GROUP BY detail ORDER BY count DESC LIMIT 1
+                """, (read_row["file"], date_filter)).fetchone()
+                multiplier = ""
+                if second_row and second_row["count"] > 0:
+                    mult = round(read_row["count"] / second_row["count"], 1)
+                    if mult >= 1.5:
+                        multiplier = f" ({mult}x more than the next file)"
+                # Truncate path to last 2 segments
+                parts = read_row["file"].split('/')
+                short = '/'.join(parts[-2:]) if len(parts) >= 2 else read_row["file"]
+                insights.append({
+                    "category": "files",
+                    "icon": "file",
+                    "text": f"{short} is the most-read file with {read_row['count']} reads{multiplier}",
+                    "value": read_row["count"],
+                })
+
+            # 4. Most-used MCP tool
+            mcp_row = conn.execute("""
+                SELECT tool_name, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name LIKE 'mcp__life__%'
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY tool_name ORDER BY count DESC LIMIT 1
+            """, (date_filter,)).fetchone()
+            if mcp_row:
+                short_name = mcp_row["tool_name"].replace("mcp__life__", "")
+                insights.append({
+                    "category": "tools",
+                    "icon": "tool",
+                    "text": f"{short_name}() is the most-used MCP tool with {mcp_row['count']} calls",
+                    "value": mcp_row["count"],
+                })
+
+            # 5. Total tool calls
+            total_row = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM tool_calls
+                WHERE called_at >= datetime('now', ? || ' days')
+            """, (date_filter,)).fetchone()
+            if total_row:
+                insights.append({
+                    "category": "system",
+                    "icon": "activity",
+                    "text": f"{total_row['count']:,} total tool calls in the last {days} days",
+                    "value": total_row["count"],
+                })
+
+            # 6. Sessions today
+            today_row = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM sessions
+                WHERE date(started_at, 'localtime') = date('now', 'localtime')
+            """).fetchone()
+            if today_row:
+                insights.append({
+                    "category": "system",
+                    "icon": "zap",
+                    "text": f"{today_row['count']} sessions today",
+                    "value": today_row["count"],
+                })
+
+            # 7. Most common search pattern
+            grep_row = conn.execute("""
+                SELECT detail as pattern, COUNT(*) as count
+                FROM tool_calls
+                WHERE tool_name = 'Grep' AND detail IS NOT NULL
+                  AND called_at >= datetime('now', ? || ' days')
+                GROUP BY detail ORDER BY count DESC LIMIT 1
+            """, (date_filter,)).fetchone()
+            if grep_row and grep_row["count"] >= 3:
+                insights.append({
+                    "category": "tools",
+                    "icon": "search",
+                    "text": f'Most searched pattern: "{grep_row["pattern"]}" ({grep_row["count"]} times)',
+                    "value": grep_row["count"],
+                })
+
+            # 8. Avg specialist duration
+            dur_row = conn.execute("""
+                SELECT AVG(total_duration_min) as avg_min
+                FROM specialist_tasks
+                WHERE prep_started >= datetime('now', ? || ' days')
+                  AND total_duration_min IS NOT NULL
+            """, (date_filter,)).fetchone()
+            if dur_row and dur_row["avg_min"]:
+                mins = round(dur_row["avg_min"], 1)
+                insights.append({
+                    "category": "specialists",
+                    "icon": "clock",
+                    "text": f"Average specialist task takes {mins} minutes",
+                    "value": mins,
+                })
+
+        return insights
+
+    insights = await _run_blocking(_load_insights)
+    return {"insights": insights, "days": days}
 
 
 # ============================================

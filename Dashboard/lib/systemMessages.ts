@@ -4,6 +4,16 @@
  * Patterns for identifying and summarizing injected system messages
  * that appear as "user" messages in the transcript but are actually
  * hook injections, handoffs, worker notifications, etc.
+ *
+ * Message taxonomy:
+ *   [SYSTEM:TYPE]  — System-generated notifications, warnings, team messages
+ *   [CAPTURE:TYPE] — Quick captures (drop, bug, idea, dump)
+ *   [CONTEXT:App]  — Context injections from AttachToChat (email, calendar, etc.)
+ *
+ * Legacy format [CLAUDE OS SYS: TYPE] kept as fallback for existing transcripts.
+ *
+ * Icon keys (returned by summarizeSystemMessage) map to Lucide components
+ * in TranscriptViewer.tsx via SYSTEM_ICON_MAP.
  */
 
 /**
@@ -18,9 +28,15 @@ export function normalizeMessageContent(content: string): string {
 }
 
 /**
- * Patterns that indicate a message is a system injection, not a real user message
+ * Patterns that indicate a message is a system injection, not a real user message.
+ * Checked via startsWith against trimmed content.
  */
 export const SYSTEM_MESSAGE_PATTERNS = [
+  // New standardized prefixes
+  '[SYSTEM:',           // All system messages
+  '[CAPTURE:',          // Quick captures (drop, bug, idea, dump)
+  '[CONTEXT:',          // Context injections from AttachToChat
+  // Legacy patterns (fallback for existing transcripts)
   '[AUTO-HANDOFF]',
   'Courtesy System Wakeup',
   '<session-mode>',
@@ -29,14 +45,14 @@ export const SYSTEM_MESSAGE_PATTERNS = [
   '<system-reminder>',
   'Previous session handed off',
   'Background worker',
-  '📬 Task',
   'SessionStart:',
   '[Request interrupted by user]',
   'Request interrupted by user',
-  '[PING from',
-  '[CLAUDE OS SYS:',               // System notifications (specialist complete, warnings, etc.)
-  '[TEAM \u2192',                   // Direct team messages between sessions
-  '[TEAM REQUEST:',                 // Spawn requests from non-Chief specialists
+  '[CLAUDE OS SYS:',               // Legacy system notifications
+  '[TEAM \u2192',                   // Legacy team messages
+  '[TEAM REQUEST:',                 // Legacy spawn requests
+  'Specialist complete',            // Legacy specialist completion
+  'Specialist FAILED',              // Legacy specialist failure
   'Base directory for this skill:',  // Skill invocation
   'ARGUMENTS:',                       // Skill arguments injection
   "You're writing a handoff document", // Memory Agent (summarizer) prompt
@@ -54,6 +70,41 @@ export function isSystemMessage(content: string): boolean {
 }
 
 // =============================================================================
+// NEW FORMAT DETECTION
+// =============================================================================
+
+/** Extract type from [SYSTEM:TYPE] prefix. Returns null if not a match. */
+export function parseSystemPrefix(content: string): { type: string; body: string } | null {
+  const match = content.trimStart().match(/^\[SYSTEM:([\w-]+)\]\s*([\s\S]*)/);
+  if (!match) return null;
+  return { type: match[1], body: match[2] };
+}
+
+/** Extract type from [CAPTURE:TYPE] prefix. Returns null if not a match. */
+export function parseCapturePrefix(content: string): { type: string; body: string } | null {
+  const match = content.trimStart().match(/^\[CAPTURE:(\w+)\]\s*([\s\S]*)/);
+  if (!match) return null;
+  return { type: match[1], body: match[2] };
+}
+
+/** Extract app name from [CONTEXT:App] prefix. Returns null if not a match. */
+export function parseContextPrefix(content: string): { app: string; body: string } | null {
+  const match = content.trimStart().match(/^\[CONTEXT:(\w+)\]\s*([\s\S]*)/);
+  if (!match) return null;
+  return { app: match[1], body: match[2] };
+}
+
+/** Check if content is a [CONTEXT:App] message. */
+export function isContextMessage(content: string): boolean {
+  return content.trimStart().startsWith('[CONTEXT:');
+}
+
+/** Check if content is a [CAPTURE:TYPE] message. */
+export function isCaptureMessage(content: string): boolean {
+  return content.trimStart().startsWith('[CAPTURE:');
+}
+
+// =============================================================================
 // SPECIALIST NOTIFICATION PARSING
 // =============================================================================
 
@@ -68,42 +119,64 @@ export interface SpecialistNotification {
 /**
  * Parse specialist completion/failure notifications.
  *
- * Handles two formats:
- * 1. Specialist loop: "Specialist complete - builder (0212-1607-builder-83d0349e)"
- * 2. Background done: "Builder 0212-160 complete"
+ * Handles formats:
+ * 1. New: "[SYSTEM:SPECIALIST] complete - builder (0212-1607-builder-83d0349e)"
+ * 2. Legacy loop: "Specialist complete - builder (0212-1607-builder-83d0349e)"
+ * 3. Legacy bg: "[CLAUDE OS SYS: NOTIFICATION]: Builder 0212-160 complete"
+ * 4. New bg via send_system_message: "[SYSTEM:NOTIFY] Builder 0212-160 complete"
  */
 export function parseSpecialistNotification(content: string): SpecialistNotification | null {
-  // Pattern 1: "Specialist complete/FAILED - role (conversation-id)"
-  const loopMatch = content.match(/Specialist (complete|FAILED) - ([\w-]+) \(([^)]+)\)/);
-  if (loopMatch) {
-    const passed = loopMatch[1] === 'complete';
-    const role = loopMatch[2];
-    const sessionId = loopMatch[3];
-
-    // Body is after the first double-newline
+  // Pattern 1 (new): "[SYSTEM:SPECIALIST] complete/FAILED - role (conversation-id)"
+  const newMatch = content.match(/\[SYSTEM:SPECIALIST\] (complete|FAILED) - ([\w-]+) \(([^)]+)\)/);
+  if (newMatch) {
+    const passed = newMatch[1] === 'complete';
+    const role = newMatch[2];
+    const sessionId = newMatch[3];
     const bodyStart = content.indexOf('\n\n');
     let body = bodyStart >= 0 ? content.slice(bodyStart + 2) : '';
-
-    // Extract workspace from end of body
     let workspace: string | undefined;
     const wsMatch = body.match(/\n\nWorkspace:\s*(.+?)\s*$/);
     if (wsMatch) {
       workspace = wsMatch[1];
       body = body.slice(0, wsMatch.index);
     }
-
     return { role, sessionId, passed, summary: body.trim(), workspace };
   }
 
-  // Pattern 2: "{Role} {short_id} complete" (from notify_specialist_complete)
+  // Pattern 2 (legacy loop): "Specialist complete/FAILED - role (conversation-id)"
+  const loopMatch = content.match(/Specialist (complete|FAILED) - ([\w-]+) \(([^)]+)\)/);
+  if (loopMatch) {
+    const passed = loopMatch[1] === 'complete';
+    const role = loopMatch[2];
+    const sessionId = loopMatch[3];
+    const bodyStart = content.indexOf('\n\n');
+    let body = bodyStart >= 0 ? content.slice(bodyStart + 2) : '';
+    let workspace: string | undefined;
+    const wsMatch = body.match(/\n\nWorkspace:\s*(.+?)\s*$/);
+    if (wsMatch) {
+      workspace = wsMatch[1];
+      body = body.slice(0, wsMatch.index);
+    }
+    return { role, sessionId, passed, summary: body.trim(), workspace };
+  }
+
+  // Pattern 3 (legacy bg): "[CLAUDE OS SYS: NOTIFICATION]: Role shortId complete"
   const bgMatch = content.match(/\[CLAUDE OS SYS: NOTIFICATION\]:\s*(\w+) ([a-f0-9]{8}) complete/);
   if (bgMatch) {
     const role = bgMatch[1].toLowerCase();
     const sessionId = bgMatch[2];
-
     const bodyStart = content.indexOf('\n\n');
     const summary = bodyStart >= 0 ? content.slice(bodyStart + 2).trim() : '';
+    return { role, sessionId, passed: true, summary };
+  }
 
+  // Pattern 4 (new bg): "[SYSTEM:NOTIFY] Role shortId complete"
+  const newBgMatch = content.match(/\[SYSTEM:NOTIFY\]\s*(\w+) ([a-f0-9]{8}) complete/);
+  if (newBgMatch) {
+    const role = newBgMatch[1].toLowerCase();
+    const sessionId = newBgMatch[2];
+    const bodyStart = content.indexOf('\n\n');
+    const summary = bodyStart >= 0 ? content.slice(bodyStart + 2).trim() : '';
     return { role, sessionId, passed: true, summary };
   }
 
@@ -112,13 +185,14 @@ export function parseSpecialistNotification(content: string): SpecialistNotifica
 
 /**
  * Check if a system message is a specialist completion notification.
- * Anchored to start of content to avoid false positives.
  */
 export function isSpecialistNotification(content: string): boolean {
   const trimmed = content.trimStart();
-  return trimmed.startsWith('Specialist complete') ||
+  return trimmed.startsWith('[SYSTEM:SPECIALIST]') ||
+    trimmed.startsWith('Specialist complete') ||
     trimmed.startsWith('Specialist FAILED') ||
-    /^\[CLAUDE OS SYS: NOTIFICATION\]:\s*\w+ [a-f0-9]{8} complete/.test(trimmed);
+    /^\[CLAUDE OS SYS: NOTIFICATION\]:\s*\w+ [a-f0-9]{8} complete/.test(trimmed) ||
+    /^\[SYSTEM:NOTIFY\]\s*\w+ [a-f0-9]{8} complete/.test(trimmed);
 }
 
 // =============================================================================
@@ -133,10 +207,19 @@ export interface SpecialistReply {
 
 /**
  * Parse "Reply from {role} ({id}): {message}" notifications.
- * These always follow a [CLAUDE OS SYS:] prefix.
+ * Handles both new [SYSTEM:NOTIFY] and legacy [CLAUDE OS SYS:] prefix.
  */
 export function parseSpecialistReply(content: string): SpecialistReply | null {
-  // Match Reply from after [CLAUDE OS SYS: ...]: prefix
+  // New format: [SYSTEM:NOTIFY] Reply from role (id): message
+  const newMatch = content.match(/\[SYSTEM:NOTIFY\]\s*Reply from (\w[\w-]*) \(([^)]+)\):\s*([\s\S]+)/);
+  if (newMatch) {
+    return {
+      role: newMatch[1].toLowerCase(),
+      sessionId: newMatch[2],
+      message: newMatch[3].trim(),
+    };
+  }
+  // Legacy format: [CLAUDE OS SYS: ...]: Reply from role (id): message
   const match = content.match(/\[CLAUDE OS SYS:[^\]]*\]:\s*Reply from (\w[\w-]*) \(([^)]+)\):\s*([\s\S]+)/);
   if (!match) return null;
   return {
@@ -148,11 +231,11 @@ export function parseSpecialistReply(content: string): SpecialistReply | null {
 
 /**
  * Check if a system message is a specialist reply.
- * Anchored to start of content to avoid false positives.
  */
 export function isSpecialistReply(content: string): boolean {
   const trimmed = content.trimStart();
-  return trimmed.startsWith('[CLAUDE OS SYS:') && trimmed.includes('Reply from ');
+  return (trimmed.startsWith('[SYSTEM:NOTIFY]') && trimmed.includes('Reply from ')) ||
+    (trimmed.startsWith('[CLAUDE OS SYS:') && trimmed.includes('Reply from '));
 }
 
 // =============================================================================
@@ -167,17 +250,28 @@ export interface TeamMessage {
 
 /**
  * Check if a system message is a direct team message.
- * Format: [TEAM → Target] from Source: message
+ * New: [SYSTEM:TEAM] from Source (conv_id) → Target: message
+ * Legacy: [TEAM → Target] from Source: message
  */
 export function isTeamMessage(content: string): boolean {
-  return content.trimStart().startsWith('[TEAM \u2192');
+  const trimmed = content.trimStart();
+  return trimmed.startsWith('[SYSTEM:TEAM]') || trimmed.startsWith('[TEAM \u2192');
 }
 
 /**
  * Parse a team message into structured parts.
- * Format: [TEAM → Target] from Source: message
  */
 export function parseTeamMessage(content: string): TeamMessage | null {
+  // New format: [SYSTEM:TEAM] from Source (conv_id) → Target: message
+  const newMatch = content.match(/\[SYSTEM:TEAM\] from ([\w-]+) \([^)]*\) \u2192 ([\w-]+):\s*([\s\S]+)/);
+  if (newMatch) {
+    return {
+      sourceRole: newMatch[1].toLowerCase(),
+      targetRole: newMatch[2].toLowerCase(),
+      message: newMatch[3].trim(),
+    };
+  }
+  // Legacy format: [TEAM → Target] from Source: message
   const match = content.match(/\[TEAM \u2192 ([\w-]+)\] from ([\w-]+):\s*([\s\S]+)/);
   if (!match) return null;
   return {
@@ -195,17 +289,28 @@ export interface TeamRequest {
 
 /**
  * Check if a system message is a team spawn request.
- * Format: [TEAM REQUEST: Role wants OtherRole for "purpose"]
+ * New: [SYSTEM:TEAM-REQUEST] Role wants OtherRole for "purpose"
+ * Legacy: [TEAM REQUEST: Role wants OtherRole for "purpose"]
  */
 export function isTeamRequest(content: string): boolean {
-  return content.trimStart().startsWith('[TEAM REQUEST:');
+  const trimmed = content.trimStart();
+  return trimmed.startsWith('[SYSTEM:TEAM-REQUEST]') || trimmed.startsWith('[TEAM REQUEST:');
 }
 
 /**
  * Parse a team spawn request into structured parts.
- * Format: [TEAM REQUEST: Role wants OtherRole for "purpose"]
  */
 export function parseTeamRequest(content: string): TeamRequest | null {
+  // New format: [SYSTEM:TEAM-REQUEST] Role wants OtherRole for "purpose"
+  const newMatch = content.match(/\[SYSTEM:TEAM-REQUEST\]\s*([\w-]+) wants ([\w-]+) for "([^"]+)"/);
+  if (newMatch) {
+    return {
+      requestingRole: newMatch[1].toLowerCase(),
+      requestedRole: newMatch[2].toLowerCase(),
+      purpose: newMatch[3],
+    };
+  }
+  // Legacy format: [TEAM REQUEST: Role wants OtherRole for "purpose"]
   const match = content.match(/\[TEAM REQUEST:\s*([\w-]+) wants ([\w-]+) for "([^"]+)"\]/);
   if (!match) return null;
   return {
@@ -266,155 +371,203 @@ export function parseTaskNotification(content: string): TaskNotification | null 
 // =============================================================================
 
 export interface SystemMessageSummary {
+  /** Lucide icon key (maps to component in renderer) or 'dot' for default */
   icon: string;
   summary: string;
 }
 
 /**
  * Extract a concise summary from system message content.
- * Uses startsWith checks where possible to avoid mid-content false matches.
+ * Icon values are Lucide component keys (e.g., 'clock', 'bell', 'alert-triangle')
+ * that map to actual components via SYSTEM_ICON_MAP in TranscriptViewer.tsx.
  */
 export function summarizeSystemMessage(content: string): SystemMessageSummary {
   const trimmed = content.trimStart();
 
+  // ─── New format: [SYSTEM:TYPE] ───
+  const systemParsed = parseSystemPrefix(trimmed);
+  if (systemParsed) {
+    const { type, body } = systemParsed;
+    const typeIcons: Record<string, string> = {
+      'WAKE': 'clock',
+      'CRON': 'timer',
+      'EVENT': 'calendar',
+      'LATE': 'clock',
+      'FORCE-HANDOFF': 'alert-triangle',
+      'HANDOFF': 'refresh-cw',
+      'NOTIFY': 'bell',
+      'WARNING': 'alert-triangle',
+      'ACTION': 'zap',
+      'INFO': 'info',
+      'TEAM': 'arrow-right',
+      'TEAM-REQUEST': 'user-plus',
+      'SPECIALIST': 'check',
+    };
+    const icon = typeIcons[type] || 'dot';
+
+    // Special handling for specific types
+    if (type === 'WAKE') return { icon, summary: 'Wake' };
+    if (type === 'SPECIALIST') {
+      const parsed = parseSpecialistNotification(trimmed);
+      if (parsed) {
+        const status = parsed.passed ? 'complete' : 'FAILED';
+        return { icon: parsed.passed ? 'check' : 'x-circle', summary: `${parsed.role} ${status}` };
+      }
+    }
+    if (type === 'TEAM') {
+      const parsed = parseTeamMessage(trimmed);
+      if (parsed) return { icon, summary: `${parsed.sourceRole}: ${parsed.message.slice(0, 50)}` };
+    }
+    if (type === 'TEAM-REQUEST') {
+      const parsed = parseTeamRequest(trimmed);
+      if (parsed) return { icon, summary: `${parsed.requestingRole} wants ${parsed.requestedRole}` };
+    }
+    if (type === 'WARNING') {
+      const contextMatch = body.match(/Context at (\d+)%/);
+      if (contextMatch) return { icon: 'alert-triangle', summary: `Context ${contextMatch[1]}%` };
+    }
+    if (type === 'NOTIFY') {
+      const replyMatch = body.match(/Reply from (\w+) \(([^)]+)\):\s*(.+)/);
+      if (replyMatch) return { icon: 'message-circle', summary: `${replyMatch[1]}: ${replyMatch[3].slice(0, 50)}` };
+      if (body.includes('Consider setting a session status')) return { icon: 'info', summary: 'Status reminder' };
+    }
+    if (type === 'INFO') {
+      if (body.includes('Consider setting a session status')) return { icon: 'info', summary: 'Status reminder' };
+      if (body.includes('Session context loaded')) return { icon: 'play', summary: 'Session started' };
+    }
+
+    return { icon, summary: body.split('\n')[0].slice(0, 60) || type };
+  }
+
+  // ─── [CAPTURE:TYPE] ───
+  const captureParsed = parseCapturePrefix(trimmed);
+  if (captureParsed) {
+    const captureIcons: Record<string, string> = { DROP: 'arrow-down', BUG: 'bug', IDEA: 'lightbulb', DUMP: 'zap' };
+    return {
+      icon: captureIcons[captureParsed.type] || 'zap',
+      summary: `${captureParsed.type.toLowerCase()}: ${captureParsed.body.split('\n')[0].slice(0, 50)}`,
+    };
+  }
+
+  // ─── [CONTEXT:App] ───
+  const contextParsed = parseContextPrefix(trimmed);
+  if (contextParsed) {
+    return {
+      icon: 'external-link',
+      summary: `${contextParsed.app}: ${contextParsed.body.split('\n')[0].slice(0, 50)}`,
+    };
+  }
+
+  // ─── Legacy patterns (fallback) ───
+
   // User interrupt
   if (trimmed.startsWith('Request interrupted by user') || trimmed.startsWith('[Request interrupted by user]')) {
-    return { icon: '⎋', summary: 'Interrupted' };
+    return { icon: 'x-circle', summary: 'Interrupted' };
   }
 
-  // Team message (direct communication between sessions)
+  // Legacy team message
   if (trimmed.startsWith('[TEAM \u2192')) {
     const parsed = parseTeamMessage(trimmed);
-    if (parsed) {
-      return { icon: '\u2192', summary: `${parsed.sourceRole}: ${parsed.message.slice(0, 50)}` };
-    }
-    return { icon: '\u2192', summary: 'Team message' };
+    if (parsed) return { icon: 'arrow-right', summary: `${parsed.sourceRole}: ${parsed.message.slice(0, 50)}` };
+    return { icon: 'arrow-right', summary: 'Team message' };
   }
 
-  // Team spawn request
+  // Legacy team spawn request
   if (trimmed.startsWith('[TEAM REQUEST:')) {
     const parsed = parseTeamRequest(trimmed);
-    if (parsed) {
-      return { icon: '\u270B', summary: `${parsed.requestingRole} wants ${parsed.requestedRole}` };
-    }
-    return { icon: '\u270B', summary: 'Spawn request' };
-  }
-
-  // Ping from another session
-  if (trimmed.startsWith('[PING from')) {
-    const sessionMatch = trimmed.match(/\[PING from (\w+)\]/);
-    const sessionId = sessionMatch ? sessionMatch[1].slice(0, 8) : 'session';
-    return { icon: '📍', summary: `Ping: ${sessionId}` };
+    if (parsed) return { icon: 'user-plus', summary: `${parsed.requestingRole} wants ${parsed.requestedRole}` };
+    return { icon: 'user-plus', summary: 'Spawn request' };
   }
 
   // Handoff
   if (trimmed.startsWith('[AUTO-HANDOFF]')) {
     const reasonMatch = content.match(/Reason:\s*(\w+)/);
     const reason = reasonMatch ? reasonMatch[1] : 'handoff';
-    return { icon: '↻', summary: `Handoff: ${reason}` };
+    return { icon: 'refresh-cw', summary: `Handoff: ${reason}` };
   }
 
   // Worker completion
-  if (trimmed.startsWith('Courtesy System Wakeup') || trimmed.startsWith('📬 Task')) {
-    return { icon: '⏰', summary: 'Workers complete' };
+  if (trimmed.startsWith('Courtesy System Wakeup')) {
+    return { icon: 'clock', summary: 'Workers complete' };
   }
 
   // Session start with context
   if (trimmed.startsWith('SessionStart:')) {
-    return { icon: '▶', summary: 'Session started' };
+    return { icon: 'play', summary: 'Session started' };
   }
 
-  // Session mode/role injection — parse for meaningful metadata
-  // Also catches YAML frontmatter (---\nauto_include:) that wraps session-role
+  // Session mode/role injection
   if (trimmed.startsWith('<session-mode>') || trimmed.startsWith('<session-role>') || trimmed.startsWith('---\nauto_include:')) {
-    // Extract role from <session-role> tag content
     const roleMatch = content.match(/# (\w[\w\s-]*)/);
     const roleName = roleMatch ? roleMatch[1].trim() : '';
-
-    // Detect mode from content
     const modeMatch = content.match(/# \w+:\s*(Interactive|Preparation|Implementation|Verification)/i)
       || content.match(/mode[:\s]+(interactive|preparation|implementation|verification)/i);
     const mode = modeMatch ? modeMatch[1] : '';
-
-    // Extract description if present
     const descMatch = content.match(/<session-description>\s*([\s\S]*?)\s*<\/session-description>/);
     const description = descMatch ? descMatch[1].trim().split('\n')[0].slice(0, 80) : '';
-
-    // Build summary
     const parts = [roleName || 'Session'].filter(Boolean);
     if (mode) parts.push(mode.toLowerCase());
-    if (description) parts.push(`— ${description}`);
-
-    return { icon: '▶', summary: parts.join(' ') };
+    if (description) parts.push(`\u2014 ${description}`);
+    return { icon: 'play', summary: parts.join(' ') };
   }
 
   // Task notification (subagent result)
   if (trimmed.startsWith('<task-notification>')) {
     const parsed = parseTaskNotification(trimmed);
     if (parsed) {
-      const statusIcon = parsed.status === 'completed' ? '✓' : '✗';
-      return { icon: '⚡', summary: `${statusIcon} ${parsed.summary.slice(0, 60)}` };
+      const statusMark = parsed.status === 'completed' ? '\u2713' : '\u2717';
+      return { icon: 'zap', summary: `${statusMark} ${parsed.summary.slice(0, 60)}` };
     }
-    return { icon: '⚡', summary: 'Agent result' };
+    return { icon: 'zap', summary: 'Agent result' };
   }
 
   // System reminder
   if (trimmed.startsWith('<system-reminder>')) {
-    return { icon: '📋', summary: 'System reminder' };
+    return { icon: 'info', summary: 'System reminder' };
   }
 
   // Background worker
   if (trimmed.startsWith('Background worker')) {
-    return { icon: '🔄', summary: 'Background worker update' };
+    return { icon: 'refresh-cw', summary: 'Background worker update' };
   }
 
   // Memory Agent (summarizer) prompt
   if (trimmed.startsWith("You're writing a handoff document")) {
-    return { icon: '🧠', summary: 'Memory Agent prompt' };
+    return { icon: 'brain', summary: 'Memory Agent prompt' };
   }
 
   // Skill invocation
   if (trimmed.startsWith('Base directory for this skill:') || trimmed.startsWith('ARGUMENTS:')) {
-    // Try to extract skill name from path like ".../skills/playwright-skill"
     const pathMatch = content.match(/skills\/([^\/\n]+)/);
     const skillName = pathMatch ? pathMatch[1] : 'skill';
-    return { icon: '⚡', summary: `Skill: ${skillName}` };
+    return { icon: 'zap', summary: `Skill: ${skillName}` };
   }
 
-  // [CLAUDE OS SYS:] messages — specialist completions handled separately in TranscriptViewer
+  // Legacy [CLAUDE OS SYS:] messages
   if (trimmed.startsWith('[CLAUDE OS SYS:')) {
-    // Context warnings
     const contextMatch = content.match(/Context at (\d+)%/);
-    if (contextMatch) {
-      return { icon: '⚠', summary: `Context ${contextMatch[1]}%` };
-    }
-
-    // Reply from specialist
+    if (contextMatch) return { icon: 'alert-triangle', summary: `Context ${contextMatch[1]}%` };
     const replyMatch = content.match(/Reply from (\w+) \(([^)]+)\):\s*(.+)/);
-    if (replyMatch) {
-      return { icon: '💬', summary: `${replyMatch[1]}: ${replyMatch[3].slice(0, 50)}` };
-    }
-
-    // Status reminder
-    if (content.includes('Consider setting a session status')) {
-      return { icon: '📋', summary: 'Status reminder' };
-    }
-
-    // Generic SYS category extraction
+    if (replyMatch) return { icon: 'message-circle', summary: `${replyMatch[1]}: ${replyMatch[3].slice(0, 50)}` };
+    if (content.includes('Consider setting a session status')) return { icon: 'info', summary: 'Status reminder' };
     const catMatch = content.match(/\[CLAUDE OS SYS:\s*(\w+)\]:\s*([^\n]+)/);
     if (catMatch) {
       const category = catMatch[1];
       const title = catMatch[2].slice(0, 60);
-      const icons: Record<string, string> = {
-        WARNING: '⚠',
-        NOTIFICATION: '📣',
-        ACTION: '⚡',
-        INFO: 'ℹ',
-      };
-      return { icon: icons[category] || '•', summary: title };
+      const icons: Record<string, string> = { WARNING: 'alert-triangle', NOTIFICATION: 'bell', ACTION: 'zap', INFO: 'info' };
+      return { icon: icons[category] || 'dot', summary: title };
+    }
+  }
+
+  // Legacy specialist complete (no prefix)
+  if (trimmed.startsWith('Specialist complete') || trimmed.startsWith('Specialist FAILED')) {
+    const parsed = parseSpecialistNotification(trimmed);
+    if (parsed) {
+      const status = parsed.passed ? 'complete' : 'FAILED';
+      return { icon: parsed.passed ? 'check' : 'x-circle', summary: `${parsed.role} ${status}` };
     }
   }
 
   // Default
-  return { icon: '•', summary: 'System message' };
+  return { icon: 'dot', summary: 'System message' };
 }

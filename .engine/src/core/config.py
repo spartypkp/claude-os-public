@@ -109,7 +109,7 @@ class Settings:
             "SCHEDULE.md", "HEARTBEAT.md"
         }
         self.claude_system_folders: Set[str] = {
-            "sessions", "working", "prepared", "logs", "conversations"
+            "sessions", "working", "prepared", "logs", "conversations", "scheduled"
         }
 
         # === Rate Limits ===

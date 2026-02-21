@@ -1267,12 +1267,15 @@ class AppleMailAdapter(EmailAdapter):
         if not timestamp:
             return ""
         try:
-            # Apple Mail.app uses Cocoa timestamp (seconds since 2001-01-01 00:00:00 UTC)
-            # Unix timestamp is seconds since 1970-01-01 00:00:00 UTC
-            # Offset: 978307200 seconds (31 years)
+            ts = int(timestamp)
+            # Apple Mail stores timestamps in Cocoa format (seconds since 2001-01-01)
+            # on older macOS, but recent versions use Unix timestamps (since 1970-01-01).
+            # Cocoa timestamps for dates before ~2033 are < 1 billion.
+            # Unix timestamps for dates after ~2001 are > 1 billion.
             COCOA_TO_UNIX_OFFSET = 978307200
-            unix_timestamp = int(timestamp) + COCOA_TO_UNIX_OFFSET
-            return datetime.utcfromtimestamp(unix_timestamp).isoformat()
+            if ts < 1_000_000_000:
+                ts = ts + COCOA_TO_UNIX_OFFSET
+            return datetime.utcfromtimestamp(ts).isoformat()
         except Exception:
             return ""
 
@@ -1610,25 +1613,175 @@ class AppleMailAdapter(EmailAdapter):
             logger.error(f"Failed to create draft: {e}")
             return False
     
+    def _lookup_message_info(self, rowid: str, account_identifier: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Look up subject and sender from a ROWID in the messages table."""
+        conn = self._get_db_connection()
+        if not conn:
+            return None
+        try:
+            cursor = conn.cursor()
+            if account_identifier:
+                cursor.execute(
+                    """
+                    SELECT subj.subject, addr.address
+                    FROM messages m
+                    LEFT JOIN subjects subj ON subj.ROWID = m.subject
+                    LEFT JOIN addresses addr ON addr.ROWID = m.sender
+                    JOIN mailboxes mb ON mb.ROWID = m.mailbox
+                    WHERE m.ROWID = ? AND mb.url LIKE ?
+                    LIMIT 1
+                    """,
+                    (rowid, f"%//{account_identifier}/%"),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT subj.subject, addr.address
+                    FROM messages m
+                    LEFT JOIN subjects subj ON subj.ROWID = m.subject
+                    LEFT JOIN addresses addr ON addr.ROWID = m.sender
+                    WHERE m.ROWID = ?
+                    LIMIT 1
+                    """,
+                    (rowid,),
+                )
+            row = cursor.fetchone()
+            if row:
+                return {"subject": row["subject"] or "", "sender": row["address"] or ""}
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to look up message info for ROWID {rowid}: {e}")
+            return None
+        finally:
+            conn.close()
+
+    def _get_applescript_account_name(self, account_identifier: Optional[str]) -> Optional[str]:
+        """Get the Mail.app account name for AppleScript commands."""
+        if not account_identifier:
+            return None
+
+        cache_key = f"applescript_{account_identifier}"
+        if cache_key in self._account_name_cache:
+            return self._account_name_cache[cache_key]
+
+        try:
+            accounts_db = Path.home() / "Library" / "Accounts" / "Accounts4.sqlite"
+            if accounts_db.exists():
+                aconn = sqlite3.connect(accounts_db)
+                aconn.row_factory = sqlite3.Row
+                cur = aconn.cursor()
+                cur.execute(
+                    "SELECT ZACCOUNTDESCRIPTION FROM ZACCOUNT WHERE ZIDENTIFIER = ?",
+                    (account_identifier,),
+                )
+                arow = cur.fetchone()
+                aconn.close()
+                if arow and arow["ZACCOUNTDESCRIPTION"]:
+                    email_addr = arow["ZACCOUNTDESCRIPTION"]
+                    for discovered in self.discover_accounts():
+                        if discovered.get("email", "").lower() == email_addr.lower():
+                            name = discovered["name"]
+                            self._account_name_cache[cache_key] = name
+                            return name
+        except Exception as e:
+            logger.debug(f"Failed to resolve AppleScript account name: {e}")
+
+        return None
+
+    def _run_message_applescript(self, subject: str, account_name: Optional[str], action_script: str) -> bool:
+        """Run an AppleScript action on a message matched by subject.
+
+        Uses subject matching to find the message in Mail.app, then executes the action.
+        Tries common inbox names (INBOX, Inbox) to handle IMAP vs Exchange naming.
+        """
+        import subprocess
+
+        def escape_applescript(s: str) -> str:
+            if not s:
+                return ""
+            return s.replace('\\', '\\\\').replace('"', '\\"')
+
+        safe_subject = escape_applescript(subject)
+
+        if account_name:
+            safe_name = escape_applescript(account_name)
+            # Try INBOX first (Gmail/IMAP), then Inbox (Exchange)
+            script = f'''tell application "Mail"
+    set targetAccount to first account whose name is "{safe_name}"
+    set inboxNames to {{"INBOX", "Inbox"}}
+    repeat with inboxName in inboxNames
+        try
+            set inboxMailbox to mailbox (inboxName as text) of targetAccount
+            set matchingMsgs to (every message of inboxMailbox whose subject is "{safe_subject}")
+            if (count of matchingMsgs) > 0 then
+                set msg to item 1 of matchingMsgs
+                {action_script}
+                return "ok"
+            end if
+        end try
+    end repeat
+    return "not_found"
+end tell'''
+        else:
+            script = f'''tell application "Mail"
+    set inboxNames to {{"INBOX", "Inbox"}}
+    repeat with acct in accounts
+        repeat with inboxName in inboxNames
+            try
+                set inboxMailbox to mailbox (inboxName as text) of acct
+                set matchingMsgs to (every message of inboxMailbox whose subject is "{safe_subject}")
+                if (count of matchingMsgs) > 0 then
+                    set msg to item 1 of matchingMsgs
+                    {action_script}
+                    return "ok"
+                end if
+            end try
+        end repeat
+    end repeat
+    return "not_found"
+end tell'''
+
+        try:
+            result = subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0 and "ok" in result.stdout.strip():
+                return True
+            elif "not_found" in result.stdout.strip():
+                logger.warning(f"Message not found in Mail.app with subject: {subject[:50]}")
+                return False
+            else:
+                logger.error(f"AppleScript error: {result.stderr[:200]}")
+                return False
+        except subprocess.TimeoutExpired:
+            logger.error("AppleScript timed out")
+            return False
+        except Exception as e:
+            logger.error(f"AppleScript failed: {e}")
+            return False
+
     def mark_read(
         self,
         message_id: str,
         mailbox: str = "INBOX",
         account: Optional[str] = None,
     ) -> bool:
-        """Mark a message as read.
-        
-        Note: Requires message to be identifiable by subject/date.
-        """
-        handler = self._get_mail_handler()
-        if not handler:
+        """Mark a message as read via AppleScript."""
+        if not IS_MACOS:
             return False
-        
-        # pyapple_mcp mark_read expects different parameters
-        # This is a limitation - we can't mark by ID directly
-        logger.warning("Apple Mail mark_read by ID not fully supported")
-        return False
-    
+
+        account_identifier = self._get_account_identifier(account)
+        info = self._lookup_message_info(message_id, account_identifier)
+        if not info or not info["subject"]:
+            logger.warning(f"Could not find message info for ROWID {message_id}")
+            return False
+
+        account_name = self._get_applescript_account_name(account_identifier)
+        return self._run_message_applescript(info["subject"], account_name, 'set read status of msg to true')
+
     def mark_flagged(
         self,
         message_id: str,
@@ -1636,19 +1789,136 @@ class AppleMailAdapter(EmailAdapter):
         mailbox: str = "INBOX",
         account: Optional[str] = None,
     ) -> bool:
-        """Set flagged status."""
-        logger.warning("Apple Mail flag toggle not supported")
-        return False
-    
+        """Set flagged status via AppleScript."""
+        if not IS_MACOS:
+            return False
+
+        account_identifier = self._get_account_identifier(account)
+        info = self._lookup_message_info(message_id, account_identifier)
+        if not info or not info["subject"]:
+            logger.warning(f"Could not find message info for ROWID {message_id}")
+            return False
+
+        account_name = self._get_applescript_account_name(account_identifier)
+        flag_value = "true" if flagged else "false"
+        return self._run_message_applescript(info["subject"], account_name, f'set flagged status of msg to {flag_value}')
+
     def delete(
         self,
         message_id: str,
         mailbox: str = "INBOX",
         account: Optional[str] = None,
     ) -> bool:
-        """Move to trash."""
-        logger.warning("Apple Mail delete not supported via adapter")
-        return False
+        """Move message to trash via AppleScript."""
+        if not IS_MACOS:
+            return False
+
+        account_identifier = self._get_account_identifier(account)
+        info = self._lookup_message_info(message_id, account_identifier)
+        if not info or not info["subject"]:
+            logger.warning(f"Could not find message info for ROWID {message_id}")
+            return False
+
+        account_name = self._get_applescript_account_name(account_identifier)
+        return self._run_message_applescript(info["subject"], account_name, 'delete msg')
+
+    def archive(
+        self,
+        message_id: str,
+        mailbox: str = "INBOX",
+        account: Optional[str] = None,
+    ) -> bool:
+        """Archive a message (move to Archive or [Gmail]/All Mail)."""
+        if not IS_MACOS:
+            return False
+
+        import subprocess
+
+        account_identifier = self._get_account_identifier(account)
+        info = self._lookup_message_info(message_id, account_identifier)
+        if not info or not info["subject"]:
+            logger.warning(f"Could not find message info for ROWID {message_id}")
+            return False
+
+        account_name = self._get_applescript_account_name(account_identifier)
+
+        def escape_applescript(s: str) -> str:
+            if not s:
+                return ""
+            return s.replace('\\', '\\\\').replace('"', '\\"')
+
+        safe_subject = escape_applescript(info["subject"])
+
+        # Determine if Gmail (archive = move to All Mail) or IMAP (archive = move to Archive)
+        is_gmail = False
+        if account_identifier:
+            conn = self._get_db_connection()
+            if conn:
+                is_gmail = self._is_gmail_account(conn, account_identifier)
+                conn.close()
+
+        archive_mailbox = 'All Mail' if is_gmail else 'Archive'
+
+        if account_name:
+            safe_name = escape_applescript(account_name)
+            script = f'''tell application "Mail"
+    set targetAccount to first account whose name is "{safe_name}"
+    set archiveMailbox to mailbox "{archive_mailbox}" of targetAccount
+    set inboxNames to {{"INBOX", "Inbox"}}
+    repeat with inboxName in inboxNames
+        try
+            set inboxMailbox to mailbox (inboxName as text) of targetAccount
+            set matchingMsgs to (every message of inboxMailbox whose subject is "{safe_subject}")
+            if (count of matchingMsgs) > 0 then
+                move item 1 of matchingMsgs to archiveMailbox
+                return "ok"
+            end if
+        end try
+    end repeat
+    return "not_found"
+end tell'''
+        else:
+            script = f'''tell application "Mail"
+    set inboxNames to {{"INBOX", "Inbox"}}
+    repeat with acct in accounts
+        try
+            set archiveMailbox to mailbox "{archive_mailbox}" of acct
+            repeat with inboxName in inboxNames
+                try
+                    set inboxMailbox to mailbox (inboxName as text) of acct
+                    set matchingMsgs to (every message of inboxMailbox whose subject is "{safe_subject}")
+                    if (count of matchingMsgs) > 0 then
+                        move item 1 of matchingMsgs to archiveMailbox
+                        return "ok"
+                    end if
+                end try
+            end repeat
+        end try
+    end repeat
+    return "not_found"
+end tell'''
+
+        try:
+            result = subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0 and "ok" in result.stdout.strip():
+                return True
+            elif "not_found" in result.stdout.strip():
+                logger.warning(f"Message not found for archive: {info['subject'][:50]}")
+                return False
+            else:
+                logger.error(f"AppleScript archive error: {result.stderr[:200]}")
+                return False
+        except subprocess.TimeoutExpired:
+            logger.error("AppleScript timed out during archive")
+            return False
+        except Exception as e:
+            logger.error(f"Archive failed: {e}")
+            return False
     
     def get_unread_count(self, mailbox: str = "INBOX", account: Optional[str] = None) -> int:
         """Get unread message count."""

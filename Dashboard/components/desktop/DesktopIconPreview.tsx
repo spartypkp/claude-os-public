@@ -2,17 +2,21 @@
 
 import { getFileIconSpec } from '@/lib/fileTypes';
 import { FileTreeNode } from '@/lib/types';
-import { FolderOpen } from 'lucide-react';
+import {
+	Briefcase,
+	FolderOpen,
+} from 'lucide-react';
 
 // Lightweight drag preview - no interactions, no transitions
 export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 	const fileIconSpec = getFileIconSpec(node.name);
 	const isClaudeSystemFile = ['TODAY.md', 'MEMORY.md', 'LIFE.md', 'IDENTITY.md'].includes(node.name);
-
+	
 	// Determine icon
+	const isCustomApp = node.name === 'job-search';
 	const isFolder = node.type === 'directory';
-
-	const Icon = isFolder ? FolderOpen : fileIconSpec.icon;
+	
+	const Icon = isCustomApp ? Briefcase : (isFolder ? FolderOpen : fileIconSpec.icon);
 	const iconColor = isClaudeSystemFile ? 'text-[#DA7756]' : (isFolder ? 'text-[#DA7756]' : fileIconSpec.colorClass);
 	
 	// Format name
@@ -28,7 +32,11 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 		<div className="flex flex-col items-center justify-start gap-1 w-[96px] h-[112px] pt-2 pb-1 px-1 rounded-lg bg-[#DA7756]/30 ring-1 ring-[#DA7756] opacity-90 cursor-grabbing">
 			{/* Icon */}
 			<div className="w-16 h-16 flex items-center justify-center">
-				{isFolder ? (
+				{isCustomApp ? (
+					<div className="w-16 h-16 flex items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg shadow-black/30 ring-1 ring-white/20">
+						<Icon className="w-8 h-8 text-white drop-shadow-sm" />
+					</div>
+				) : isFolder ? (
 					<FolderOpen className="w-14 h-14 text-[#DA7756] drop-shadow-lg" fill="currentColor" fillOpacity={0.15} />
 				) : (
 					<Icon className={`w-14 h-14 ${iconColor} drop-shadow-lg`} />

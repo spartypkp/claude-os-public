@@ -376,6 +376,22 @@ class EmailService:
             self._apple_read_identifier(account),
         )
 
+    def archive(
+        self,
+        message_id: str,
+        mailbox_name: str = "INBOX",
+        account_identifier: str = None,
+    ) -> bool:
+        account = self._resolve_read_account(account_identifier)
+        if not account or not self._apple_adapter:
+            return False
+
+        return self._apple_adapter.archive(
+            str(message_id),
+            mailbox_name,
+            self._apple_read_identifier(account),
+        )
+
     # === Send safeguards ===
 
     def send_message(
@@ -435,18 +451,3 @@ class EmailService:
             return []
         return self._send_service.get_send_history(limit=limit)
 
-    # === Settings ===
-
-    def get_settings(self) -> Dict[str, Any]:
-        if not self._storage:
-            return {}
-        rows = self._storage.fetchall("SELECT key, value FROM email_settings")
-        return {row["key"]: row["value"] for row in rows}
-
-    def update_setting(self, key: str, value: Any) -> None:
-        if not self._storage:
-            return
-        self._storage.execute(
-            "INSERT OR REPLACE INTO email_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-            (key, str(value)),
-        )

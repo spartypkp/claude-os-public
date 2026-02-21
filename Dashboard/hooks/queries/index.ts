@@ -12,4 +12,10 @@ export * from './useMissionsQuery';
 export * from './usePrioritiesQuery';
 export * from './useRolesQuery';
 export * from './useConversationsQuery';  // Exports both session and conversation hooks
-
+export * from './useServicesQuery';
+export * from './useCalendarInlineQuery';
+export * from './useEmailBadgeQuery';
+export * from './useClaudeStatusQuery';
+export * from './useConnectionQuery';
+export * from './useUsageQuery';
+export * from './useAnalyticsQuery';

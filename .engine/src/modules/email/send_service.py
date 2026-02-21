@@ -19,7 +19,7 @@ Usage:
 
     # Queue email (sent after delay)
     result = service.queue_email(
-        to=["user@example.com"],
+        to=["will@example.com"],
         subject="Daily Report",
         content="<h2>Report</h2>",
     )
@@ -67,7 +67,7 @@ class EmailSendService:
         self._load_settings()
 
     def _load_settings(self) -> None:
-        """Load safeguard settings from unified settings table."""
+        """Load safeguard settings from unified settings table + service_defaults."""
         try:
             # Load safety settings from unified settings table
             settings = self._storage.fetchall(
@@ -86,6 +86,19 @@ class EmailSendService:
             self.require_new_recipient_confirmation = settings_dict.get(
                 'require_new_recipient_confirmation', 'false'
             ).lower() == 'true'
+
+            # Override with service_defaults if configured (takes precedence)
+            try:
+                from modules.accounts.access import get_access_service
+                access = get_access_service()
+                delay_override = access.get_default('email', 'send_delay_seconds')
+                if delay_override is not None:
+                    self.send_delay_seconds = int(delay_override)
+                rate_override = access.get_default('email', 'rate_limit_per_hour')
+                if rate_override is not None:
+                    self.rate_limit_per_hour = int(rate_override)
+            except (RuntimeError, ImportError):
+                pass  # AccessService not yet initialized during early startup
 
             # Get Claude's account ID from the unified accounts table
             claude_account = self._storage.fetchone(

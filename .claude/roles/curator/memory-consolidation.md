@@ -57,11 +57,11 @@ Read yesterday's `daily.md` and any working files in `chief/` or `conversations/
 **Look for:**
 
 **Decisions made:**
-- Example: "Focus on Juicebox prep this week"
+- Example: "Focus on TargetCo prep this week"
 - Action: Update MEMORY.md → Active Threads
 
 **Patterns observed:**
-- Example: "the user defers prep when stressed" (3rd occurrence)
+- Example: "User defers prep when stressed" (3rd occurrence)
 - Action: Promote to MEMORY.md → Patterns (if validated), or add to Hypotheses (if new)
 
 **Bugs discovered:**
@@ -73,7 +73,7 @@ Read yesterday's `daily.md` and any working files in `chief/` or `conversations/
 - Action: Add to MEMORY.md → Patterns → System Operations
 
 **Context accumulated:**
-- Example: "Abhi helping with Sequoia referrals"
+- Example: "Contact helping with VC referrals"
 - Action: Update MEMORY.md → Active Threads (Job Search)
 
 **Open loops created:**
@@ -137,7 +137,7 @@ Check for contradictions between files:
 - Example: MEMORY says "Usage tracker disabled" but yesterday re-enabled it
 - Action: Update to match reality
 
-**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief/the user.
+**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief.
 
 ---
 
@@ -169,14 +169,14 @@ Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 # Memory Consolidation - Feb 13, 2026
 
 ## Knowledge Extracted
-- Decision: Focus on Juicebox prep this week → Active Threads updated
-- Pattern: the user defers prep when stressed → Promoted to Patterns (3rd validation)
+- Decision: Focus on TargetCo prep this week → Active Threads updated
+- Pattern: User defers prep when stressed → Promoted to Patterns (3rd validation)
 - Bug: reset_day.py idempotency → Added to System Backlog
-- Context: Abhi helping with referrals → Job Search thread updated
+- Context: Contact helping with referrals → Job Search thread updated
 
 ## Memory Updates
-- Active Threads: Updated Juicebox prep, Job Search pipeline
-- Waiting On: Cleared "Abhi feedback" (received)
+- Active Threads: Updated TargetCo prep, Job Search pipeline
+- Waiting On: Cleared "Contact feedback" (received)
 - System Backlog: Added reset_day.py idempotency bug
 - Patterns: Promoted "productive procrastination" (validated 3x)
 - Recent Corrections: Removed >1 week items (3 cleared)
@@ -184,12 +184,12 @@ Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 ## Carried Forward
 - Open loop: Retest public release install
 - Open loop: .env.example update (blocked by hook)
-- Context: 3 days to Juicebox screen (priority)
+- Context: 3 days to TargetCo screen (priority)
 
 ## Contradictions Found
 - None (clean cross-check)
 
-## Questions for Chief/the user
+## Questions for Chief
 - None
 
 ## Summary
@@ -276,7 +276,7 @@ Chief trusts your work. Spot-checks occasionally, but defaults to accepting your
 
 **Yesterday's daily.md timeline:**
 ```
-09:00 [Chief] — the user asked to work on system infrastructure instead of Juicebox prep
+09:00 [Chief] — User asked to work on system infrastructure instead of TargetCo prep
 10:04 [Builder] — Finished localhost consolidation spec
 ```
 

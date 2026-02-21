@@ -223,3 +223,34 @@ def find_contact(storage, identifier: str) -> Optional[Dict[str, Any]]:
         return dict(row)
 
     return None
+
+
+# =============================================================================
+# SSE NOTIFICATION HELPER
+# =============================================================================
+
+def notify_backend_event(event_type: str, data: dict = None):
+    """Notify the backend to emit an SSE event for real-time Dashboard updates.
+
+    Used by MCP tools to trigger frontend refreshes after mutations.
+    """
+    import urllib.request
+    import json as json_module
+
+    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
+    payload = {
+        "event_type": event_type,
+        "session_id": session_id,
+        "data": data or {}
+    }
+
+    try:
+        req = urllib.request.Request(
+            f"{settings.backend_url}/api/sessions/notify-event",
+            data=json_module.dumps(payload).encode('utf-8'),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass  # Best effort - don't fail the tool if notification fails

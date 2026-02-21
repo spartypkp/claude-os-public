@@ -1,4 +1,4 @@
-import { BlockData, CalendarEvent, ClaudeActivityData, Contact, ContactDetail, DashboardData, FileContent, FileTreeNode, LifeTasksResponse, MemoryData, MetricsData, MetricsOverviewData, MetricsPatternsData, MissionsResponse, StageData, SystemConfigData, SystemDocsData, SystemHealth, SystemHealthData, SystemMetricsData } from './types';
+import { CalendarEvent, ClaudeActivityData, Contact, ContactDetail, FileContent, FileTreeNode, LifeTasksResponse, MemoryData, MetricsData, MetricsOverviewData, MetricsPatternsData, MissionsResponse, SystemConfigData, SystemDocsData, SystemHealth, SystemHealthData, SystemMetricsData } from './types';
 import { CLAUDE_SYSTEM_FILES } from './systemFiles';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
@@ -47,7 +47,7 @@ function resolveDateRange(options: FetchCalendarEventsOptions): { from: string; 
 
 /**
  * Fetch calendar events from Apple Calendar.
- * This is the primary API for calendar data - use instead of fetchDashboardData.
+ * Fetch calendar events from Apple Calendar via the backend API.
  */
 export async function fetchCalendarEvents(options: FetchCalendarEventsOptions = {}): Promise<CalendarEventsResponse> {
 	const params = new URLSearchParams();
@@ -75,18 +75,6 @@ export async function fetchCalendarEvents(options: FetchCalendarEventsOptions = 
 		count: Array.isArray(payload) ? events.length : payload.count ?? events.length,
 		from_date: Array.isArray(payload) ? from : payload.from_date ?? from,
 		to_date: Array.isArray(payload) ? to : payload.to_date ?? to,
-	};
-}
-
-// NOTE: fetchDashboardData - DEPRECATED
-// Jan 2026: Removed calendar fetch to prevent spam (was triggering on every SSE event)
-export async function fetchDashboardData(): Promise<DashboardData> {
-	return {
-		timestamp: new Date().toISOString(),
-		schedule: [],
-		attention: [],
-		sessions: { count: 0, active: false },
-		priorities: { critical: [], medium: [], low: [] },
 	};
 }
 
@@ -256,39 +244,6 @@ export async function fetchContact(id: string): Promise<ContactDetail> {
 }
 
 // =========================================
-// IMPROVEMENTS APIs - REMOVED (no backend endpoint)
-// =========================================
-
-// NOTE: fetchImprovements removed - /api/improvements endpoint doesn't exist
-
-// =========================================
-// STAGE APIs - STUB (no backend endpoint)
-// =========================================
-
-// NOTE: /api/stage endpoint doesn't exist - returns empty data for compatibility
-export async function fetchStage(): Promise<StageData> {
-	return { items: [], count: 0 };
-}
-
-export async function dismissStagedItem(id: string): Promise<{ success: boolean; }> {
-	return { success: true };
-}
-
-// =========================================
-// EMAIL APIs - REMOVED (no backend endpoint)
-// =========================================
-
-// NOTE: All email functions removed - /api/emails/* endpoints don't exist
-// Email access is via Apple MCP tool (mcp__apple__mail) only
-
-// =========================================
-// IMESSAGE APIs - REMOVED (no backend endpoint)
-// =========================================
-
-// NOTE: All iMessage functions removed - /api/imessages/* endpoints don't exist
-// iMessage access is via Apple MCP tool (mcp__apple__messages) only
-
-// =========================================
 // PRIORITIES APIs
 // =========================================
 
@@ -442,12 +397,7 @@ export async function fetchLifeTasks(): Promise<LifeTasksResponse> {
 // CLAUDE VIEW APIs (Memory)
 // =========================================
 
-export type { BlockData, MemoryData } from './types';
-
-// NOTE: /api/system/blocks endpoint doesn't exist - returns empty array for compatibility
-export async function fetchBlocks(): Promise<BlockData[]> {
-	return [];
-}
+export type { MemoryData } from './types';
 
 export async function fetchMemory(): Promise<MemoryData> {
 	const res = await fetch(`${API_BASE}/api/system/memory`, { cache: 'no-store' });
@@ -815,3 +765,151 @@ export async function emptyTrash(olderThanDays?: number): Promise<{ deleted_coun
 	return res.json();
 }
 
+// =========================================
+// LEETCODE SPEEDRUN APIs
+// =========================================
+
+export interface SpeedrunProblem {
+	problem_number: number;
+	name: string;
+	difficulty: string;
+	pattern: string;
+	front_text: string;
+	back_text: string;
+	signals?: string;
+}
+
+export interface SpeedrunSessionData {
+	session_id: string;
+	problems: SpeedrunProblem[];
+	mode: string;
+	count: number;
+	attempts: SpeedrunAttempt[];
+	created_at: string;
+}
+
+export interface SpeedrunAttempt {
+	problem_number: number;
+	outcome: 'correct' | 'partial' | 'missed';
+	user_answer: string;
+	canonical_answer: string;
+	response_seconds: number;
+	timestamp: string;
+	explanation: string;
+	next_review: string;
+}
+
+export interface SpeedrunSessionStats {
+	session_id: string;
+	total: number;
+	completed: number;
+	accuracy: number;
+	avg_seconds: number;
+	correct: number;
+	partial: number;
+	missed: number;
+	weak_patterns: { pattern: string; problem_number: number; problem_name: string; }[];
+}
+
+/**
+ * Start a new speedrun session.
+ */
+export async function startSpeedrunSession(
+	mode: 'random' | 'due' | 'weak',
+	count: number,
+	problemDomain: 'leetcode' | 'concurrency' | 'system-design' | 'debugging' = 'leetcode'
+): Promise<SpeedrunSessionData> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/start`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ mode, count, problem_domain: problemDomain }),
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to start session' }));
+		throw new Error(error.detail || 'Failed to start session');
+	}
+	return res.json();
+}
+
+/**
+ * Get session data including problems and attempts.
+ */
+export async function getSpeedrunSession(sessionId: string): Promise<SpeedrunSessionData> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get session' }));
+		throw new Error(error.detail || 'Failed to get session');
+	}
+	return res.json();
+}
+
+/**
+ * Submit an answer for a problem in the session.
+ */
+export async function submitSpeedrunAnswer(
+	sessionId: string,
+	problemNumber: number,
+	userAnswer: string,
+	responseSeconds: number
+): Promise<SpeedrunAttempt> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}/submit`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			problem_number: problemNumber,
+			user_answer: userAnswer,
+			response_seconds: responseSeconds
+		}),
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to submit answer' }));
+		throw new Error(error.detail || 'Failed to submit answer');
+	}
+	return res.json();
+}
+
+/**
+ * Get stats for a session.
+ */
+export async function getSpeedrunSessionStats(sessionId: string): Promise<SpeedrunSessionStats> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/session/${sessionId}/stats`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get session stats' }));
+		throw new Error(error.detail || 'Failed to get session stats');
+	}
+	return res.json();
+}
+
+/**
+ * Get global speedrun statistics.
+ */
+export async function getSpeedrunGlobalStats(): Promise<any> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/stats/global`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get global stats' }));
+		throw new Error(error.detail || 'Failed to get global stats');
+	}
+	return res.json();
+}
+
+/**
+ * Get count of problems due for review.
+ */
+export async function getSpeedrunDueCount(): Promise<{ count: number; }> {
+	const res = await fetch(`${API_BASE}/api/training/speedrun/due`, {
+		cache: 'no-store'
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to get due count' }));
+		throw new Error(error.detail || 'Failed to get due count');
+	}
+	return res.json();
+}

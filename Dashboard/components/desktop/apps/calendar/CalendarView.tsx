@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import 'temporal-polyfill/global';
+import './schedule-x-overrides.css';
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,79 +13,229 @@ import {
   Calendar,
 } from 'lucide-react';
 import { CalendarEvent } from '@/lib/types';
-import { fetchCalendarEvents } from '@/lib/api';
+import { API_BASE } from '@/lib/api';
 import { CalendarSettingsPanel } from './CalendarSettingsPanel';
 
-// Imported components
-import { EventCard } from './components/EventCard';
+// Schedule-X imports
+import { useNextCalendarApp, ScheduleXCalendar } from '@schedule-x/react';
+import {
+  viewWeek,
+  viewDay,
+  viewMonthGrid,
+  toJSDate,
+  type CalendarEvent as SXCalendarEvent,
+} from '@schedule-x/calendar';
+import { createEventsServicePlugin } from '@schedule-x/events-service';
+import { createDragAndDropPlugin } from '@schedule-x/drag-and-drop';
+import { createCalendarControlsPlugin } from '@schedule-x/calendar-controls';
+import { createCurrentTimePlugin } from '@schedule-x/current-time';
+
+// Custom Schedule-X event components
+import { ScheduleXTimeGridEvent } from './components/ScheduleXTimeGridEvent';
+import { ScheduleXDateGridEvent } from './components/ScheduleXDateGridEvent';
+
+// Kept components
 import { EventModal } from './components/EventModal';
 import { EventDetailPanel } from './components/EventDetailPanel';
 import { CalendarSidebar } from './components/CalendarSidebar';
 import { MonthDayDetail } from './components/MonthDayDetail';
-import { TimeGrid, TimeSlot } from './components/TimeGrid';
 
-// Imported utils
+// Kept utils
 import {
   ViewMode,
   ProcessedEvent,
   CalendarInfo,
   DAY_NAMES,
-  FULL_DAY_NAMES,
   MONTH_NAMES,
-  HOURS,
-  HOUR_HEIGHT,
-  START_HOUR,
   getWeekStart,
   getWeekDates,
-  getMonthDays,
   isSameDay,
-  isSameMonth,
-  eventSpansDate,
   formatWeekRange,
-  processEventsForDay,
   getCalendarColor,
   getEventColor,
   parseTags,
-  getDayStart,
-  formatHour,
   formatTime,
 } from './utils/calendarUtils';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5001';
+// Calendars hidden by default (noise calendars)
+const HIDDEN_CALENDARS = new Set([
+  'Found in Natural Language',
+  'Found in Mail',
+  'Facebook Birthdays',
+  'Scheduled Reminders',
+  'Birthdays',
+  'US Holidays',
+  'Siri Suggestions',
+]);
 
-// Claude OS branded colors
-const CLAUDE_CORAL = '#DA7756';
+const CALENDAR_VISIBILITY_KEY = 'claude-os-calendar-visibility';
 
-// Claude badge component
-function ClaudeBadge() {
-  return (
-    <div
-      className="w-5 h-5 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center"
-      title="Claude Calendar"
-    >
-      <svg className="w-3 h-3 text-white" viewBox="0 0 16 16" fill="currentColor">
-        <path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
-      </svg>
-    </div>
-  );
+// Color palette for Schedule-X calendar types
+const SX_CALENDAR_COLORS: Record<string, { main: string; container: string; onContainer: string }> = {
+  blue: { main: '#3b82f6', container: 'rgba(59,130,246,0.2)', onContainer: '#93bbfd' },
+  green: { main: '#10b981', container: 'rgba(16,185,129,0.2)', onContainer: '#6ee7b7' },
+  orange: { main: '#f97316', container: 'rgba(249,115,22,0.2)', onContainer: '#fdba74' },
+  purple: { main: '#8b5cf6', container: 'rgba(139,92,246,0.2)', onContainer: '#c4b5fd' },
+  red: { main: '#ef4444', container: 'rgba(239,68,68,0.2)', onContainer: '#fca5a5' },
+  cyan: { main: '#06b6d4', container: 'rgba(6,182,212,0.2)', onContainer: '#67e8f9' },
+  pink: { main: '#ec4899', container: 'rgba(236,72,153,0.2)', onContainer: '#f9a8d4' },
+  yellow: { main: '#f59e0b', container: 'rgba(245,158,11,0.2)', onContainer: '#fcd34d' },
+  teal: { main: '#14b8a6', container: 'rgba(20,184,166,0.2)', onContainer: '#5eead4' },
+  indigo: { main: '#6366f1', container: 'rgba(99,102,241,0.2)', onContainer: '#a5b4fc' },
+};
+
+// Map CalendarInfo color names to hex colors for custom event rendering
+function getCalendarHexColor(calendarName: string, allCalendarNames: string[]): string {
+  const calColor = getCalendarColor(calendarName, allCalendarNames);
+  const sxColor = SX_CALENDAR_COLORS[calColor.name];
+  return sxColor?.main || '#da7756';
 }
 
-export function CalendarView() {
-  // Mount state to prevent hydration issues
-  const [mounted, setMounted] = useState(false);
+// Convert our CalendarEvent to Schedule-X event format
+function toScheduleXEvent(event: CalendarEvent, allCalendarNames: string[]): SXCalendarEvent {
+  const startDate = new Date(event.start_ts);
+  const endDate = new Date(event.end_ts);
 
-  // State - initialize date-dependent state as null
+  let start: any;
+  let end: any;
+
+  if (event.all_day) {
+    start = Temporal.PlainDate.from({
+      year: startDate.getFullYear(),
+      month: startDate.getMonth() + 1,
+      day: startDate.getDate(),
+    });
+    // For all-day events, end is exclusive in many APIs but inclusive in Schedule-X
+    const endAdj = new Date(endDate);
+    if (endAdj.getHours() === 0 && endAdj.getMinutes() === 0) {
+      endAdj.setDate(endAdj.getDate() - 1);
+    }
+    end = Temporal.PlainDate.from({
+      year: endAdj.getFullYear(),
+      month: endAdj.getMonth() + 1,
+      day: endAdj.getDate(),
+    });
+  } else {
+    const tz = Temporal.Now.timeZoneId();
+    start = Temporal.ZonedDateTime.from({
+      year: startDate.getFullYear(),
+      month: startDate.getMonth() + 1,
+      day: startDate.getDate(),
+      hour: startDate.getHours(),
+      minute: startDate.getMinutes(),
+      second: startDate.getSeconds(),
+      timeZone: tz,
+    });
+    end = Temporal.ZonedDateTime.from({
+      year: endDate.getFullYear(),
+      month: endDate.getMonth() + 1,
+      day: endDate.getDate(),
+      hour: endDate.getHours(),
+      minute: endDate.getMinutes(),
+      second: endDate.getSeconds(),
+      timeZone: tz,
+    });
+  }
+
+  const calColor = getCalendarHexColor(event.calendar_name || '', allCalendarNames);
+  const timeText = !event.all_day
+    ? `${formatTime(startDate)} – ${formatTime(endDate)}`
+    : '';
+
+  return {
+    id: event.id || `${event.summary}-${event.start_ts}`,
+    start,
+    end,
+    title: event.summary,
+    location: event.location || undefined,
+    description: event.description || undefined,
+    calendarId: event.calendar_name || 'default',
+    // Custom fields for our event components
+    _calendarColor: calColor,
+    _timeText: timeText,
+    _originalEvent: event,
+  };
+}
+
+// Convert Schedule-X event back to ProcessedEvent for our detail panels
+function sxEventToProcessed(sxEvent: SXCalendarEvent, allCalendarNames: string[]): ProcessedEvent {
+  const original = sxEvent._originalEvent as CalendarEvent;
+  if (original) {
+    return {
+      ...original,
+      id: String(sxEvent.id),
+      dragId: `${sxEvent.id}-detail`,
+      startDate: new Date(original.start_ts),
+      endDate: new Date(original.end_ts),
+      topOffset: 0,
+      height: 0,
+      width: 100,
+      leftOffset: 0,
+      colorClass: getEventColor(original, allCalendarNames),
+      hasConflict: false,
+      parsedTags: parseTags(original.tags),
+    };
+  }
+  // Fallback if no original event stored
+  const startJs = sxEvent.start instanceof Temporal.ZonedDateTime
+    ? new Date(sxEvent.start.epochMilliseconds)
+    : new Date(sxEvent.start.year, sxEvent.start.month - 1, sxEvent.start.day);
+  const endJs = sxEvent.end instanceof Temporal.ZonedDateTime
+    ? new Date(sxEvent.end.epochMilliseconds)
+    : new Date(sxEvent.end.year, sxEvent.end.month - 1, sxEvent.end.day);
+
+  return {
+    id: String(sxEvent.id),
+    dragId: `${sxEvent.id}-detail`,
+    summary: sxEvent.title || '',
+    start_ts: startJs.toISOString(),
+    end_ts: endJs.toISOString(),
+    location: sxEvent.location || undefined,
+    description: sxEvent.description || undefined,
+    calendar_name: (sxEvent.calendarId as string) || undefined,
+    calendar_id: undefined,
+    all_day: sxEvent.start instanceof Temporal.PlainDate,
+    startDate: startJs,
+    endDate: endJs,
+    topOffset: 0,
+    height: 0,
+    width: 100,
+    leftOffset: 0,
+    colorClass: { bg: 'bg-[var(--color-primary)]/70', border: 'border-[var(--color-primary)]', text: 'text-white' },
+    hasConflict: false,
+    parsedTags: [],
+  } as ProcessedEvent;
+}
+
+// Custom components object — MUST be defined at module scope for stable reference
+const customComponents = {
+  timeGridEvent: ScheduleXTimeGridEvent,
+  dateGridEvent: ScheduleXDateGridEvent,
+  monthGridEvent: ScheduleXDateGridEvent,
+};
+
+// Schedule-X view name to our ViewMode mapping
+const SX_VIEW_MAP: Record<string, ViewMode> = {
+  'week': 'week',
+  'day': 'day',
+  'month-grid': 'month',
+};
+const VIEW_MODE_TO_SX: Record<ViewMode, string> = {
+  'week': 'week',
+  'day': 'day',
+  'month': 'month-grid',
+};
+
+export function CalendarView() {
+  const [mounted, setMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ProcessedEvent | null>(null);
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [today, setToday] = useState<Date | null>(null);
 
-  // New state for features
   const [showSidebar, setShowSidebar] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
@@ -94,44 +247,123 @@ export function CalendarView() {
   const [monthDetailOpen, setMonthDetailOpen] = useState(false);
   const [monthDetailDate, setMonthDetailDate] = useState<Date | null>(null);
 
-  // Mark as mounted and initialize dates (client-side only)
+  // Raw events from API — stored for filtering and sidebar
+  const [rawEvents, setRawEvents] = useState<CalendarEvent[]>([]);
+  const allCalendarNamesRef = useRef<string[]>([]);
+  const calendarsRef = useRef<CalendarInfo[]>([]);
+  const fetchEventsRef = useRef<((start: Date, end: Date) => Promise<void>) | null>(null);
+
+  // Schedule-X plugins — create once
+  const eventsService = useMemo(() => createEventsServicePlugin(), []);
+  const dragAndDrop = useMemo(() => createDragAndDropPlugin(15), []);
+  const calendarControls = useMemo(() => createCalendarControlsPlugin(), []);
+  const currentTimePlugin = useMemo(() => createCurrentTimePlugin(), []);
+
+  // Build Schedule-X calendars config from our CalendarInfo
+  const sxCalendars = useMemo(() => {
+    const result: Record<string, any> = {};
+    calendars.forEach((cal) => {
+      const sxColor = SX_CALENDAR_COLORS[cal.color.name] || SX_CALENDAR_COLORS.blue;
+      result[cal.name] = {
+        colorName: cal.color.name,
+        label: cal.name,
+        darkColors: sxColor,
+        lightColors: sxColor,
+      };
+    });
+    // Default calendar for events without a calendar_name
+    if (!result['default']) {
+      result['default'] = {
+        colorName: 'orange',
+        label: 'Default',
+        darkColors: SX_CALENDAR_COLORS.orange,
+        lightColors: SX_CALENDAR_COLORS.orange,
+      };
+    }
+    return result;
+  }, [calendars]);
+
+  // Create Schedule-X calendar app
+  const calendarApp = useNextCalendarApp({
+    views: [viewWeek, viewDay, viewMonthGrid],
+    defaultView: 'week',
+    selectedDate: Temporal.Now.plainDateISO(),
+    theme: 'shadcn',
+    isDark: false,
+    locale: 'en-US',
+    timezone: Temporal.Now.timeZoneId(),
+    firstDayOfWeek: 1,
+    dayBoundaries: { start: '07:00', end: '23:00' },
+    weekOptions: { gridHeight: 1600 },
+    calendars: sxCalendars,
+    callbacks: {
+      // Disable Schedule-X's responsive small-calendar breakpoint (forces day view at 690px)
+      // Our calendar lives in a windowed desktop, not full-page — always allow week view
+      isCalendarSmall: () => false,
+      onEventClick(sxEvent, e) {
+        const processed = sxEventToProcessed(sxEvent, allCalendarNamesRef.current);
+        setSelectedEvent(processed);
+      },
+      onClickDateTime(dateTime) {
+        const jsDate = new Date(dateTime.epochMilliseconds);
+        openCreateModal(jsDate, jsDate.getHours());
+      },
+      onClickDate(date) {
+        if (viewMode === 'month') {
+          const jsDate = new Date(date.year, date.month - 1, date.day);
+          setMonthDetailDate(jsDate);
+          setMonthDetailOpen(true);
+        }
+      },
+      onEventUpdate(updatedEvent) {
+        handleDragUpdate(updatedEvent);
+      },
+      onRangeUpdate(range) {
+        // Range changed — fetch new events via ref (avoids stale closure)
+        if (range.start && range.end) {
+          const startDate = range.start instanceof Temporal.ZonedDateTime
+            ? new Date(range.start.epochMilliseconds)
+            : new Date((range.start as any).year, (range.start as any).month - 1, (range.start as any).day);
+          const endDate = range.end instanceof Temporal.ZonedDateTime
+            ? new Date(range.end.epochMilliseconds)
+            : new Date((range.end as any).year, (range.end as any).month - 1, (range.end as any).day);
+          // Add a day buffer to end
+          endDate.setDate(endDate.getDate() + 1);
+          fetchEventsRef.current?.(startDate, endDate);
+        }
+      },
+    },
+  }, [eventsService, dragAndDrop, calendarControls, currentTimePlugin]);
+
+  // Initialize
   useEffect(() => {
     setMounted(true);
     const now = new Date();
     setCurrentDate(now);
-    setCurrentTime(now);
     setToday(now);
   }, []);
 
-  // Update "today" at midnight to keep highlighting accurate
+  // Update today at midnight
   useEffect(() => {
     if (!mounted) return;
-
     const checkDayChange = () => {
       const now = new Date();
       setToday((prev) => {
-        if (!prev) return now;
-        // Check if day has changed
-        if (
-          prev.getDate() !== now.getDate() ||
-          prev.getMonth() !== now.getMonth() ||
-          prev.getFullYear() !== now.getFullYear()
-        ) {
+        if (!prev || prev.getDate() !== now.getDate() ||
+            prev.getMonth() !== now.getMonth() ||
+            prev.getFullYear() !== now.getFullYear()) {
           return now;
         }
         return prev;
       });
     };
-
-    // Check every minute for day change
     const interval = setInterval(checkDayChange, 60000);
     return () => clearInterval(interval);
   }, [mounted]);
 
-  // Auto-switch to day view on mobile screens (only after mount)
+  // Mobile detection
   useEffect(() => {
     if (!mounted) return;
-
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
@@ -145,7 +377,7 @@ export function CalendarView() {
     return () => window.removeEventListener('resize', handleResize);
   }, [mounted, viewMode]);
 
-  // Modal functions (must be defined before keyboard shortcuts that use them)
+  // Modal functions
   const openCreateModal = useCallback((date: Date, hour: number) => {
     setEventModalMode('create');
     setEventModalEvent(null);
@@ -162,350 +394,348 @@ export function CalendarView() {
     setEventModalOpen(true);
   }, []);
 
-  // Keyboard shortcuts
+  // Keep calendarsRef in sync with state
   useEffect(() => {
-    if (!mounted) return;
+    calendarsRef.current = calendars;
+  }, [calendars]);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 't':
-          goToToday();
-          break;
-        case 'd':
-          setViewMode('day');
-          break;
-        case 'w':
-          if (!isMobile) setViewMode('week');
-          break;
-        case 'm':
-          setViewMode('month');
-          break;
-        case 'c':
-          // Open create modal for current date
-          if (currentDate) {
-            openCreateModal(currentDate, 9);
-          }
-          break;
-        case 'arrowleft':
-          goToPrevious();
-          break;
-        case 'arrowright':
-          goToNext();
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mounted, isMobile, currentDate, openCreateModal]);
-
-  // Computed values - guard against null currentDate
-  const weekStart = useMemo(
-    () => (currentDate ? getWeekStart(currentDate) : new Date()),
-    [currentDate]
-  );
-  const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
-  const monthDays = useMemo(
-    () => (currentDate ? getMonthDays(currentDate) : []),
-    [currentDate]
-  );
-
-  const loadCalendars = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/calendar/calendars`, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error('Failed to load calendars');
-      }
-      const payload = await response.json();
-      const rawCalendars = Array.isArray(payload) ? payload : payload.calendars || [];
-      const calendarNames = rawCalendars.map((cal: any) => cal.name);
-
-      setCalendars((prev) => {
-        const existingVisibility = new Map(prev.map((cal) => [cal.id, cal.visible]));
-        return rawCalendars.map((cal: any) => ({
-          id: cal.id,
-          name: cal.name,
-          color: getCalendarColor(cal.name, calendarNames),
-          provider: cal.provider || 'apple',
-          writable: Boolean(cal.writable),
-          primary: Boolean(cal.primary),
-          visible: existingVisibility.get(cal.id) ?? true,
-        }));
-      });
-    } catch (err) {
-      console.error('Error loading calendars:', err);
-    }
-  }, []);
-
-  // Fetch calendar data
-  const loadData = useCallback(async () => {
-    if (!currentDate) return;
-
+  // Fetch events from API and push to Schedule-X
+  // Uses calendarsRef to avoid recreating on every calendars state change
+  const fetchAndSetEvents = useCallback(async (rangeStart: Date, rangeEnd: Date) => {
     try {
       setLoading(true);
-
-      let rangeStart = new Date(currentDate);
-      let rangeEnd = new Date(currentDate);
-
-      if (viewMode === 'week') {
-        rangeStart = getWeekStart(currentDate);
-        rangeEnd = new Date(rangeStart);
-        rangeEnd.setDate(rangeEnd.getDate() + 7);
-      } else if (viewMode === 'month') {
-        const monthGrid = getMonthDays(currentDate);
-        rangeStart = new Date(monthGrid[0]);
-        rangeEnd = new Date(monthGrid[monthGrid.length - 1]);
-        rangeEnd.setDate(rangeEnd.getDate() + 1);
-      } else {
-        rangeStart = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate()
-        );
-        rangeEnd = new Date(rangeStart);
-        rangeEnd.setDate(rangeEnd.getDate() + 1);
-      }
-
-      const data = await fetchCalendarEvents({
-        fromDate: rangeStart.toISOString(),
-        toDate: rangeEnd.toISOString(),
-        usePreferred: false,
-        limit: 500,
+      const params = new URLSearchParams({
+        from_date: rangeStart.toISOString(),
+        to_date: rangeEnd.toISOString(),
+        limit: '500',
       });
-
-      setEvents(data.events || []);
+      const response = await fetch(`${API_BASE}/api/calendar/events?${params}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load events');
+      const data = await response.json();
+      const events: CalendarEvent[] = data.events || [];
+      setRawEvents(events);
       setError(null);
+
+      // Filter by visible calendars and convert to Schedule-X format
+      const cals = calendarsRef.current;
+      const visibleCalIds = new Set(cals.filter((c) => c.visible).map((c) => c.id));
+      const visibleCalNames = new Set(cals.filter((c) => c.visible).map((c) => c.name));
+      const filtered = cals.length === 0
+        ? events
+        : events.filter((e) => {
+            if (e.calendar_id) return visibleCalIds.has(e.calendar_id);
+            if (e.calendar_name) return visibleCalNames.has(e.calendar_name);
+            return true;
+          });
+
+      const sxEvents = filtered.map((e) => toScheduleXEvent(e, allCalendarNamesRef.current));
+      eventsService.set(sxEvents);
     } catch (err) {
       console.error('Error loading calendar:', err);
       setError('Failed to load calendar events');
     } finally {
       setLoading(false);
     }
-  }, [currentDate, viewMode]);
+  }, [eventsService]);
 
-  // Initial load + visibility-based refresh + polling
+  // Keep ref in sync so Schedule-X callbacks always call the latest version
+  useEffect(() => {
+    fetchEventsRef.current = fetchAndSetEvents;
+  }, [fetchAndSetEvents]);
+
+  // Load calendars
+  const loadCalendars = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/calendar/calendars`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load calendars');
+      const payload = await response.json();
+      const rawCalendars = Array.isArray(payload) ? payload : payload.calendars || [];
+      const calendarNames = rawCalendars.map((cal: any) => cal.name);
+      allCalendarNamesRef.current = calendarNames;
+
+      let savedVisibility: Record<string, boolean> = {};
+      try {
+        const stored = localStorage.getItem(CALENDAR_VISIBILITY_KEY);
+        if (stored) savedVisibility = JSON.parse(stored);
+      } catch {}
+
+      setCalendars((prev) => {
+        const existingVisibility = new Map(prev.map((cal) => [cal.id, cal.visible]));
+        return rawCalendars.map((cal: any) => {
+          const defaultVisible = !HIDDEN_CALENDARS.has(cal.name);
+          const visible = existingVisibility.get(cal.id)
+            ?? savedVisibility[cal.id]
+            ?? defaultVisible;
+          return {
+            id: cal.id,
+            name: cal.name,
+            color: getCalendarColor(cal.name, calendarNames),
+            provider: cal.provider || 'apple',
+            writable: Boolean(cal.writable),
+            primary: Boolean(cal.primary),
+            visible,
+          };
+        });
+      });
+    } catch (err) {
+      console.error('Error loading calendars:', err);
+    }
+  }, []);
+
+  // Helper to get current range dates from calendarControls
+  const getRangeDates = useCallback((): { start: Date; end: Date } | null => {
+    const range = calendarControls.getRange?.();
+    if (!range?.start || !range?.end) return null;
+    const s = range.start instanceof Temporal.ZonedDateTime
+      ? new Date(range.start.epochMilliseconds)
+      : new Date((range.start as any).year, (range.start as any).month - 1, (range.start as any).day);
+    const e = range.end instanceof Temporal.ZonedDateTime
+      ? new Date(range.end.epochMilliseconds)
+      : new Date((range.end as any).year, (range.end as any).month - 1, (range.end as any).day);
+    e.setDate(e.getDate() + 1);
+    return { start: s, end: e };
+  }, [calendarControls]);
+
+  // Initial load — runs once on mount
   useEffect(() => {
     if (!mounted) return;
-
-    // Refresh when tab becomes visible (instant feedback when switching back)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        loadData();
-      }
-    };
-
-    // Initial load
-    loadData();
-    loadCalendars();
+    loadCalendars().then(() => {
+      // Explicit initial fetch — onRangeUpdate may have fired before fetchEventsRef was ready
+      setTimeout(() => {
+        const dates = getRangeDates();
+        if (dates) fetchEventsRef.current?.(dates.start, dates.end);
+      }, 100);
+    });
 
     // Visibility-based refresh
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const dates = getRangeDates();
+        if (dates) fetchEventsRef.current?.(dates.start, dates.end);
+      }
+    };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Background polling every 60 seconds (catches changes while tab is active)
-    const interval = setInterval(loadData, 60000);
+    // Background polling every 60s
+    const interval = setInterval(() => {
+      const dates = getRangeDates();
+      if (dates) fetchEventsRef.current?.(dates.start, dates.end);
+    }, 60000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
     };
-  }, [mounted, loadData, loadCalendars]);
+  }, [mounted, loadCalendars, getRangeDates]);
 
-  // Update current time every minute (only after mount)
+  // Re-filter events when calendar visibility changes
   useEffect(() => {
-    if (!mounted) return;
-    const interval = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(interval);
-  }, [mounted]);
+    if (!mounted || rawEvents.length === 0) return;
+    const visibleCalIds = new Set(calendars.filter((c) => c.visible).map((c) => c.id));
+    const visibleCalNames = new Set(calendars.filter((c) => c.visible).map((c) => c.name));
+    const filtered = calendars.length === 0
+      ? rawEvents
+      : rawEvents.filter((e) => {
+          if (e.calendar_id) return visibleCalIds.has(e.calendar_id);
+          if (e.calendar_name) return visibleCalNames.has(e.calendar_name);
+          return true;
+        });
+    const sxEvents = filtered.map((e) => toScheduleXEvent(e, allCalendarNamesRef.current));
+    eventsService.set(sxEvents);
+  }, [mounted, rawEvents, calendars, eventsService]);
 
-  // Navigation handlers
-  const goToToday = useCallback(() => {
-    setCurrentDate(new Date());
+  // Handle drag-and-drop update
+  const handleDragUpdate = useCallback(async (updatedEvent: SXCalendarEvent) => {
+    const original = updatedEvent._originalEvent as CalendarEvent;
+    if (!original) return;
+
+    const newStart = updatedEvent.start instanceof Temporal.ZonedDateTime
+      ? new Date(updatedEvent.start.epochMilliseconds)
+      : new Date((updatedEvent.start as any).year, (updatedEvent.start as any).month - 1, (updatedEvent.start as any).day);
+    const newEnd = updatedEvent.end instanceof Temporal.ZonedDateTime
+      ? new Date(updatedEvent.end.epochMilliseconds)
+      : new Date((updatedEvent.end as any).year, (updatedEvent.end as any).month - 1, (updatedEvent.end as any).day);
+
+    try {
+      const query = original.calendar_id
+        ? `?calendar_id=${encodeURIComponent(original.calendar_id)}`
+        : '';
+      const response = await fetch(`${API_BASE}/api/calendar/events/${original.id}${query}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: original.summary,
+          start_ts: newStart.toISOString(),
+          end_ts: newEnd.toISOString(),
+          all_day: original.all_day,
+          location: original.location,
+        }),
+      });
+      if (!response.ok) {
+        console.error('Failed to update event via drag');
+      }
+    } catch (err) {
+      console.error('Error updating event:', err);
+    }
   }, []);
 
-  const goToPrevious = useCallback(() => {
-    if (!currentDate) return;
-    const newDate = new Date(currentDate);
-    if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() - 7);
-    } else if (viewMode === 'month') {
-      newDate.setMonth(newDate.getMonth() - 1);
-    } else {
-      newDate.setDate(newDate.getDate() - 1);
-    }
-    setCurrentDate(newDate);
-  }, [currentDate, viewMode]);
+  // Persist calendar visibility
+  const persistVisibility = useCallback((cals: CalendarInfo[]) => {
+    try {
+      const map: Record<string, boolean> = {};
+      cals.forEach((c) => { map[c.id] = c.visible; });
+      localStorage.setItem(CALENDAR_VISIBILITY_KEY, JSON.stringify(map));
+    } catch {}
+  }, []);
 
-  const goToNext = useCallback(() => {
-    if (!currentDate) return;
-    const newDate = new Date(currentDate);
-    if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() + 7);
-    } else if (viewMode === 'month') {
-      newDate.setMonth(newDate.getMonth() + 1);
-    } else {
-      newDate.setDate(newDate.getDate() + 1);
-    }
-    setCurrentDate(newDate);
-  }, [currentDate, viewMode]);
-
-  // Toggle calendar visibility
   const toggleCalendar = useCallback((calendarId: string) => {
-    setCalendars((prev) =>
-      prev.map((c) => (c.id === calendarId ? { ...c, visible: !c.visible } : c))
-    );
-  }, []);
+    setCalendars((prev) => {
+      const next = prev.map((c) => (c.id === calendarId ? { ...c, visible: !c.visible } : c));
+      persistVisibility(next);
+      return next;
+    });
+  }, [persistVisibility]);
 
   const setCalendarsVisibility = useCallback((visible: boolean) => {
-    setCalendars((prev) => prev.map((c) => ({ ...c, visible })));
-  }, []);
+    setCalendars((prev) => {
+      const next = prev.map((c) => ({ ...c, visible }));
+      persistVisibility(next);
+      return next;
+    });
+  }, [persistVisibility]);
 
-  // Filter events by visible calendars
+  // Visible events for sidebar and detail panels
   const visibleEvents = useMemo(() => {
     const visibleCalIds = new Set(calendars.filter((c) => c.visible).map((c) => c.id));
     const visibleCalNames = new Set(calendars.filter((c) => c.visible).map((c) => c.name));
-    // If no calendars tracked yet, show all
-    if (visibleCalIds.size === 0 && calendars.length === 0) return events;
-    return events.filter((e) => {
+    if (visibleCalIds.size === 0 && calendars.length === 0) return rawEvents;
+    return rawEvents.filter((e) => {
       if (e.calendar_id) return visibleCalIds.has(e.calendar_id);
       if (e.calendar_name) return visibleCalNames.has(e.calendar_name);
       return true;
     });
-  }, [events, calendars]);
+  }, [rawEvents, calendars]);
 
-  // Get all calendar names for consistent color assignment
   const allCalendarNames = useMemo(() => calendars.map((c) => c.name), [calendars]);
 
-  // Separate all-day events from timed events
-  const { allDayEvents, timedEvents } = useMemo(() => {
-    const allDay: CalendarEvent[] = [];
-    const timed: CalendarEvent[] = [];
-
-    visibleEvents.forEach((event) => {
-      if (event.all_day) {
-        allDay.push(event);
-      } else {
-        timed.push(event);
-      }
+  // Navigation — use calendarControls plugin
+  const goToToday = useCallback(() => {
+    const now = new Date();
+    setCurrentDate(now);
+    const tp = Temporal.PlainDate.from({
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
     });
+    calendarControls.setDate(tp);
+  }, [calendarControls]);
 
-    return { allDayEvents: allDay, timedEvents: timed };
-  }, [visibleEvents]);
-
-  const weekAllDayPlacements = useMemo(() => {
-    if (viewMode !== 'week' || !currentDate) {
-      return { placements: [], rows: 0 };
-    }
-
-    const weekStartDate = getWeekStart(currentDate);
-    const weekStartDay = getDayStart(weekStartDate);
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    const blocks = allDayEvents
-      .map((event) => {
-        const startDate = getDayStart(new Date(event.start_ts));
-        const endDate = getDayStart(new Date(event.end_ts));
-        if (event.all_day && endDate > startDate) {
-          endDate.setDate(endDate.getDate() - 1);
-        }
-
-        let startIndex = Math.floor((startDate.getTime() - weekStartDay.getTime()) / dayMs);
-        let endIndex = Math.floor((endDate.getTime() - weekStartDay.getTime()) / dayMs);
-
-        if (endIndex < 0 || startIndex > 6) {
-          return null;
-        }
-
-        startIndex = Math.max(0, startIndex);
-        endIndex = Math.min(6, endIndex);
-
-        return {
-          event,
-          startIndex,
-          endIndex,
-          span: endIndex - startIndex + 1,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        if (!a || !b) return 0;
-        if (a.startIndex !== b.startIndex) return a.startIndex - b.startIndex;
-        return b.span - a.span;
-      }) as Array<{ event: CalendarEvent; startIndex: number; endIndex: number; span: number }>;
-
-    const rows: number[] = [];
-    const placements = blocks.map((block) => {
-      let rowIndex = rows.findIndex((lastEnd) => lastEnd < block.startIndex);
-      if (rowIndex === -1) {
-        rowIndex = rows.length;
-        rows.push(block.endIndex);
-      } else {
-        rows[rowIndex] = block.endIndex;
-      }
-      return { ...block, row: rowIndex };
+  const goToPrevious = useCallback(() => {
+    if (!currentDate) return;
+    const newDate = new Date(currentDate);
+    if (viewMode === 'week') newDate.setDate(newDate.getDate() - 7);
+    else if (viewMode === 'month') newDate.setMonth(newDate.getMonth() - 1);
+    else newDate.setDate(newDate.getDate() - 1);
+    setCurrentDate(newDate);
+    const tp = Temporal.PlainDate.from({
+      year: newDate.getFullYear(),
+      month: newDate.getMonth() + 1,
+      day: newDate.getDate(),
     });
+    calendarControls.setDate(tp);
+  }, [currentDate, viewMode, calendarControls]);
 
-    return { placements, rows: rows.length };
-  }, [allDayEvents, currentDate, viewMode]);
+  const goToNext = useCallback(() => {
+    if (!currentDate) return;
+    const newDate = new Date(currentDate);
+    if (viewMode === 'week') newDate.setDate(newDate.getDate() + 7);
+    else if (viewMode === 'month') newDate.setMonth(newDate.getMonth() + 1);
+    else newDate.setDate(newDate.getDate() + 1);
+    setCurrentDate(newDate);
+    const tp = Temporal.PlainDate.from({
+      year: newDate.getFullYear(),
+      month: newDate.getMonth() + 1,
+      day: newDate.getDate(),
+    });
+    calendarControls.setDate(tp);
+  }, [currentDate, viewMode, calendarControls]);
 
-  // Get events for displayed days (use weekStart as fallback if currentDate is null)
-  const displayedDays: Date[] =
-    viewMode === 'week' ? weekDates : currentDate ? [currentDate] : [weekStart];
+  // View switching
+  const handleViewChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    calendarControls.setView(VIEW_MODE_TO_SX[mode]);
+  }, [calendarControls]);
 
-  const handleDeleteEvent = useCallback(
-    async (event: ProcessedEvent) => {
-      if (!confirm('Delete this event?')) return;
-
-      try {
-        const query = event.calendar_id
-          ? `?calendar_id=${encodeURIComponent(event.calendar_id)}`
-          : '';
-        const response = await fetch(`${API_BASE}/api/calendar/events/${event.id}${query}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Failed to delete event');
-        }
-        setSelectedEvent(null);
-        loadData();
-      } catch (err) {
-        console.error('Error deleting event:', err);
-        alert('Failed to delete event. Please try again.');
-      }
-    },
-    [loadData]
-  );
-
-  // Handle click on time slot to create event
-  const handleSlotClick = useCallback(
-    (date: Date, hour: number) => {
-      openCreateModal(date, hour);
-    },
-    [openCreateModal]
-  );
-
-  // Handle date selection from mini calendar
+  // Sidebar date selection
   const handleDateSelect = useCallback((date: Date) => {
     setCurrentDate(date);
-  }, []);
+    const tp = Temporal.PlainDate.from({
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+    });
+    calendarControls.setDate(tp);
+  }, [calendarControls]);
 
-  // Handle click on month day
-  const handleMonthDayClick = useCallback((date: Date) => {
-    setMonthDetailDate(date);
-    setMonthDetailOpen(true);
-  }, []);
+  // Event deletion
+  const handleDeleteEvent = useCallback(async (event: ProcessedEvent) => {
+    if (!confirm('Delete this event?')) return;
+    try {
+      const query = event.calendar_id
+        ? `?calendar_id=${encodeURIComponent(event.calendar_id)}`
+        : '';
+      const response = await fetch(`${API_BASE}/api/calendar/events/${event.id}${query}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete event');
+      setSelectedEvent(null);
+      // Refresh
+      const range = calendarControls.getRange?.();
+      if (range?.start && range?.end) {
+        const s = range.start instanceof Temporal.ZonedDateTime
+          ? new Date(range.start.epochMilliseconds)
+          : new Date((range.start as any).year, (range.start as any).month - 1, (range.start as any).day);
+        const e = range.end instanceof Temporal.ZonedDateTime
+          ? new Date(range.end.epochMilliseconds)
+          : new Date((range.end as any).year, (range.end as any).month - 1, (range.end as any).day);
+        e.setDate(e.getDate() + 1);
+        fetchAndSetEvents(s, e);
+      }
+    } catch (err) {
+      console.error('Error deleting event:', err);
+      alert('Failed to delete event. Please try again.');
+    }
+  }, [calendarControls, fetchAndSetEvents]);
 
-  // Get header text
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!mounted) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key.toLowerCase()) {
+        case 't': goToToday(); break;
+        case 'd': handleViewChange('day'); break;
+        case 'w': if (!isMobile) handleViewChange('week'); break;
+        case 'm': handleViewChange('month'); break;
+        case 'c':
+          if (currentDate) openCreateModal(currentDate, 9);
+          break;
+        case 'arrowleft': goToPrevious(); break;
+        case 'arrowright': goToNext(); break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mounted, isMobile, currentDate, goToToday, goToPrevious, goToNext, handleViewChange, openCreateModal]);
+
+  // Header text
   const getHeaderText = useCallback(() => {
     if (!currentDate) return '';
     if (viewMode === 'month') {
       return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
     } else if (viewMode === 'week') {
-      return formatWeekRange(weekDates);
+      const ws = getWeekStart(currentDate);
+      return formatWeekRange(getWeekDates(ws));
     } else {
       return currentDate.toLocaleDateString('en-US', {
         weekday: 'long',
@@ -514,9 +744,9 @@ export function CalendarView() {
         year: 'numeric',
       });
     }
-  }, [currentDate, viewMode, weekDates]);
+  }, [currentDate, viewMode]);
 
-  // Guard against pre-mount rendering
+  // Guard against pre-mount
   if (!mounted || !currentDate) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -526,7 +756,7 @@ export function CalendarView() {
   }
 
   return (
-    <div className="h-full flex bg-[var(--surface-base)]">
+    <div data-testid="calendar-view" className="h-full flex bg-[var(--surface-base)]">
       {/* Sidebar */}
       {showSidebar && (
         <CalendarSidebar
@@ -541,401 +771,80 @@ export function CalendarView() {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-raised)]">
-        {/* Calendar Controls - Compact toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--surface-base)]">
+        {/* Toolbar */}
+        <div data-testid="calendar-toolbar" className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--surface-base)]">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              {isMobile && (
-                <button
-                  onClick={() => setShowSidebar((prev) => !prev)}
-                  className="btn btn-ghost btn-icon-sm"
-                  title="Toggle sidebar"
-                >
-                  <Menu className="w-4 h-4" />
-                </button>
-              )}
+            {isMobile && (
               <button
-                onClick={goToPrevious}
+                onClick={() => setShowSidebar((prev) => !prev)}
                 className="btn btn-ghost btn-icon-sm"
-                title={`Previous ${viewMode}`}
+                title="Toggle sidebar"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button onClick={goToToday} className="btn btn-ghost btn-sm">
-                Today
-              </button>
-              <button
-                onClick={goToNext}
-                className="btn btn-ghost btn-icon-sm"
-                title={`Next ${viewMode}`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <ClaudeBadge />
-            <span className="text-sm text-[var(--text-secondary)]">{getHeaderText()}</span>
-          </div>
-
-          <div className="flex items-center gap-1">
-            {/* Create button */}
-            <button
-              onClick={() => {
-                if (currentDate) {
-                  openCreateModal(currentDate, 9);
-                }
-              }}
-              className="btn btn-ghost btn-icon-sm mr-2"
-              title="Create event (C)"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-
-            {/* View toggles */}
-            {!isMobile && (
-              <button
-                onClick={() => setViewMode('week')}
-                className={`btn btn-ghost btn-sm ${
-                  viewMode === 'week' ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
-                }`}
-                title="Week view (W)"
-              >
-                Week
+                <Menu className="w-4 h-4" />
               </button>
             )}
-            <button
-              onClick={() => setViewMode('day')}
-              className={`btn btn-ghost btn-sm ${
-                viewMode === 'day' ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
-              }`}
-              title="Day view (D)"
-            >
-              Day
+            <button onClick={goToPrevious} className="p-1 rounded hover:bg-[var(--surface-accent)] transition-colors" title={`Previous ${viewMode}`}>
+              <ChevronLeft className="w-4 h-4 text-[var(--text-secondary)]" />
             </button>
+            <button onClick={goToNext} className="p-1 rounded hover:bg-[var(--surface-accent)] transition-colors" title={`Next ${viewMode}`}>
+              <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
+            </button>
+            <h2 className="text-base font-semibold text-[var(--text-primary)] select-none">{getHeaderText()}</h2>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setViewMode('month')}
-              className={`btn btn-ghost btn-sm ${
-                viewMode === 'month' ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
-              }`}
-              title="Month view (M)"
+              onClick={goToToday}
+              className="px-2.5 py-1 text-xs font-medium border border-[var(--border-subtle)] rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-accent)] transition-colors"
             >
-              Month
+              Today
             </button>
 
-            {/* Settings button */}
+            {/* View segmented control */}
+            <div className="flex rounded-md border border-[var(--border-subtle)] overflow-hidden">
+              {(!isMobile ? ['week', 'day', 'month'] as const : ['day', 'month'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => handleViewChange(mode)}
+                  className={`px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                    viewMode === mode
+                      ? 'bg-[var(--surface-accent)] text-[var(--text-primary)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                  }`}
+                  title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} view (${mode.charAt(0).toUpperCase()})`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => currentDate && openCreateModal(currentDate, 9)}
+              className="p-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors"
+              title="Create event (C)"
+            >
+              <Plus className="w-4 h-4 text-[var(--text-secondary)]" />
+            </button>
+
             <button
               onClick={() => setShowSettings(true)}
-              className="btn btn-ghost btn-icon-sm ml-2"
+              className="p-1.5 rounded-md hover:bg-[var(--surface-accent)] transition-colors"
               title="Calendar Settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 text-[var(--text-muted)]" />
             </button>
           </div>
         </div>
 
-        {/* Month View */}
-        {viewMode === 'month' && (
-          <div className="flex-1 overflow-auto p-4">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 gap-px mb-2">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <div key={day} className="text-xs text-center text-[var(--text-muted)] py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Days grid */}
-            <div className="grid grid-cols-7 gap-px bg-[var(--border-subtle)]">
-              {monthDays.map((date, i) => {
-                const isCurrentMonth = isSameMonth(date, currentDate);
-                const isToday = today ? isSameDay(date, today) : false;
-                const dayEvents = visibleEvents
-                  .filter((e) => eventSpansDate(e, date))
-                  .sort((a, b) => new Date(a.start_ts).getTime() - new Date(b.start_ts).getTime());
-                const multiDayEvents = dayEvents.filter((event) => {
-                  const start = new Date(event.start_ts);
-                  const end = new Date(event.end_ts);
-                  const duration = end.getTime() - start.getTime();
-                  return event.all_day || duration >= 24 * 60 * 60 * 1000;
-                });
-                const timedEventsForDay = dayEvents.filter(
-                  (event) => !multiDayEvents.includes(event)
-                );
-                const multiDayToShow = multiDayEvents.slice(0, 2);
-                const remainingSlots = Math.max(0, 3 - multiDayToShow.length);
-                const timedToShow = timedEventsForDay.slice(0, remainingSlots);
-                const extraCount = dayEvents.length - (multiDayToShow.length + timedToShow.length);
-
-                return (
-                  <button
-                    key={i}
-                    onClick={() => handleMonthDayClick(date)}
-                    className={`
-                      group relative min-h-[100px] p-2 bg-[var(--surface-raised)] text-left
-                      hover:bg-[var(--surface-accent)] transition-colors
-                      ${!isCurrentMonth ? 'opacity-40' : ''}
-                    `}
-                  >
-                    <div className="flex items-start justify-between mb-1">
-                      <div
-                        className={`
-                        text-sm font-medium
-                        ${
-                          isToday
-                            ? 'w-7 h-7 flex items-center justify-center rounded-full bg-[var(--color-primary)] text-white'
-                            : 'text-[var(--text-primary)]'
-                        }
-                      `}
-                      >
-                        {date.getDate()}
-                      </div>
-                      {isCurrentMonth && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCreateModal(date, 9);
-                          }}
-                          className="btn btn-ghost btn-icon-sm opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-                          title="Add event"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Event dots/previews */}
-                    <div className="space-y-0.5">
-                      {multiDayToShow.map((event, idx) => {
-                        const colorClass = getEventColor(event, allCalendarNames);
-                        return (
-                          <div
-                            key={`multi-${idx}`}
-                            className={`text-[10px] truncate px-2 py-0.5 rounded-full ${colorClass.bg} ${colorClass.text}`}
-                            title={event.summary}
-                          >
-                            ↔ {event.summary}
-                          </div>
-                        );
-                      })}
-                      {timedToShow.map((event, idx) => {
-                        const colorClass = getEventColor(event, allCalendarNames);
-                        return (
-                          <div
-                            key={`timed-${idx}`}
-                            className={`text-[10px] truncate px-1 py-0.5 rounded ${colorClass.bg} ${colorClass.text}`}
-                          >
-                            {event.summary}
-                          </div>
-                        );
-                      })}
-                      {extraCount > 0 && (
-                        <div className="text-[10px] text-[var(--text-muted)]">
-                          +{extraCount} more
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Week/Day View */}
-        {viewMode !== 'month' && (
-          <div className="flex-1 overflow-auto">
-            <div className={viewMode === 'week' && !isMobile ? 'min-w-[800px]' : 'min-w-0'}>
-              {/* All-day events section */}
-              {allDayEvents.length > 0 && (
-                <div className="border-b border-[var(--border-subtle)] bg-[var(--surface-raised)]">
-                  {viewMode === 'week' ? (
-                    <div className="grid grid-cols-[60px_repeat(7,1fr)]">
-                      <div className="px-2 py-2 text-xs text-[var(--text-tertiary)]">All day</div>
-                      <div
-                        className="relative col-span-7 px-1 py-1 border-l border-[var(--border-subtle)]"
-                        style={{ minHeight: `${Math.max(1, weekAllDayPlacements.rows) * 24}px` }}
-                      >
-                        {weekAllDayPlacements.placements.map((placement, idx) => {
-                          const colorClass = getEventColor(placement.event, allCalendarNames);
-                          const left = (placement.startIndex / 7) * 100;
-                          const width = (placement.span / 7) * 100;
-                          return (
-                            <button
-                              key={`${placement.event.id}-${idx}`}
-                              onClick={() =>
-                                setSelectedEvent({
-                                  ...placement.event,
-                                  id: placement.event.id,
-                                  dragId: `${placement.event.id}-allday-week-${idx}`,
-                                  startDate: new Date(placement.event.start_ts),
-                                  endDate: new Date(placement.event.end_ts),
-                                  topOffset: 0,
-                                  height: 24,
-                                  width: 100,
-                                  leftOffset: 0,
-                                  colorClass,
-                                  hasConflict: false,
-                                  parsedTags: parseTags(placement.event.tags),
-                                })
-                              }
-                              className={`
-                                absolute rounded text-xs px-2 py-0.5 truncate
-                                ${colorClass.bg} ${colorClass.text}
-                                hover:brightness-110 transition cursor-pointer
-                              `}
-                              style={{
-                                left: `${left}%`,
-                                width: `${width}%`,
-                                top: `${placement.row * 24}px`,
-                              }}
-                              title={placement.event.summary}
-                            >
-                              {placement.event.summary}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="px-4 py-2 space-y-1">
-                      <div className="text-xs text-[var(--text-tertiary)]">All day</div>
-                      {allDayEvents.map((event, idx) => {
-                        const colorClass = getEventColor(event, allCalendarNames);
-                        return (
-                          <button
-                            key={`allday-${idx}`}
-                            onClick={() =>
-                              setSelectedEvent({
-                                ...event,
-                                id: event.id,
-                                dragId: `${event.id}-allday-day-${idx}`,
-                                startDate: new Date(event.start_ts),
-                                endDate: new Date(event.end_ts),
-                                topOffset: 0,
-                                height: 24,
-                                width: 100,
-                                leftOffset: 0,
-                                colorClass,
-                                hasConflict: false,
-                                parsedTags: parseTags(event.tags),
-                              })
-                            }
-                            className={`
-                              w-full rounded text-xs px-2 py-1 text-left truncate
-                              ${colorClass.bg} ${colorClass.text}
-                              hover:brightness-110 transition cursor-pointer
-                            `}
-                            title={event.summary}
-                          >
-                            {event.summary}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Day Headers */}
-              <div
-                className={`grid ${
-                  viewMode === 'week' ? 'grid-cols-[60px_repeat(7,1fr)]' : 'grid-cols-[60px_1fr]'
-                } border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--surface-base)] z-10`}
-              >
-                <div /> {/* Time column spacer */}
-                {displayedDays.map((date, i) => {
-                  const isToday = today ? isSameDay(date, today) : false;
-                  return (
-                    <div
-                      key={i}
-                      className={`
-                        px-2 py-3 text-center border-l border-[var(--border-subtle)]
-                        ${isToday ? 'bg-[var(--color-primary-dim)]' : ''}
-                      `}
-                    >
-                      <div className="text-xs text-[var(--text-muted)] uppercase">
-                        {viewMode === 'week'
-                          ? DAY_NAMES[date.getDay()]
-                          : FULL_DAY_NAMES[date.getDay()]}
-                      </div>
-                      <div
-                        className={`
-                          text-lg font-semibold mt-1
-                          ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--text-primary)]'}
-                        `}
-                      >
-                        {date.getDate()}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Time Grid */}
-              <TimeGrid mode={viewMode === 'week' ? 'week' : 'day'}>
-                {displayedDays.map((date, dayIndex) => {
-                  const isToday = today ? isSameDay(date, today) : false;
-                  const dayEvents = processEventsForDay(
-                    timedEvents,
-                    date,
-                    viewMode,
-                    allCalendarNames
-                  );
-
-                  // Current time indicator position
-                  const currentTimeOffset =
-                    isToday && currentTime
-                      ? (currentTime.getHours() + currentTime.getMinutes() / 60 - START_HOUR) *
-                        HOUR_HEIGHT
-                      : null;
-                  const showCurrentTime =
-                    currentTimeOffset !== null &&
-                    currentTimeOffset >= 0 &&
-                    currentTimeOffset <= HOURS.length * HOUR_HEIGHT;
-
-                  return (
-                    <div
-                      key={dayIndex}
-                      className={`
-                        relative border-l border-[var(--border-subtle)]
-                        ${isToday ? 'bg-[var(--color-primary-glow)]' : ''}
-                      `}
-                      style={{ minHeight: `${HOURS.length * HOUR_HEIGHT}px` }}
-                    >
-                      {/* Hour grid lines (clickable time slots) */}
-                      {HOURS.map((hour) => (
-                        <TimeSlot
-                          key={hour}
-                          hour={hour}
-                          onClick={() => handleSlotClick(date, hour)}
-                        />
-                      ))}
-
-                      {/* Events */}
-                      <div className="absolute inset-0 px-1 pointer-events-none">
-                        <div className="relative h-full pointer-events-auto">
-                          {dayEvents.map((event) => (
-                            <EventCard key={event.dragId} event={event} onSelect={setSelectedEvent} />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Current time indicator */}
-                      {showCurrentTime && (
-                        <div
-                          className="absolute left-0 right-0 h-0.5 bg-[var(--color-error)] z-20 pointer-events-none"
-                          style={{ top: `${currentTimeOffset}px` }}
-                        >
-                          <div className="absolute -left-1.5 -top-1 w-3 h-3 bg-[var(--color-error)] rounded-full" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </TimeGrid>
-            </div>
-          </div>
-        )}
+        {/* Schedule-X Calendar */}
+        <div data-testid="calendar-grid" className="flex-1 overflow-hidden">
+          {calendarApp && (
+            <ScheduleXCalendar
+              calendarApp={calendarApp}
+              customComponents={customComponents}
+            />
+          )}
+        </div>
       </div>
 
       {/* Event Detail Slide-over */}
@@ -960,8 +869,8 @@ export function CalendarView() {
           onEditEvent={openEditModal}
           onDeleteEvent={handleDeleteEvent}
           onOpenDayView={(date) => {
-            setViewMode('day');
-            setCurrentDate(new Date(date));
+            handleViewChange('day');
+            handleDateSelect(date);
             setMonthDetailOpen(false);
           }}
           onCreateEvent={(date, hour) => {
@@ -971,7 +880,7 @@ export function CalendarView() {
         />
       )}
 
-      {/* Create Event Modal */}
+      {/* Create/Edit Event Modal */}
       <EventModal
         isOpen={eventModalOpen}
         mode={eventModalMode}
@@ -982,13 +891,23 @@ export function CalendarView() {
         calendars={calendars}
         onSaved={() => {
           setSelectedEvent(null);
-          loadData();
+          const range = calendarControls.getRange?.();
+          if (range?.start && range?.end) {
+            const s = range.start instanceof Temporal.ZonedDateTime
+              ? new Date(range.start.epochMilliseconds)
+              : new Date((range.start as any).year, (range.start as any).month - 1, (range.start as any).day);
+            const e = range.end instanceof Temporal.ZonedDateTime
+              ? new Date(range.end.epochMilliseconds)
+              : new Date((range.end as any).year, (range.end as any).month - 1, (range.end as any).day);
+            e.setDate(e.getDate() + 1);
+            fetchAndSetEvents(s, e);
+          }
           loadCalendars();
         }}
       />
 
-      {/* Empty state overlay if no events */}
-      {visibleEvents.length === 0 && viewMode !== 'month' && (
+      {/* Empty state */}
+      {visibleEvents.length === 0 && !loading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center bg-[var(--surface-base)]/80 px-8 py-6 rounded-lg">
             <Calendar className="w-12 h-12 mx-auto mb-4 text-[var(--text-muted)]" />
@@ -1004,8 +923,18 @@ export function CalendarView() {
         <CalendarSettingsPanel
           onClose={() => {
             setShowSettings(false);
-            loadData(); // Refresh after settings change
             loadCalendars();
+            const range = calendarControls.getRange?.();
+            if (range?.start && range?.end) {
+              const s = range.start instanceof Temporal.ZonedDateTime
+                ? new Date(range.start.epochMilliseconds)
+                : new Date((range.start as any).year, (range.start as any).month - 1, (range.start as any).day);
+              const e = range.end instanceof Temporal.ZonedDateTime
+                ? new Date(range.end.epochMilliseconds)
+                : new Date((range.end as any).year, (range.end as any).month - 1, (range.end as any).day);
+              e.setDate(e.getDate() + 1);
+              fetchAndSetEvents(s, e);
+            }
           }}
         />
       )}

@@ -8,7 +8,7 @@ import { CalendarView } from './CalendarView';
  */
 export function CalendarWindowContent() {
   return (
-    <div className="h-full overflow-auto bg-white dark:bg-[#1e1e1e]">
+    <div data-testid="calendar-app" className="h-full overflow-auto bg-[var(--surface-base)]">
       <CalendarView />
     </div>
   );

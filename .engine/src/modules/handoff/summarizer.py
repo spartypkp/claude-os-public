@@ -58,7 +58,7 @@ It has section headers with HTML comments explaining what belongs in each sectio
 
 This is NOT just a conversational handoff. Fresh Claude needs to know:
 - What work was being done when reset happened
-- Whether to resume autonomously or wait for the user
+- Whether to resume autonomously or wait for Will
 - What files are relevant to continue the work
 - Concrete next action (not vague "continue seamlessly")
 

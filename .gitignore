@@ -14,16 +14,11 @@ Logs/**/*.pdf
 .DS_Store
 temp-src/
 
-# Build artifacts
-node_modules/
-Dashboard/.next/
-
 # Session/mission execution temp files (never committed)
 .engine/tmp/
 
 # Trash folder (soft-deleted files)
 Workspace/.trash/
-Desktop/.trash/
 
 # Worker execution artifacts (reports stored in DB)
 .engine/data/outputs/
@@ -33,28 +28,25 @@ Desktop/.trash/
 .engine/logs/async/
 
 # Playwright skill temp execution scripts
-.claude/skills/utility-playwright/.temp-execution-*.js
+.claude/skills/playwright-skill/.temp-execution-*.js
 
-# Runtime state (recreated on start)
+# User data (personal, never commit)
+Desktop/IDENTITY.md
+Desktop/MEMORY.md
+Desktop/TODAY.md
 Desktop/logs/
 .engine/data/db/*.db
 .engine/data/db/*.db-wal
 .engine/data/db/*.db-shm
-.engine/state/*.log
-
-# MCP config (contains local paths)
 .mcp.json
+
+# Keep examples
+!Desktop/IDENTITY.md.example
+!Desktop/MEMORY.md.example
+!Desktop/TODAY.md.example
 !.mcp.json.example
 
-Desktop/PUSH-INSTRUCTIONS.md
+# Exceptions - always track these
+!**/Will Diamond - Resume.pdf
 
-# Specialist workspaces (transient)
-Desktop/conversations/
-
-# Desktop templates: IDENTITY.md, MEMORY.md, TODAY.md, SYSTEM-INDEX.md
-# are committed as starter templates. Once you fill them with personal data,
-# add them to your local .gitignore to avoid committing personal information:
-#
-#   echo "Desktop/IDENTITY.md" >> .gitignore
-#   echo "Desktop/MEMORY.md" >> .gitignore
-#   echo "Desktop/TODAY.md" >> .gitignore
+temp-parliament-experiments/node_modules/

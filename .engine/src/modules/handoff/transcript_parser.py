@@ -296,7 +296,7 @@ def _parse_user_event(event: Dict[str, Any], skip: bool) -> str | None:
 
     # Skip very long messages (likely system injections)
     if len(content) > 2000:
-        return f"User: [System injection - {len(content)} chars]"
+        return f"Will: [System injection - {len(content)} chars]"
 
     content = content.strip()
     if not content:
@@ -305,20 +305,30 @@ def _parse_user_event(event: Dict[str, Any], skip: bool) -> str | None:
     # Format special messages distinctly
     if "[Request interrupted by user]" in content:
         return ">>> INTERRUPTED <<<"
-    if "[CLAUDE OS SYS:" in content:
+    if "[CLAUDE OS SYS:" in content or "[SYSTEM:" in content or "[CAPTURE:" in content or "[CONTEXT:" in content:
         # Extract the key part of system messages
         return f">>> SYSTEM: {_extract_system_message_type(content)} <<<"
 
-    return f"User: {content}"
+    return f"Will: {content}"
 
 
 def _extract_system_message_type(content: str) -> str:
     """Extract the type and brief description from system messages."""
-    # Pattern: [CLAUDE OS SYS: TYPE]: Description
+    # New format: [SYSTEM:TYPE] Description
+    match = re.search(r'\[SYSTEM:(\w[\w-]*)\]\s*([^\n]+)', content)
+    if match:
+        msg_type, desc = match.groups()
+        return f"{msg_type} - {desc[:50]}"
+    # Legacy format: [CLAUDE OS SYS: TYPE]: Description
     match = re.search(r'\[CLAUDE OS SYS:\s*(\w+)\]:\s*([^\n]+)', content)
     if match:
         msg_type, desc = match.groups()
         return f"{msg_type} - {desc[:50]}"
+    # Capture/Context formats
+    match = re.search(r'\[(CAPTURE|CONTEXT):(\w+)\]\s*([^\n]+)', content)
+    if match:
+        prefix, msg_type, desc = match.groups()
+        return f"{prefix}:{msg_type} - {desc[:50]}"
     return "unknown"
 
 
@@ -415,6 +425,12 @@ def _summarize_tool_call(name: str, input: Dict[str, Any]) -> str:
         if tool == "timeline":
             desc = input.get("description", "")
             return f"MCP: timeline(\"{desc[:30]}...\")" if desc else "MCP: timeline"
+        if tool == "day":
+            op = input.get("operation", "")
+            desc = input.get("description", "")
+            if op == "log" and desc:
+                return f"MCP: day(log, \"{desc[:30]}...\")"
+            return f"MCP: day({op})" if op else "MCP: day"
         return f"MCP: {tool}"
 
     else:

@@ -59,17 +59,9 @@ interface ChatPanelState {
 
 const DRAFTS_STORAGE_KEY = 'claude-panel-drafts-v2';
 
-interface SessionCache {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  events: any[];
-  lastEventUuid: string | null;
-  loadedAt: number;
-}
-
 interface ChatPanelContextValue extends ChatPanelState {
   // Conversation management
   openConversation: (conversationId: string, role?: string) => void;
-  openSession: (sessionId: string, role?: string) => void;
   setConversation: (conversationId: string | null, role?: string | null) => void;
   closePanel: () => void;
   togglePanel: (conversationId: string, role?: string) => void;
@@ -79,12 +71,6 @@ interface ChatPanelContextValue extends ChatPanelState {
   getDraft: (conversationId: string) => ChatDraft | undefined;
   setDraft: (conversationId: string, draft: ChatDraft) => void;
   clearDraft: (conversationId: string) => void;
-
-  // Session transcript cache
-  getSessionCache: (sessionId: string) => SessionCache | undefined;
-  setSessionCache: (sessionId: string, cache: SessionCache) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  appendToCache: (sessionId: string, event: any) => void;
 }
 
 const ChatPanelContext = createContext<ChatPanelContextValue | null>(null);
@@ -97,7 +83,6 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
   });
 
   const draftCacheRef = useRef<Map<string, ChatDraft>>(new Map());
-  const sessionCacheRef = useRef<Map<string, SessionCache>>(new Map());
 
   // Load drafts from localStorage
   useEffect(() => {
@@ -214,35 +199,9 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
     debouncedPersist();
   }, [debouncedPersist]);
 
-  // Session cache methods
-  const getSessionCache = useCallback((sessionId: string): SessionCache | undefined => {
-    return sessionCacheRef.current.get(sessionId);
-  }, []);
-
-  const setSessionCache = useCallback((sessionId: string, cache: SessionCache) => {
-    sessionCacheRef.current.set(sessionId, cache);
-  }, []);
-
-  const appendToCache = useCallback((sessionId: string, event: unknown) => {
-    const existing = sessionCacheRef.current.get(sessionId);
-    if (existing) {
-      existing.events.push(event);
-    }
-  }, []);
-
-  // openSession is an alias for openConversation
-  const openSession = useCallback((sessionId: string, role?: string) => {
-    setState({
-      isOpen: true,
-      conversationId: sessionId,
-      conversationRole: role || null,
-    });
-  }, []);
-
   const value: ChatPanelContextValue = {
     ...state,
     openConversation,
-    openSession,
     setConversation,
     closePanel,
     togglePanel,
@@ -250,9 +209,6 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
     getDraft,
     setDraft,
     clearDraft,
-    getSessionCache,
-    setSessionCache,
-    appendToCache,
   };
 
   return (

@@ -263,6 +263,41 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
   }, [activeConversations, openConversation, addAttachment]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // INJECT-TO-CONVERSATION EVENT LISTENER (from ChatButton / ConversationPicker)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleInject = async (e: Event) => {
+      const { conversationId: targetId, sessionId, role, message } = (e as CustomEvent<{
+        conversationId: string;
+        sessionId: string;
+        role: string;
+        message: string;
+      }>).detail;
+
+      // Switch to target conversation
+      openConversation(targetId, role);
+
+      // Auto-send the message via keystroke API (no prefill, immediate delivery)
+      if (sessionId) {
+        try {
+          await sendKeystroke(sessionId, message);
+        } catch (err) {
+          console.error('Failed to inject message:', err);
+          // Fallback to prefill if auto-send fails
+          setTimeout(() => {
+            chatInputRef.current?.setValue(message);
+            chatInputRef.current?.focus();
+          }, 100);
+        }
+      }
+    };
+
+    window.addEventListener('inject-to-conversation', handleInject);
+    return () => window.removeEventListener('inject-to-conversation', handleInject);
+  }, [openConversation]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // ANSWER QUESTION EVENT LISTENER (for AskUserQuestion tool)
   // ─────────────────────────────────────────────────────────────────────────
 

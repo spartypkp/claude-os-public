@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from core.config import settings
 from core.storage import SystemStorage
 from adapters.telegram.messaging import get_messaging, MessageType
 from modules.sessions.claude_status import get_session_claude_status
@@ -33,7 +34,7 @@ WARNING_THRESHOLD = 90
 POLL_INTERVAL = 30  # seconds
 
 # Paths
-REPO_ROOT = Path(__file__).resolve().parents[3]  # .engine/src/workers -> repo root
+REPO_ROOT = settings.repo_root
 
 
 class ContextMonitor:
@@ -215,7 +216,7 @@ class ContextMonitor:
             mode_note = "\n\n**AUTONOMOUS MODE:** No human backup. Reset now or risk getting stuck."
 
         return (
-            f"[{_timestamp()}] [CLAUDE OS SYS: WARNING]: Context at {percent}%\n\n"
+            f"[{_timestamp()}] [SYSTEM:WARNING] Context at {percent}%\n\n"
             f"Time to reset. Do cleanup, then call `reset(\"what you accomplished\")`\n\n"
             f"**Before reset:**\n"
             f"- Update specs/working files to reflect what actually happened\n"

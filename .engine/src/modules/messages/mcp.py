@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 
 from fastmcp import FastMCP
 
+from modules.accounts.access import get_access_service
+
 mcp = FastMCP("life-messages")
 
 
@@ -13,21 +15,21 @@ def messages(
     operation: str,
     recipient: Optional[str] = None,
     text: Optional[str] = None,
-    phone_number: Optional[str] = None,
-    email: Optional[str] = None,
     chat_id: Optional[str] = None,
     query: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
     """iMessage operations - read conversations, search, and send messages.
 
+    IMPORTANT: Send operations are restricted by default via tool_tracking hook.
+    Only enabled during explicitly authorized sessions (e.g., testing, specific
+    user directives). Read operations are always available.
+
     Args:
         operation: Operation - 'conversations', 'read', 'unread', 'search', 'send', 'test'
 
         # Read operations
         recipient: Phone number or email to read messages from (for read)
-        phone_number: Alias for recipient (phone number)
-        email: Alias for recipient (email address)
         chat_id: Chat GUID to read messages from (alternative to recipient)
         query: Search query (required for search)
         limit: Max results (default 50)
@@ -45,7 +47,7 @@ def messages(
 
         # Read messages from a contact
         messages("read", recipient="+14155551234", limit=30)
-        messages("read", email="dan@example.com")
+        messages("read", recipient="dan@example.com")
 
         # Get unread messages
         messages("unread")
@@ -54,7 +56,7 @@ def messages(
         messages("search", query="lunch tomorrow")
 
         # Send a message
-        messages("send", recipient="user@example.com", text="Hello from Claude!")
+        messages("send", recipient="danbotmorgan@gmail.com", text="Hello from Claude!")
 
         # Test connection
         messages("test")
@@ -71,15 +73,13 @@ def messages(
         if operation == "conversations":
             return _list_conversations(service, limit)
         elif operation == "read":
-            handle = recipient or phone_number or email
-            return _read_messages(service, handle, chat_id, limit)
+            return _read_messages(service, recipient, chat_id, limit)
         elif operation == "unread":
             return _get_unread(service, limit)
         elif operation == "search":
             return _search_messages(service, query, limit)
         elif operation == "send":
-            handle = recipient or phone_number or email
-            return _send_message(service, handle, text)
+            return _send_message(service, recipient, text)
         elif operation == "test":
             return service.test_connection()
         else:
@@ -105,9 +105,20 @@ def _list_conversations(service, limit: int) -> Dict[str, Any]:
 def _read_messages(service, handle: Optional[str], chat_id: Optional[str], limit: int) -> Dict[str, Any]:
     """Read messages from a conversation."""
     if not handle and not chat_id:
-        return {"success": False, "error": "recipient, phone_number, email, or chat_id required for read"}
+        return {"success": False, "error": "recipient or chat_id required for read"}
 
     messages = service.get_messages(handle_id=handle, chat_id=chat_id, limit=limit)
+
+    # Fire-and-forget contact signal
+    try:
+        from core.mcp_helpers import get_services
+        from modules.contacts.signals import process_message_signals
+        from modules.contacts.standalone import StandaloneContactsRepository
+        repo = StandaloneContactsRepository(get_services().storage)
+        process_message_signals(messages, repo)
+    except Exception:
+        pass  # Never block message operations
+
     return {
         "success": True,
         "count": len(messages),
@@ -118,6 +129,17 @@ def _read_messages(service, handle: Optional[str], chat_id: Optional[str], limit
 def _get_unread(service, limit: int) -> Dict[str, Any]:
     """Get unread messages."""
     messages = service.get_unread(limit=limit)
+
+    # Fire-and-forget contact signal
+    try:
+        from core.mcp_helpers import get_services
+        from modules.contacts.signals import process_message_signals
+        from modules.contacts.standalone import StandaloneContactsRepository
+        repo = StandaloneContactsRepository(get_services().storage)
+        process_message_signals(messages, repo)
+    except Exception:
+        pass  # Never block message operations
+
     return {
         "success": True,
         "count": len(messages),
@@ -141,8 +163,19 @@ def _search_messages(service, query: Optional[str], limit: int) -> Dict[str, Any
 
 def _send_message(service, recipient: Optional[str], text: Optional[str]) -> Dict[str, Any]:
     """Send a message."""
+    # Access tier check — send requires assist or higher
+    try:
+        access = get_access_service()
+        if not access.can_assist('messages'):
+            return {
+                "success": False,
+                "error": "Messages access is set to 'Read' mode. Change to 'Assist' in Settings to enable sending."
+            }
+    except RuntimeError:
+        pass  # AccessService not initialized
+
     if not recipient:
-        return {"success": False, "error": "recipient (phone_number or email) required for send"}
+        return {"success": False, "error": "recipient required for send"}
     if not text:
         return {"success": False, "error": "text required for send"}
 

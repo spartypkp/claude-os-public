@@ -1,4 +1,4 @@
-"""Base renderer for visual content generation."""
+"""Base renderer for visual content generation — dark theme."""
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict
@@ -12,19 +12,28 @@ logger = logging.getLogger(__name__)
 class BaseRenderer(ABC):
     """Abstract base class for content renderers."""
 
-    # Design constants
-    WIDTH = 800  # Image width in pixels (readable on mobile)
-    PADDING = 40  # Padding around content
-    LINE_HEIGHT = 1.5  # Line height multiplier
+    # Layout
+    WIDTH = 900
+    PADDING = 40
+    CARD_PADDING = 16
+    CARD_RADIUS = 12
+    ACCENT_BAR_WIDTH = 4
 
-    # Colors (hex)
-    COLOR_BG = "#FFFFFF"
-    COLOR_TEXT = "#1F2937"  # Dark gray
-    COLOR_TEXT_LIGHT = "#6B7280"  # Medium gray
-    COLOR_ACCENT = "#3B82F6"  # Blue
-    COLOR_CRITICAL = "#EF4444"  # Red
-    COLOR_MEDIUM = "#F59E0B"  # Amber
-    COLOR_LOW = "#10B981"  # Green
+    # Dark palette (Tailwind slate)
+    COLOR_BG = "#0F172A"          # slate-900
+    COLOR_CARD = "#1E293B"        # slate-800
+    COLOR_CARD_BORDER = "#334155" # slate-700
+    COLOR_TEXT = "#F1F5F9"        # slate-100
+    COLOR_TEXT_MUTED = "#94A3B8"  # slate-400
+    COLOR_TEXT_DIM = "#64748B"    # slate-500
+    COLOR_DIVIDER = "#334155"     # slate-700
+
+    # Accent colors (bright on dark)
+    COLOR_ACCENT = "#60A5FA"      # blue-400
+    COLOR_CRITICAL = "#F87171"    # red-400
+    COLOR_MEDIUM = "#FBBF24"      # amber-400
+    COLOR_LOW = "#34D399"         # emerald-400
+    COLOR_PURPLE = "#A78BFA"      # violet-400
 
     def __init__(self):
         """Initialize renderer."""
@@ -34,15 +43,13 @@ class BaseRenderer(ABC):
         """Load system fonts with fallbacks."""
         fonts = {}
 
-        # Try to load San Francisco (macOS system font)
         font_paths = [
-            "/System/Library/Fonts/SFNS.ttf",  # macOS SF
-            "/System/Library/Fonts/Helvetica.ttc",  # macOS fallback
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+            "/System/Library/Fonts/SFNS.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         ]
 
-        # Load different sizes
-        for name, size in [("title", 32), ("heading", 24), ("body", 18), ("small", 14)]:
+        for name, size in [("title", 28), ("heading", 22), ("body", 17), ("small", 14), ("tiny", 12)]:
             font = None
             for path in font_paths:
                 try:
@@ -52,7 +59,6 @@ class BaseRenderer(ABC):
                     continue
 
             if font is None:
-                # Fallback to default PIL font
                 logger.warning(f"Could not load custom font for {name}, using default")
                 font = ImageFont.load_default()
 
@@ -61,14 +67,7 @@ class BaseRenderer(ABC):
         return fonts
 
     def _create_image(self, height: int) -> tuple[Image.Image, ImageDraw.Draw]:
-        """Create a new image with white background.
-
-        Args:
-            height: Image height in pixels
-
-        Returns:
-            Tuple of (image, draw) objects
-        """
+        """Create a new image with dark background."""
         img = Image.new('RGB', (self.WIDTH, height), self.COLOR_BG)
         draw = ImageDraw.Draw(img)
         return img, draw
@@ -82,17 +81,65 @@ class BaseRenderer(ABC):
         outline: str = None,
         width: int = 1
     ):
-        """Draw a rounded rectangle.
+        """Draw a rounded rectangle."""
+        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+
+    def _draw_accent_card(
+        self,
+        draw: ImageDraw.Draw,
+        xy: tuple[int, int, int, int],
+        accent_color: str,
+    ):
+        """Draw a card with a left accent bar.
 
         Args:
             draw: ImageDraw object
             xy: Bounding box (x1, y1, x2, y2)
-            radius: Corner radius
-            fill: Fill color (hex)
-            outline: Outline color (hex), optional
-            width: Outline width
+            accent_color: Color for the left accent bar
         """
-        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+        x1, y1, x2, y2 = xy
+
+        # Card background
+        self._draw_rounded_rect(draw, (x1, y1, x2, y2), radius=self.CARD_RADIUS, fill=self.COLOR_CARD)
+
+        # Left accent bar (drawn as a thin rounded rect clipped to the card)
+        bar_x2 = x1 + self.ACCENT_BAR_WIDTH
+        self._draw_rounded_rect(
+            draw,
+            (x1, y1, bar_x2 + self.CARD_RADIUS, y2),
+            radius=self.CARD_RADIUS,
+            fill=accent_color,
+        )
+        # Fill the right side of the accent bar with card color to clean up
+        draw.rectangle((bar_x2, y1 + 1, bar_x2 + self.CARD_RADIUS, y2 - 1), fill=self.COLOR_CARD)
+
+    def _draw_header(
+        self,
+        draw: ImageDraw.Draw,
+        title: str,
+        subtitle: str,
+        y: int,
+    ) -> int:
+        """Draw a header block with title and subtitle.
+
+        Returns:
+            Y position after the header.
+        """
+        # Title
+        self._draw_text_centered(draw, title, y, self.fonts["title"], self.COLOR_TEXT)
+        y += 38
+
+        # Subtitle
+        self._draw_text_centered(draw, subtitle, y, self.fonts["small"], self.COLOR_TEXT_MUTED)
+        y += 24
+
+        # Divider line
+        div_x1 = self.PADDING + 60
+        div_x2 = self.WIDTH - self.PADDING - 60
+        draw.line([(div_x1, y), (div_x2, y)], fill=self.COLOR_DIVIDER, width=1)
+        y += 20
+
+        return y
 
     def _draw_text_centered(
         self,
@@ -102,29 +149,18 @@ class BaseRenderer(ABC):
         font: ImageFont.FreeTypeFont,
         color: str
     ):
-        """Draw text centered horizontally.
-
-        Args:
-            draw: ImageDraw object
-            text: Text to draw
-            y: Y position (top of text)
-            font: Font to use
-            color: Text color (hex)
-        """
+        """Draw text centered horizontally."""
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
         x = (self.WIDTH - text_width) // 2
         draw.text((x, y), text, font=font, fill=color)
 
+    def _draw_empty_state(self, draw: ImageDraw.Draw, text: str, y: int):
+        """Draw a centered muted empty-state message."""
+        self._draw_text_centered(draw, text, y, self.fonts["body"], self.COLOR_TEXT_DIM)
+
     def _to_png_bytes(self, img: Image.Image) -> bytes:
-        """Convert image to PNG bytes.
-
-        Args:
-            img: PIL Image
-
-        Returns:
-            PNG image as bytes
-        """
+        """Convert image to PNG bytes."""
         buffer = BytesIO()
         img.save(buffer, format='PNG')
         return buffer.getvalue()
@@ -138,17 +174,5 @@ class BaseRenderer(ABC):
 
         Returns:
             PNG image as bytes
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def render_dashboard(self, data: Any) -> Dict[str, Any]:
-        """Render content as component data for Dashboard.
-
-        Args:
-            data: Content data to render
-
-        Returns:
-            Component data dict
         """
         raise NotImplementedError

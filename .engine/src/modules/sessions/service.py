@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from core.config import settings
 from core.event_log import emit_event
 from core.tmux import send_text, inject_message
 
@@ -38,9 +39,9 @@ DEFAULT_MODELS = {
     "idea": "sonnet",
 }
 
-# Default paths (computed once)
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_DB_PATH = _REPO_ROOT / ".engine" / "data" / "db" / "system.db"
+# Default paths
+_REPO_ROOT = settings.repo_root
+_DB_PATH = settings.db_path
 
 
 class SessionService:
@@ -107,7 +108,8 @@ class SessionService:
                     # Format: MMDD-HHMM-{role}-{id} for timeline sorting
                     from datetime import datetime
                     timestamp = datetime.now().strftime("%m%d-%H%M")
-                    conversation_id = f"{timestamp}-{role}-{uuid.uuid4().hex[:8]}"
+                    role_slug = role.replace(" ", "-")
+                    conversation_id = f"{timestamp}-{role_slug}-{uuid.uuid4().hex[:8]}"
 
             # Determine window name
             if window_name is None:
@@ -192,7 +194,7 @@ class SessionService:
             if window_created:
                 try:
                     self._kill_window(window_name)
-                except:
+                except Exception:
                     pass
             return SpawnResult(success=False, error=str(e))
 
@@ -279,7 +281,7 @@ class SessionService:
                     ["tmux", "kill-pane", "-t", session.tmux_pane],
                     capture_output=True
                 )
-            except:
+            except Exception:
                 pass
 
         return True
@@ -305,7 +307,7 @@ class SessionService:
                     age_hours = (now - last_seen_dt).total_seconds() / 3600
                 else:
                     age_hours = float("inf")
-            except:
+            except Exception:
                 age_hours = float("inf")
 
             if age_hours < max_age_hours:
@@ -425,7 +427,7 @@ class SessionService:
                 check=True
             )
             return True
-        except:
+        except Exception:
             return False
 
     # =========================================================================
@@ -433,7 +435,7 @@ class SessionService:
     # =========================================================================
 
     CHIEF_MESSAGE_TEMPLATES = {
-        "wake": """[WAKE:{wake_type}]
+        "wake": """[SYSTEM:WAKE:{wake_type}]
 Time: {time} ({minutes_since_last}m since last wake)
 {event_alert}
 WILL'S STATE:
@@ -446,16 +448,16 @@ SCHEDULE:
 
 SESSIONS:
 {sessions}""",
-        "drop": """[DROP] {message}
+        "drop": """[CAPTURE:DROP] {message}
 
 No response needed. File this and continue what you were doing.""",
-        "bug": """[BUG] {message}
+        "bug": """[CAPTURE:BUG] {message}
 
 Add to TODAY.md Open Loops with bug tag. Brief acknowledgment.""",
-        "idea": """[IDEA] {message}
+        "idea": """[CAPTURE:IDEA] {message}
 
 Capture to Claude/ideas.md or appropriate place. Brief acknowledgment.""",
-        "dump": """[BRAIN-DUMP]
+        "dump": """[CAPTURE:DUMP]
 {message}
 
 Rapid capture mode. File each item silently. Say "Done." when complete.""",
@@ -552,9 +554,9 @@ Rapid capture mode. File each item silently. Say "Done." when complete.""",
         if session.ended_at is not None:
             return False
 
-        message = """[SYSTEM WARNING - FORCE HANDOFF REQUESTED]
+        message = """[SYSTEM:FORCE-HANDOFF]
 
-The user has requested you perform an immediate session handoff.
+Will has requested you perform an immediate session handoff.
 
 Your context may be running low or a fresh session is needed.
 
@@ -786,6 +788,11 @@ Do this NOW before continuing any other work."""
         if model:
             cmd_parts.append(f"--model {model}")
 
+        # Chrome integration for roles that need browser access
+        CHROME_ROLES = {"job-search", "chief"}
+        if role in CHROME_ROLES:
+            cmd_parts.append("--chrome")
+
         send_text(target, " ".join(cmd_parts))
 
     def _wait_for_claude(self, window_name: str, timeout: int = 30) -> bool:
@@ -805,11 +812,12 @@ Do this NOW before continuing any other work."""
             )
             if result.returncode == 0:
                 content = result.stdout
-                # Check for Claude ready indicators
+                # Only return when actual input prompt is visible — not just the banner.
+                # With --chrome, "Claude Code" banner appears seconds before the prompt
+                # while MCP servers connect. Injecting during that gap loses the prompt.
                 has_prompt = "❯" in content or content.strip().endswith(">")
-                has_banner = "Claude Code" in content
-                if has_prompt or has_banner:
-                    time.sleep(0.5)
+                if has_prompt:
+                    time.sleep(1)
                     return True
 
         return False
@@ -993,7 +1001,7 @@ Reason: {reason_text}
 
 <mission-context>
 You are executing Mission ID: {mission_id}
-This is autonomous mode - the user is not available for questions.
+This is autonomous mode - Will is not available for questions.
 
 **BEFORE EXITING:**
 1. Call: mcp__life__mission_complete("{mission_id}", "completed", "brief summary")
@@ -1022,11 +1030,16 @@ This is autonomous mode - the user is not available for questions.
         return f"<!-- Role file not found: {role} -->"
 
     def _load_mode_content(self, role: str, mode: str) -> str:
-        """Load mode content from .claude/roles/{role}/{mode}.md."""
-        mode_file = self.claude_dir / "roles" / role / f"{mode}.md"
-        if mode_file.exists():
-            return mode_file.read_text()
-        return f"<!-- Mode file not found: {role}/{mode} -->"
+        """Load mode content from .claude/modes/{mode}.md (unified) or .claude/roles/{role}/{mode}.md (legacy)."""
+        # Unified mode files (preferred — role-agnostic)
+        unified_file = self.claude_dir / "modes" / f"{mode}.md"
+        if unified_file.exists():
+            return unified_file.read_text()
+        # Legacy per-role mode files (fallback)
+        role_file = self.claude_dir / "roles" / role / f"{mode}.md"
+        if role_file.exists():
+            return role_file.read_text()
+        return f"<!-- Mode file not found: {mode} -->"
 
     def _inject_prompt(self, window_name: str, prompt: str) -> bool:
         """Inject the initial prompt into the Claude session."""

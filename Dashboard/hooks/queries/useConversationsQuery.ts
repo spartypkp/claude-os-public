@@ -15,8 +15,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import type { ActiveConversation, ActiveSession, ActiveWorker, SessionState } from '@/lib/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { API_BASE } from '@/lib/api';
 
 interface Worker {
   id: string;

@@ -9,7 +9,6 @@ import {
 	Clock,
 	Loader2,
 	MapPin,
-	Sparkles,
 	Video,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -149,7 +148,7 @@ export function CalendarWidgetContent() {
 	if (loading) {
 		return (
 			<div className="flex items-center justify-center h-full">
-				<Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+				<Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
 			</div>
 		);
 	}
@@ -158,18 +157,18 @@ export function CalendarWidgetContent() {
 	if (events.length === 0) {
 		return (
 			<div className="flex flex-col items-center justify-center h-full p-8 text-center">
-				<div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400/10 to-indigo-400/10 border border-blue-400/20 flex items-center justify-center mb-4">
-					<Calendar className="w-7 h-7 text-blue-400" />
+				<div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
+					<Calendar className="w-7 h-7 text-blue-500" />
 				</div>
-				<p className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
+				<p className="text-sm font-semibold text-[var(--text-primary)] mb-1.5">
 					Clear schedule
 				</p>
-				<p className="text-xs text-gray-500 dark:text-gray-400 mb-5 max-w-[200px]">
+				<p className="text-xs text-[var(--text-secondary)] mb-5 max-w-[200px]">
 					No events scheduled for today
 				</p>
 				<button
 					onClick={() => openAppWindow('calendar')}
-					className="px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-400 to-indigo-400 rounded-lg hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm"
+					className="px-4 py-2.5 text-sm font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm"
 				>
 					Open Calendar
 				</button>
@@ -180,12 +179,12 @@ export function CalendarWidgetContent() {
 	return (
 		<div className="flex flex-col h-full">
 			{/* Date header */}
-			<div className="px-3 py-2.5 bg-gradient-to-b from-gray-50 to-white dark:from-white/5 dark:to-transparent border-b border-gray-100/80 dark:border-white/5">
+			<div className="px-3 py-2.5 bg-[var(--surface-muted)]/50 border-b border-[var(--border-subtle)]">
 				<div className="flex items-center justify-between">
-					<span className="text-xs font-semibold text-gray-900 dark:text-white">
+					<span className="text-xs font-semibold text-[var(--text-primary)]">
 						{todayLabel}
 					</span>
-					<span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 tabular-nums">
+					<span className="text-[10px] font-medium text-[var(--text-secondary)] tabular-nums">
 						{timedEvents.length} events
 					</span>
 				</div>
@@ -202,10 +201,10 @@ export function CalendarWidgetContent() {
 								className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20"
 							>
 								<Calendar className="w-3.5 h-3.5 text-blue-500" />
-								<span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+								<span className="text-xs font-medium text-blue-500">
 									All day
 								</span>
-								<span className="flex-1 truncate text-xs text-gray-900 dark:text-white">
+								<span className="flex-1 truncate text-xs text-[var(--text-primary)]">
 									{event.summary}
 								</span>
 							</div>
@@ -216,7 +215,7 @@ export function CalendarWidgetContent() {
 				{/* Current event (hero) */}
 				{currentEvent && (
 					<div className="p-2.5">
-						<div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-400 text-white shadow-md shadow-blue-400/30">
+						<div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-md shadow-blue-500/30">
 							<div className="flex items-center gap-2 mb-2.5">
 								<div className="w-2 h-2 rounded-full bg-white animate-pulse shadow-sm" />
 								<span className="text-[10px] font-semibold uppercase tracking-wider opacity-90">
@@ -248,7 +247,7 @@ export function CalendarWidgetContent() {
 				{upcomingEvents.length > 0 && (
 					<div className="p-2 pt-0 space-y-1">
 						{!currentEvent && (
-							<div className="px-1 py-1.5 text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+							<div className="px-1 py-1.5 text-[10px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
 								Coming up
 							</div>
 						)}
@@ -262,9 +261,9 @@ export function CalendarWidgetContent() {
 				{pastEvents.length > 0 && upcomingEvents.length === 0 && !currentEvent && (
 					<div className="p-2 space-y-1 opacity-50">
 						<div className="flex items-center gap-2 py-1.5 px-1">
-							<div className="flex-1 h-px bg-gray-200 dark:bg-white/10" />
-							<span className="text-[10px] text-gray-400">passed</span>
-							<div className="flex-1 h-px bg-gray-200 dark:bg-white/10" />
+							<div className="flex-1 h-px bg-[var(--border-subtle)]" />
+							<span className="text-[10px] text-[var(--text-muted)]">passed</span>
+							<div className="flex-1 h-px bg-[var(--border-subtle)]" />
 						</div>
 						{pastEvents.slice(-2).map((event, i) => (
 							<EventItem key={i} event={event} />
@@ -276,7 +275,7 @@ export function CalendarWidgetContent() {
 			{/* Footer */}
 			<button
 				onClick={() => openAppWindow('calendar')}
-				className="flex items-center justify-center gap-1 px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100/80 dark:border-white/5 transition-all hover:scale-[1.01]"
+				className="flex items-center justify-center gap-1 px-3 py-2.5 text-xs font-medium text-[var(--text-secondary)] hover:text-blue-500 hover:bg-[var(--surface-muted)] border-t border-[var(--border-subtle)] transition-all hover:scale-[1.01]"
 			>
 				Full calendar
 				<ChevronRight className="w-3 h-3" />
@@ -304,14 +303,14 @@ function EventItem({ event }: EventItemProps) {
 				flex items-start gap-2 px-2 py-2 rounded-lg transition-colors
 				${isPast
 					? 'opacity-40'
-					: 'bg-white dark:bg-white/5 ring-1 ring-gray-200 dark:ring-white/10'
+					: 'bg-[var(--surface-raised)] ring-1 ring-[var(--border-subtle)]'
 				}
 			`}
 		>
 			{/* Time */}
 			<div className="flex-shrink-0 w-14 text-right">
 				<span className={`text-xs tabular-nums ${
-					timing?.isSoon ? 'text-amber-500 font-medium' : 'text-gray-500 dark:text-gray-400'
+					timing?.isSoon ? 'text-amber-500 font-medium' : 'text-[var(--text-secondary)]'
 				}`}>
 					{formatTime(event.start_ts)}
 				</span>
@@ -319,11 +318,11 @@ function EventItem({ event }: EventItemProps) {
 
 			{/* Details */}
 			<div className="flex-1 min-w-0">
-				<div className={`text-sm ${isPast ? '' : 'text-gray-900 dark:text-white'}`}>
+				<div className={`text-sm ${isPast ? '' : 'text-[var(--text-primary)]'}`}>
 					{event.summary}
 				</div>
 				{event.location && (
-					<div className="flex items-center gap-1 mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+					<div className="flex items-center gap-1 mt-0.5 text-[10px] text-[var(--text-secondary)]">
 						{isZoom ? <Video className="w-2.5 h-2.5" /> : <MapPin className="w-2.5 h-2.5" />}
 						<span className="truncate">{event.location}</span>
 					</div>
@@ -337,7 +336,7 @@ function EventItem({ event }: EventItemProps) {
 						? 'bg-amber-500/10 text-amber-500'
 						: timing.isNow
 						? 'bg-blue-500/10 text-blue-500'
-						: 'text-gray-400 dark:text-gray-500'
+						: 'text-[var(--text-muted)]'
 				}`}>
 					{timing.label}
 				</span>

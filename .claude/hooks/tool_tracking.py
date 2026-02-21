@@ -351,14 +351,14 @@ def check_comms_permission(tool_name: str, tool_input: dict) -> tuple[bool, str]
         # Whitelisted recipients (claude_direct) can be messaged freely
         recipient = tool_input.get('recipient', '') or tool_input.get('phone_number', '') or tool_input.get('email', '')
         CLAUDE_DIRECT_WHITELIST = [
-            # Add approved recipients here:
-            # 'friend@example.com',  # Description of who/what
+            'bot@example.com',       # Example: approved AI bot
+            '+15555555555',           # Example: approved AI service
         ]
 
         if operation in ('send', 'schedule'):
             if recipient.lower() in [w.lower() for w in CLAUDE_DIRECT_WHITELIST]:
                 return True, ""
-            return False, "Message sending/scheduling is disabled. Draft the message for the user to send manually."
+            return False, "Message sending/scheduling is disabled. Draft the message for Will to send manually."
 
         # Reading still requires consent via claude_direct tag or whitelist
         if operation in ('read', 'unread') and recipient:
@@ -440,8 +440,51 @@ def handle_tracking_start(input_data: dict, tool_name: str, tool_input: dict):
     update_session_state(session_id, 'tool_active')
 
 
+def extract_detail(tool_name: str, tool_input: dict) -> str | None:
+    """Extract the most interesting parameter per tool type for observability.
+
+    Privacy rule: structural metadata only — file paths, operations, patterns.
+    Never capture email content, message text, contact details, or full URLs.
+    """
+    if tool_name in ('Read', 'Write', 'Edit'):
+        return tool_input.get('file_path')
+    elif tool_name == 'Glob':
+        return tool_input.get('pattern')
+    elif tool_name == 'Grep':
+        return tool_input.get('pattern')
+    elif tool_name == 'Bash':
+        cmd = tool_input.get('command', '')
+        return cmd[:100] if cmd else None
+    elif tool_name == 'Task':
+        return tool_input.get('subagent_type')
+    elif tool_name == 'WebSearch':
+        query = tool_input.get('query', '')
+        return query[:80] if query else None
+    elif tool_name == 'WebFetch':
+        url = tool_input.get('url', '')
+        # Extract domain only for privacy
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            return parsed.netloc or None
+        except Exception:
+            return None
+    elif tool_name.startswith('mcp__life__'):
+        op = tool_input.get('operation', '')
+        if tool_name == 'mcp__life__team':
+            role = tool_input.get('role', '')
+            return f"{op}:{role}" if role else op
+        # Skip uninteresting tools
+        if tool_name in ('mcp__life__status',):
+            return None
+        return op or None
+    return None
+
+
 def handle_tracking_result(input_data: dict, tool_name: str):
-    """Update session state for PostToolUse (tool finished, Claude processing)."""
+    """Update session state for PostToolUse (tool finished, Claude processing).
+    Also logs the tool call to tool_calls table for observability.
+    """
     session_id = os.environ.get('CLAUDE_SESSION_ID')
     if not session_id:
         return
@@ -449,6 +492,9 @@ def handle_tracking_result(input_data: dict, tool_name: str):
     # Tool finished, Claude is still processing - go back to 'active'
     # (stop.py will set to 'idle' when response completes)
     update_session_state(session_id, 'active')
+
+    # Log tool call to tool_calls table
+    log_tool_call(session_id, tool_name, input_data)
 
 
 def update_session_state(session_id: str, state: str):
@@ -467,6 +513,48 @@ def update_session_state(session_id: str, state: str):
         emit_session_state_event(session_id, state)
     except Exception as e:
         print(f"Warning: Failed to update session state: {e}", file=sys.stderr)
+
+
+def log_tool_call(session_id: str, tool_name: str, input_data: dict):
+    """Log a tool call to the tool_calls table for observability.
+
+    Called on PostToolUse. Duration is NULL for v1 (cross-invocation tracking
+    is complex and deferred). Success is inferred from tool_result if available.
+    """
+    try:
+        # Determine success from tool result
+        tool_result = input_data.get("tool_result", {})
+        tool_result_str = str(tool_result).lower() if tool_result else ""
+
+        # Heuristic: check for error indicators
+        success = 1  # Default to success
+        error_type = None
+        if isinstance(tool_result, dict):
+            if tool_result.get("success") is False:
+                success = 0
+                error_type = tool_result.get("error", "unknown")[:100] if tool_result.get("error") else None
+            elif "error" in tool_result and tool_result.get("error"):
+                success = 0
+                error_type = str(tool_result["error"])[:100]
+        elif "error" in tool_result_str or "failed" in tool_result_str:
+            # For non-dict results, check string content
+            if "traceback" in tool_result_str or "exception" in tool_result_str:
+                success = 0
+
+        # Extract detail (structural metadata for analytics)
+        tool_input = input_data.get("tool_input", {})
+        detail = extract_detail(tool_name, tool_input)
+
+        now = datetime.now(timezone.utc).isoformat()
+        storage = SystemStorage(DB_PATH)
+        storage.execute("""
+            INSERT INTO tool_calls (session_id, tool_name, called_at, success, error_type, detail)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (session_id, tool_name, now, success, error_type, detail))
+        storage.close()
+    except Exception as e:
+        # Never block on tracking failures
+        print(f"Warning: Failed to log tool call: {e}", file=sys.stderr)
 
 
 if __name__ == '__main__':

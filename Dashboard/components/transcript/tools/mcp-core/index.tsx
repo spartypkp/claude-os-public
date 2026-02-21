@@ -4,7 +4,7 @@
  * MCP Core Tool Expanded Views
  *
  * Life system MCP tools with custom expanded views.
- * Tools without custom views (status, timeline, log, ping, show) render as
+ * Tools without custom views (status, day, reset, done) render as
  * non-expandable system event chips — the one-liner IS the full info.
  */
 
@@ -855,7 +855,77 @@ export function SkillExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 }
 
 // =============================================================================
-// PET (Companion)
+// TURBINE (Prediction Markets)
+// =============================================================================
+
+export function TurbineExpanded({ rawInput, rawResult }: ToolExpandedProps) {
+	const op = String(rawInput?.operation || '');
+	const name = rawInput?.name ? String(rawInput.name) : '';
+	const hasError = isErrorResult(rawResult);
+	const resultData = !hasError ? parseResult(rawResult) : null;
+
+	// Scoreboard — table of strategies
+	if (op === 'scoreboard') {
+		let strategies: Array<Record<string, unknown>> = [];
+		if (resultData) {
+			if (Array.isArray(resultData)) strategies = resultData;
+			else if (Array.isArray(resultData.strategies)) strategies = resultData.strategies;
+			else if (Array.isArray(resultData.scoreboard)) strategies = resultData.scoreboard;
+		}
+		if (strategies.length > 0) {
+			return (
+				<div className="space-y-1">
+					{strategies.slice(0, 10).map((s, i) => (
+						<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
+							<span className="font-medium text-[var(--text-secondary)] truncate flex-1">
+								{String(s.name || s.strategy || 'Strategy')}
+							</span>
+							{s.roi !== undefined ? (
+								<span className={`font-mono text-[10px] ${Number(s.roi) >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
+									{Number(s.roi) >= 0 ? '+' : ''}{Number(s.roi).toFixed(1)}%
+								</span>
+							) : null}
+							{s.win_rate !== undefined ? (
+								<span className="text-[10px] text-[var(--text-muted)]">
+									{Number(s.win_rate).toFixed(0)}% WR
+								</span>
+							) : null}
+							{s.trades !== undefined ? (
+								<span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1 py-0.5 rounded">
+									{String(s.trades)}
+								</span>
+							) : null}
+						</div>
+					))}
+					{strategies.length > 10 && <div className="text-[10px] text-[var(--text-muted)]">+{strategies.length - 10} more</div>}
+				</div>
+			);
+		}
+	}
+
+	// Strategy detail
+	if (name) {
+		return (
+			<div className="space-y-2">
+				<div className="flex items-center gap-2 flex-wrap">
+					<span className="text-[12px] font-medium text-[var(--text-primary)]">{name}</span>
+					{op && <StatusBadge label={op} color="var(--color-primary)" />}
+				</div>
+				{rawResult && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText={op || 'Done'} /> :
+					<CodeBlock code={rawResult} maxHeight="150px" />
+				)}
+			</div>
+		);
+	}
+
+	// Default
+	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="150px" />) : null;
+}
+
+// =============================================================================
+// PET (Ember)
 // =============================================================================
 
 export function PetExpanded({ rawInput, rawResult }: ToolExpandedProps) {
@@ -880,7 +950,7 @@ export function PetExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 		);
 	}
 
-	// Status — show companion's state
+	// Status — show Ember's state
 	if (op === 'status' && resultData) {
 		const mood = resultData.mood ? String(resultData.mood) : '';
 		const stage = resultData.stage ? String(resultData.stage) : '';
@@ -922,14 +992,16 @@ export const mcpCoreExpandedViews = {
 	calendar: CalendarExpanded,
 	messages: MessagesExpanded,
 	opportunity: OpportunityExpanded,
+	turbine: TurbineExpanded,
 	pet: PetExpanded,
 
-	// Communication
+	// Legacy: kept for rendering old transcripts
 	reply_to_chief: ReplyExpanded,
 
 	// Skills
 	Skill: SkillExpanded,
 
-	// NOTE: status, timeline, log, ping, show are intentionally NOT mapped here.
+	// NOTE: status, day, reset, done are intentionally NOT mapped here.
 	// They render as non-expandable system event chips — the one-liner is complete info.
+	// Legacy entries (reply_to_chief, priority, timeline, show) kept for old transcript rendering.
 };

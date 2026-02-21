@@ -14,8 +14,6 @@ from typing import Any, Dict, List, Optional
 class ProviderType(str, Enum):
     """Supported calendar provider types."""
     APPLE = "apple"
-    GOOGLE = "google"
-    CALDAV = "caldav"
     LOCAL = "local"
 
 

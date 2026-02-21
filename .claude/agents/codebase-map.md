@@ -23,7 +23,7 @@ You create comprehensive architectural maps of unfamiliar codebases by surveying
 
 ## Task
 
-When invoked, you receive a project path (e.g., "Desktop/projects/example-project").
+When invoked, you receive a project path (e.g., "Desktop/projects/accelr8").
 
 **Step-by-step process:**
 

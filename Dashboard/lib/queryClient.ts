@@ -105,6 +105,25 @@ export const queryKeys = {
 	// Role data
 	roles: ['roles'] as const,
 	role: (slug: string) => ['roles', slug] as const,
+
+	// Service data (accounts redesign)
+	services: ['services'] as const,
+	service: (name: string) => ['services', name] as const,
+
+	// Menubar data
+	health: ['health'] as const,
+	usage: ['usage'] as const,
+	emailTriage: ['email', 'triage'] as const,
+
+	// Analytics data
+	analytics: ['analytics'] as const,
+	analyticsPatterns: ['analytics', 'patterns'] as const,
+	analyticsOverview: ['analytics', 'overview'] as const,
+	analyticsSystem: ['analytics', 'system'] as const,
+	analyticsSpecialists: ['analytics', 'specialists'] as const,
+	analyticsFiles: ['analytics', 'files'] as const,
+	analyticsToolDetails: ['analytics', 'tool-details'] as const,
+	analyticsInsights: ['analytics', 'insights'] as const,
 } as const;
 
 /**
@@ -118,8 +137,8 @@ export const queryKeys = {
  */
 export const eventToQueryKeys: Record<string, readonly (readonly string[])[]> = {
 	// Session events
-	'session.started': [queryKeys.sessions, queryKeys.sessionsActivity, queryKeys.chief],
-	'session.ended': [queryKeys.sessions, queryKeys.sessionsActivity, queryKeys.chief],
+	'session.started': [queryKeys.sessions, queryKeys.sessionsActivity, queryKeys.chief, queryKeys.analytics],
+	'session.ended': [queryKeys.sessions, queryKeys.sessionsActivity, queryKeys.chief, queryKeys.analytics],
 	'session.state': [queryKeys.sessions, queryKeys.sessionsActivity],
 	'session.status': [queryKeys.sessions, queryKeys.sessionsActivity],
 
@@ -150,12 +169,12 @@ export const eventToQueryKeys: Record<string, readonly (readonly string[])[]> = 
 	'duty.completed': [queryKeys.duties, queryKeys.dutiesRunning],
 
 	// Email events
-	'email.sent': [queryKeys.email, queryKeys.emailHistory],
+	'email.sent': [queryKeys.email, queryKeys.emailHistory, queryKeys.emailTriage],
 	'email.queued': [queryKeys.emailQueue, queryKeys.emailHistory],
 	'email.cancelled': [queryKeys.emailQueue],
-	'email.read': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailUnread],
-	'email.flagged': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread],
-	'email.deleted': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread],
+	'email.read': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailUnread, queryKeys.emailTriage],
+	'email.flagged': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread, queryKeys.emailTriage],
+	'email.deleted': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread, queryKeys.emailTriage],
 
 	// Calendar events
 	'calendar.created': [queryKeys.calendar, queryKeys.calendarEvents],
@@ -170,4 +189,8 @@ export const eventToQueryKeys: Record<string, readonly (readonly string[])[]> = 
 	// Message events
 	'message.sent': [queryKeys.messages, queryKeys.messagesConversations],
 	'message.received': [queryKeys.messages, queryKeys.messagesConversations, queryKeys.messagesUnread],
+
+	// Service events (accounts redesign)
+	'service.updated': [queryKeys.services],
+
 };

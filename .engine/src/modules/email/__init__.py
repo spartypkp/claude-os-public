@@ -8,7 +8,6 @@ from .models import (
     ProviderType,
 )
 from .providers import AppleMailAdapter, EmailAdapter, GmailAdapter
-from .repository import EmailRepository
 from .send_service import EmailSendService
 from .service import EmailService
 
@@ -24,7 +23,6 @@ __all__ = [
     "EmailAdapter",
     "GmailAdapter",
     # Services
-    "EmailRepository",
     "EmailSendService",
     "EmailService",
 ]
