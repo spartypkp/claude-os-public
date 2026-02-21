@@ -205,10 +205,10 @@ else
     echo "" >> "$SETUP_LOG"
     echo "--- Fallback: core deps only ---" >> "$SETUP_LOG"
     pip install \
-        fastapi uvicorn aiosqlite httpx aiohttp jinja2 \
-        python-multipart "pydantic>=2.0" python-dotenv \
-        sse-starlette PyYAML watchdog python-dateutil \
-        mcp fastmcp 2>>"$SETUP_LOG" || {
+        fastapi uvicorn aiosqlite "pydantic>=2.0" python-dotenv \
+        sse-starlette PyYAML watchfiles Jinja2 croniter \
+        python-dateutil python-multipart \
+        fastmcp mcp claude-agent-sdk 2>>"$SETUP_LOG" || {
         warn "Core dependency install also had errors (see setup.log)"
     }
     success "Core Python dependencies installed"
