@@ -235,7 +235,23 @@ Commit when you have a working, tested change. Not mid-work, not untested, not h
 - Before switching to a different area of the codebase
 - When you have one logical, coherent change
 
-**Commit messages:** Imperative first line ("Fix hook lookup bug", not "Fixed"). Add a body if the change is complex or non-obvious.
+**Commit format:** Conventional commits with optional scope. Imperative mood.
+
+```
+feat(dashboard): PathBar breadcrumbs with middle truncation
+fix: email HTML escaping in draft content
+refactor(engine): consolidate hook loading into single pass
+docs: update SYSTEM-SPEC for new error boundaries
+chore: untrack log files from git
+```
+
+Types: `feat`, `fix`, `refactor`, `docs`, `chore`. Scope is the area of the codebase (`dashboard`, `engine`, `claude-panel`, etc.) -- use when it clarifies, skip when obvious.
+
+**Staging scope:** Only commit code and config: `Dashboard/`, `.engine/src/`, `.claude/`, `.gitignore`, config files at repo root. **Never stage:** `Desktop/` (Chief's domain, contains user data and memory), `Desktop/conversations/` (ephemeral workspaces), `.engine/data/` (logs, database).
+
+**In autonomous mode:** Verification commits before calling done(). You don't need to think about this during implementation.
+
+**In interactive mode:** Commit at natural breakpoints -- after each coherent unit of work (feature shipped, bug fixed, refactor complete). Don't wait until the session ends to make one giant commit.
 
 ## Timeline Updates
 
@@ -243,11 +259,15 @@ When you complete work, add an entry to TODAY.md Timeline documenting what you s
 
 If you discover bugs, add them to MEMORY.md → System Backlog.
 
-## Release Tracking
+## UI Design Validation
 
-If your changes touch **core Claude OS infrastructure** (not domain-specific apps like job-search, turbine, training-will), append your changes to the relevant feature entry in `Desktop/release/pending.md`. Create a new `##` entry if this is a new feature. If a matching entry already exists, append to it.
+Before shipping a UI component or interaction pattern, run `ux-perspective` on the design. It reads the user's documented patterns, stated preferences, and UX research to simulate how they'd actually react. Takes 30 seconds and has caught real friction before it ships.
 
-Include: file paths with what changed, brief reasoning, and any sanitization concerns you notice (personal names, real email addresses, absolute paths). You're not the sanitization expert — just note what you see. The Release specialist handles the rest.
+```
+Task(subagent_type="ux-perspective", prompt="[describe the interaction: what the component does, how it's triggered, what state it shows]")
+```
+
+Use it for: new modal/dialog flows, notification/alert designs, dashboard layout changes, any interaction where you're making assumptions about what the user wants to see at a glance.
 
 ## Handoff
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { finderList, finderMove, FinderItem } from '@/lib/api';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import {
 	ChevronLeft,
 	ChevronRight,
@@ -42,7 +43,8 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 	const contentRef = useRef<HTMLDivElement>(null);
 
 	// Source parent path for "current location" detection (Desktop-relative)
-	const sourceParent = sourcePath.replace(/^Desktop\//, '').split('/').slice(0, -1).join('/');
+	const sourceRelative = toDesktopRelative(sourcePath);
+	const sourceParent = sourceRelative.split('/').slice(0, -1).join('/');
 
 	const isCurrentLocation = (path: string) => path === sourceParent;
 
@@ -206,76 +208,57 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 			onClick={onClose}
 		>
 			<div
-				className="
-					w-[520px] rounded-xl overflow-hidden shadow-2xl
-					bg-[var(--surface-base)] border border-[#B8B8B8] dark:border-[#2a2a2a]
-					flex flex-col
-				"
-				style={{ height: '420px' }}
+				className="w-[520px] rounded-xl overflow-hidden flex flex-col"
+				style={{ height: '420px', background: 'var(--surface-base)', border: '1px solid var(--border-default)', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
 				onClick={(e) => e.stopPropagation()}
 			>
-				{/* Title bar — Finder gradient */}
-				<div className="
-					flex items-center justify-center
-					h-[38px] flex-shrink-0
-					bg-gradient-to-b from-[#E8E8E8] to-[#D4D4D4] dark:from-[#3d3d3d] dark:to-[#323232]
-					border-b border-[#B8B8B8] dark:border-[#2a2a2a]
-					relative
-				">
-					<span className="text-[13px] font-medium text-[var(--text-primary)]">
+				{/* Title bar */}
+				<div
+					className="flex items-center justify-center h-[38px] flex-shrink-0 relative"
+					style={{ background: 'var(--surface-base)', borderBottom: '1px solid var(--border-default)' }}
+				>
+					<span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
 						Move &ldquo;{sourceName}&rdquo;
 					</span>
 				</div>
 
-				{/* Toolbar — nav arrows + breadcrumb */}
-				<div className="
-					flex items-center gap-1.5 h-[34px] px-2 flex-shrink-0
-					bg-gradient-to-b from-[#E8E8E8] to-[#DCDCDC] dark:from-[#383838] dark:to-[#303030]
-					border-b border-[#C0C0C0] dark:border-[#2a2a2a]
-				">
+				{/* Toolbar */}
+				<div
+					className="flex items-center gap-1.5 h-[34px] px-2 flex-shrink-0"
+					style={{ background: 'var(--surface-base)', borderBottom: '1px solid var(--border-default)' }}
+				>
 					<button
 						onClick={goBack}
 						disabled={!canGoBack}
-						className="
-							p-1 rounded-md
-							bg-white/50 dark:bg-white/10 border border-[#C0C0C0] dark:border-[#4a4a4a]
-							hover:bg-white/80 dark:hover:bg-white/20
-							disabled:opacity-30 disabled:hover:bg-white/50
-							transition-colors
-						"
+						className="p-1 rounded-md disabled:opacity-30 transition-colors"
+						style={{ background: 'var(--surface-muted)', border: '1px solid var(--border-default)' }}
 					>
-						<ChevronLeft className="w-3.5 h-3.5 text-[#4A4A4A] dark:text-[#c0c0c0]" />
+						<ChevronLeft className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
 					</button>
 					<button
 						onClick={goForward}
 						disabled={!canGoForward}
-						className="
-							p-1 rounded-md
-							bg-white/50 dark:bg-white/10 border border-[#C0C0C0] dark:border-[#4a4a4a]
-							hover:bg-white/80 dark:hover:bg-white/20
-							disabled:opacity-30 disabled:hover:bg-white/50
-							transition-colors
-						"
+						className="p-1 rounded-md disabled:opacity-30 transition-colors"
+						style={{ background: 'var(--surface-muted)', border: '1px solid var(--border-default)' }}
 					>
-						<ChevronRight className="w-3.5 h-3.5 text-[#4A4A4A] dark:text-[#c0c0c0]" />
+						<ChevronRight className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
 					</button>
 
-					<div className="w-px h-4 bg-[#C0C0C0] dark:bg-[#4a4a4a] mx-1" />
+					<div className="w-px h-4 mx-1" style={{ background: 'var(--border-default)' }} />
 
 					{/* Breadcrumb */}
 					<div className="flex items-center gap-0.5 min-w-0 overflow-hidden">
 						{breadcrumbs.map((seg, i) => (
 							<div key={seg.path} className="flex items-center gap-0.5 min-w-0">
 								{i > 0 && (
-									<ChevronRight className="w-3 h-3 text-[#8E8E93] flex-shrink-0" />
+									<ChevronRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
 								)}
 								<button
 									onClick={() => navigateTo(seg.path)}
-									className="
-										text-[12px] px-1.5 py-0.5 rounded truncate
-										text-[#4A4A4A] dark:text-[#c0c0c0] hover:bg-white/50 dark:hover:bg-white/10
-										transition-colors
-									"
+									className="text-[12px] px-1.5 py-0.5 rounded truncate transition-colors"
+									style={{ color: 'var(--text-secondary)' }}
+									onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-muted)'; }}
+									onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
 								>
 									{seg.name}
 								</button>
@@ -291,13 +274,11 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 					</div>
 				) : (
 					<div className="flex-1 flex min-h-0">
-						{/* Sidebar — Finder style */}
-						<div className="
-							w-[150px] flex-shrink-0 overflow-y-auto
-							bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl
-							border-r border-[#D1D1D1] dark:border-[#3a3a3a]
-							py-1.5
-						">
+						{/* Sidebar */}
+						<div
+							className="w-[150px] flex-shrink-0 overflow-y-auto backdrop-blur-xl py-1.5"
+							style={{ background: 'var(--surface-muted)', borderRight: '1px solid var(--border-default)' }}
+						>
 							{/* Favorites */}
 							<SidebarSection label="Favorites">
 								{favorites.map(item => (
@@ -350,11 +331,11 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 						<div ref={contentRef} className="flex-1 overflow-y-auto bg-[var(--surface-raised)]">
 							{contentLoading ? (
 								<div className="flex items-center justify-center h-full">
-									<Loader2 className="w-4 h-4 animate-spin text-[#8E8E93]" />
+									<Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-muted)' }} />
 								</div>
 							) : folderContents.length === 0 ? (
 								<div className="flex items-center justify-center h-full">
-									<span className="text-[12px] text-[#8E8E93]">
+									<span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
 										No subfolders
 									</span>
 								</div>
@@ -377,36 +358,43 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 													${isCurrent
 														? 'opacity-35 cursor-not-allowed'
 														: isSelected
-															? 'bg-[#DA7756] text-white'
-															: 'hover:bg-[#F0F0F0] dark:hover:bg-[#2a2a2a]'
+															? 'bg-[var(--color-claude)] text-white'
+															: ''
 													}
 												`}
+												style={!isCurrent && !isSelected ? { color: 'var(--text-primary)' } : undefined}
+												onMouseEnter={(e) => {
+													if (!isCurrent && !isSelected) {
+														e.currentTarget.style.background = 'var(--surface-muted)';
+													}
+												}}
+												onMouseLeave={(e) => {
+													if (!isCurrent && !isSelected) {
+														e.currentTarget.style.background = 'transparent';
+													}
+												}}
 											>
 												<Folder className={`w-4 h-4 flex-shrink-0 ${
 													isSelected && !isCurrent ? 'text-white' :
 													item.type === 'domain' ? 'text-emerald-500' :
 													item.type === 'app' ? 'text-blue-500' :
-													'text-[#8E8E93]'
-												}`} />
+													''
+												}`} style={!(isSelected && !isCurrent) && item.type !== 'domain' && item.type !== 'app' ? { color: 'var(--text-tertiary)' } : undefined} />
 												<span className={`flex-1 truncate ${
-													isSelected && !isCurrent ? 'text-white' : 'text-[var(--text-primary)]'
-												}`}>
+													isSelected && !isCurrent ? 'text-white' : ''
+												}`} style={!(isSelected && !isCurrent) ? { color: 'var(--text-primary)' } : undefined}>
 													{item.name}
 												</span>
 												{isCurrent && (
-													<span className="text-[10px] text-[#8E8E93]">current location</span>
+													<span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>current location</span>
 												)}
 												{!isCurrent && item.child_count !== undefined && item.child_count > 0 && (
-													<span className={`text-[11px] ${
-														isSelected ? 'text-white/60' : 'text-[#8E8E93]'
-													}`}>
+													<span className="text-[11px]" style={{ color: isSelected ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}>
 														{item.child_count}
 													</span>
 												)}
 												{!isCurrent && (
-													<ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${
-														isSelected ? 'text-white/50' : 'text-[#8E8E93]'
-													}`} />
+													<ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: isSelected ? 'rgba(255,255,255,0.5)' : 'var(--text-muted)' }} />
 												)}
 											</button>
 										);
@@ -417,44 +405,30 @@ export function MoveToModal({ isOpen, sourcePath, sourceName, onClose, onMoved }
 					</div>
 				)}
 
-				{/* Footer — Finder status bar style */}
-				<div className="
-					flex items-center justify-between
-					h-[46px] px-3 flex-shrink-0
-					bg-[#F5F5F5] dark:bg-[#252525] border-t border-[#D1D1D1] dark:border-[#3a3a3a]
-				">
-					{/* Left: destination label */}
-					<div className="text-[11px] text-[#8E8E93] truncate max-w-[200px]">
+				{/* Footer */}
+				<div
+					className="flex items-center justify-between h-[46px] px-3 flex-shrink-0"
+					style={{ background: 'var(--surface-base)', borderTop: '1px solid var(--border-default)' }}
+				>
+					<div className="text-[11px] truncate max-w-[200px]" style={{ color: 'var(--text-muted)' }}>
 						{selectedPath !== null
 							? `to: ${selectedPath || 'Desktop'}`
 							: 'Select a destination'
 						}
 					</div>
 
-					{/* Right: buttons */}
 					<div className="flex items-center gap-2">
 						<button
 							onClick={onClose}
-							className="
-								px-3.5 py-[5px] text-[13px] font-medium rounded-md
-								bg-white/50 dark:bg-white/10 text-[var(--text-primary)]
-								hover:bg-white/80 dark:hover:bg-white/20
-								border border-[#C0C0C0] dark:border-[#4a4a4a]
-								transition-colors
-							"
+							className="px-3.5 py-[5px] text-[13px] font-medium rounded-md transition-colors"
+							style={{ background: 'var(--surface-muted)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
 						>
 							Cancel
 						</button>
 						<button
 							onClick={handleMove}
 							disabled={selectedPath === null || isCurrentLocation(selectedPath ?? '') || moving}
-							className="
-								px-3.5 py-[5px] text-[13px] font-medium rounded-md
-								bg-[#DA7756] text-white
-								hover:bg-[#C15F3C]
-								disabled:opacity-40 disabled:cursor-not-allowed
-								transition-colors flex items-center gap-1.5
-							"
+							className="px-3.5 py-[5px] text-[13px] font-medium rounded-md bg-[var(--color-claude)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
 						>
 							{moving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
 							Move
@@ -472,7 +446,7 @@ function SidebarSection({ label, children }: { label: string; children: React.Re
 	return (
 		<div className="mb-1">
 			<div className="px-3 pt-2 pb-1">
-				<span className="text-[10px] font-semibold uppercase tracking-wider text-[#8E8E93]">
+				<span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
 					{label}
 				</span>
 			</div>
@@ -498,15 +472,29 @@ function SidebarRow({ name, icon, isActive, isCurrent, onClick }: {
 				${isCurrent
 					? 'opacity-35 cursor-not-allowed'
 					: isActive
-						? 'bg-[#DA7756] text-white font-medium'
-						: 'text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
+						? 'bg-[var(--color-claude)] text-white font-medium'
+						: ''
 				}
 			`}
-			style={{ width: 'calc(100% - 8px)', marginLeft: 4 }}
+			style={{
+				width: 'calc(100% - 8px)',
+				marginLeft: 4,
+				...(!isCurrent && !isActive ? { color: 'var(--text-primary)' } : {}),
+			}}
+			onMouseEnter={(e) => {
+				if (!isCurrent && !isActive) {
+					e.currentTarget.style.background = 'var(--surface-accent)';
+				}
+			}}
+			onMouseLeave={(e) => {
+				if (!isCurrent && !isActive) {
+					e.currentTarget.style.background = 'transparent';
+				}
+			}}
 		>
 			{icon}
 			<span className="truncate">{name}</span>
-			{isCurrent && <span className="text-[9px] ml-auto text-[#8E8E93]">here</span>}
+			{isCurrent && <span className="text-[9px] ml-auto" style={{ color: 'var(--text-muted)' }}>here</span>}
 		</button>
 	);
 }

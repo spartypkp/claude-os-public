@@ -1,6 +1,8 @@
 'use client';
 
 import { useWindowStore } from '@/store/windowStore';
+import { queryKeys } from '@/lib/queryClient';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
 	Check,
 	ChevronRight,
@@ -9,7 +11,7 @@ import {
 	MailOpen,
 	MessageSquare,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 // ==========================================
 // TYPES
@@ -74,34 +76,26 @@ function senderDisplay(msg: TriageMessage): string {
 // COMPONENT
 // ==========================================
 
+// Fetch triage data — used by React Query
+async function fetchTriageData(): Promise<TriageData> {
+	const response = await fetch(`${API_BASE}/api/email/triage`);
+	if (!response.ok) throw new Error(`HTTP ${response.status}`);
+	return response.json();
+}
+
 export function EmailWidgetContent() {
-	const [data, setData] = useState<TriageData | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 	const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 	const [triaging, setTriaging] = useState(false);
 	const { openAppWindow } = useWindowStore();
+	const queryClient = useQueryClient();
 
-	const loadTriage = useCallback(async () => {
-		try {
-			const response = await fetch(`${API_BASE}/api/email/triage`);
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
-			const result = await response.json();
-			setData(result);
-			setError(null);
-		} catch (err) {
-			console.error('Failed to load email triage:', err);
-			setError('Failed to connect');
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+	// SSE-invalidated via email.triaged/classified events. No polling needed.
+	const { data, isLoading: loading, error: queryError } = useQuery({
+		queryKey: [...queryKeys.emailTriage, 'widget'] as const,
+		queryFn: fetchTriageData,
+	});
 
-	useEffect(() => {
-		loadTriage();
-		const interval = setInterval(loadTriage, 60000);
-		return () => clearInterval(interval);
-	}, [loadTriage]);
+	const error = queryError ? 'Failed to connect' : null;
 
 	const markAsRead = useCallback(async (msg: TriageMessage) => {
 		// Optimistic dismiss

@@ -53,7 +53,7 @@ export function TaskListPanel({
 					Tasks
 				</span>
 				{inProgress > 0 && (
-					<span className="text-[9px] text-[#da7756] bg-[#da7756]/10 px-1.5 py-0.5 rounded-full font-medium">
+					<span className="text-[9px] text-[var(--color-claude)] bg-[var(--color-claude)]/10 px-1.5 py-0.5 rounded-full font-medium">
 						{inProgress} active
 					</span>
 				)}
@@ -90,7 +90,7 @@ function TaskRow({ task }: { task: TaskItem }) {
 				{isCompleted ? (
 					<CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
 				) : isInProgress ? (
-					<Loader2 className="w-3.5 h-3.5 text-[#da7756] animate-spin" />
+					<Loader2 className="w-3.5 h-3.5 text-[var(--color-claude)] animate-spin" />
 				) : (
 					<Circle className="w-3.5 h-3.5 text-[var(--text-muted)]" />
 				)}

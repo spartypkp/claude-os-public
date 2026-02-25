@@ -571,9 +571,6 @@ class CronScheduler:
             inject_message,
             tmux_target,
             message,
-            True,   # submit
-            0.15,   # delay
-            True,   # cleanup
         )
 
         if success:
@@ -702,14 +699,13 @@ class CronScheduler:
 
             message = (
                 f"[SYSTEM:EVENT] \"{title}\" in ~15 min. "
-                f"Decide if Will needs context. If important, send brief via Telegram."
+                f"Decide if the user needs context. If important, send brief via Telegram."
             )
 
             success = await asyncio.to_thread(
                 inject_message,
                 "life:chief",
                 message,
-                True, 0.15, True,
             )
 
             if success:

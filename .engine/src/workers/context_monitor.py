@@ -76,6 +76,7 @@ class ContextMonitor:
             SELECT session_id, tmux_pane, role, mode, conversation_id, context_warning_level
             FROM sessions
             WHERE ended_at IS NULL AND tmux_pane IS NOT NULL
+              AND mode != 'summarizer'
         """)
 
         for row in rows:
@@ -142,7 +143,6 @@ class ContextMonitor:
             type=MessageType.WARNING,
             target=tmux_pane,
             submit=True,
-            delay=0.3
         )
 
         if success:

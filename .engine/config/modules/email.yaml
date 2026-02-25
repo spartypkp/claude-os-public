@@ -18,29 +18,29 @@ safeguards:
   # Emails to these domains never require confirmation
   auto_approved_domains:
     - "example.com"
-    - "gmail.com"  # Personal emails
+    - "gmail.com"  # personal email domain
 
 # Account Configuration
 accounts:
   # Claude's autonomous account
   claude:
-    email: "claude.assistant@gmail.com"
+    email: "assistant@example.com"
     provider: "gmail"
     can_send: true  # Full autonomy - can send directly
     description: "Claude's autonomous email for automated notifications and reports"
 
-  # Will's accounts (draft only)
-  will_personal:
+  # User's accounts (draft only)
+  user_personal:
     email: "user@gmail.com"
     provider: "apple_mail"
-    can_send: false  # Draft only - Claude creates drafts for Will to review
-    description: "Personal Gmail"
+    can_send: false  # Draft only - Claude creates drafts for user to review
+    description: "User's personal Gmail"
 
-  will_work:
+  user_work:
     email: "user@example.com"
     provider: "apple_mail"
     can_send: false  # Draft only
-    description: "Work email"
+    description: "User's work email"
 
 # Default account for sending
 default_from_account: "claude"
@@ -89,8 +89,8 @@ tools:
     who: "All roles"
     when: "Checking email, drafting responses, sending automated notifications"
     usage: |
-      - Claude can send from: claude.assistant@gmail.com (full autonomy)
-      - Personal accounts: draft-only (user@gmail.com, user@example.com)
+      - Claude can send from: assistant@example.com (full autonomy)
+      - User's accounts: draft-only (user@gmail.com, user@example.com)
       - 15-second send delay allows cancellation
       - Rate limit: 50 emails/hour
     operations: "send, draft, cancel, status, history, queue, unread, search, read, mark_read, accounts"

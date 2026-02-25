@@ -1,10 +1,10 @@
 export function BatteryIcon({ percentage, color }: { percentage: number; color: string }) {
 	const fillWidth = Math.max(0, Math.min(100, percentage));
 
-	const fillColor = color.includes('green') ? '#22c55e'
+	const fillColor = color.includes('green') ? 'var(--color-success)'
 		: color.includes('yellow') ? '#eab308'
 			: color.includes('orange') ? '#f97316'
-				: color.includes('red') ? '#ef4444'
+				: color.includes('red') ? 'var(--color-error)'
 					: '#888';
 
 	return (

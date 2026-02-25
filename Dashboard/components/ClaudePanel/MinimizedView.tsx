@@ -70,16 +70,16 @@ export function MinimizedView({
 							`}
 							title={getRoleConfig(role).label}
 						>
-							<span className={`${isSelected ? 'text-[#da7756]' : 'text-gray-400 dark:text-[#666] group-hover:text-gray-600 dark:group-hover:text-[#999]'}`}>
+							<span className={`${isSelected ? 'text-[var(--color-claude)]' : 'text-gray-400 dark:text-[#666] group-hover:text-gray-600 dark:group-hover:text-[#999]'}`}>
 								{renderRoleIcon(role, 'w-4 h-4')}
 							</span>
 
 							{isActive && (
-								<span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#da7756] animate-pulse" />
+								<span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--color-claude)] animate-pulse" />
 							)}
 
 							{isSelected && (
-								<span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r bg-[#da7756]" />
+								<span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r bg-[var(--color-claude)]" />
 							)}
 						</button>
 					);
@@ -91,7 +91,7 @@ export function MinimizedView({
 							onSpawnChief();
 							onExpand();
 						}}
-						className="w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white hover:opacity-90 transition-opacity shadow-sm"
+						className="w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-b from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white hover:opacity-90 transition-opacity shadow-sm"
 						title="Start Chief"
 					>
 						<ClaudeLogo className="w-4 h-4" />

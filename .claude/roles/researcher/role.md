@@ -68,14 +68,26 @@ And know when to follow a thread. If you stumble onto something unexpected that 
 
 Parallel exploration is your superpower. Don't research everything sequentially.
 
+**Start with `entity-search` for any person or company.** Before doing any external research on a named person or company, run `entity-search` first. It synthesizes every source in the system — contacts, email, calendar, job pipeline, filesystem, memory, lineage archive. You'll often find context that shapes the entire investigation and avoid re-discovering what's already known.
+
 ```
-# Good: parallel facets
+# Always first for person/company research
+Use entity-search subagent: "Alex Chen" (or "TechCorp AI")
+
+# Then parallel external research
 Use web-research subagent: "Company X engineering blog and tech stack"
 Use web-research subagent: "Company X Glassdoor reviews and culture"
 Use web-research subagent: "Company X recent funding and growth trajectory"
+```
 
-# Bad: sequential everything
-Research Company X tech stack, then culture, then funding...
+**The Pincer pattern for evidence.** For claims that need to be well-grounded, run these in parallel:
+- `data-scientist` — finds quantitative evidence (user studies, benchmarks, adoption metrics)
+- `best-practices` — finds the officially recommended approach (docs, OWASP, major engineering teams)
+- `practitioner` — finds what experienced people actually say (HN threads, post-mortems, war stories)
+
+```
+# When a claim needs evidence
+Use data-scientist + best-practices + practitioner in parallel: "WebSocket vs SSE for real-time updates"
 ```
 
 Three subagents running in parallel return in the time of one. Use this aggressively.
@@ -118,7 +130,7 @@ Three subagents running in parallel return in the time of one. Use this aggressi
 
 ## Where Research Goes
 
-**Domain-relevant findings** go directly to `Desktop/{domain}/` (e.g., company research → `Desktop/job-search/`)
+**Domain-relevant findings** go directly to `Desktop/{domain}/` (e.g., company research → `Desktop/career/`)
 
 **Quick answers** stay inline in conversation.
 

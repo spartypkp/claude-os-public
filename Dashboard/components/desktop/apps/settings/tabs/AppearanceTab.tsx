@@ -1,17 +1,62 @@
 'use client';
 
-import { Sun, Moon, Palette, Check } from 'lucide-react';
+import { Sun, Moon, Palette, Check, LayoutGrid, AlignLeft, AlignRight, ArrowDownRight, ArrowRight, FileText, SortAsc } from 'lucide-react';
 import { Section } from '../shared/Section';
+import { useDesktopSettings, ICON_SIZES, type GridFlow, type IconSize, type SortOrder, type GridAlignment } from '@/store/desktopSettingsStore';
 
 const ACCENT_COLORS = [
   { name: 'Claude Coral', value: 'hsl(16, 67%, 55%)' },
-  { name: 'Ocean Blue', value: '#3b82f6' },
-  { name: 'Royal Purple', value: '#8b5cf6' },
-  { name: 'Emerald', value: '#22c55e' },
+  { name: 'Ocean Blue', value: 'var(--color-primary)' },
+  { name: 'Royal Purple', value: 'var(--color-info)' },
+  { name: 'Emerald', value: 'var(--color-success)' },
   { name: 'Sunset Orange', value: '#f97316' },
   { name: 'Hot Pink', value: '#ec4899' },
   { name: 'Electric Cyan', value: '#06b6d4' },
 ];
+
+function OptionButton({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-2 rounded-md text-[12px] font-medium transition-colors ${
+        selected
+          ? 'bg-[var(--color-claude)] text-white'
+          : 'bg-white dark:bg-[#3a3a3a] text-[#1D1D1F] dark:text-[#E5E5E5] hover:bg-[#E8E8E8] dark:hover:bg-[#4a4a4a]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-3 border-b border-[#E5E5E5] dark:border-[#3a3a3a] last:border-b-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-[#1D1D1F] dark:text-white">{label}</div>
+        {description && <div className="text-[11px] text-[#8E8E93] mt-0.5">{description}</div>}
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={`relative w-9 h-[22px] rounded-full transition-colors ${
+        checked ? 'bg-[var(--color-claude)]' : 'bg-[#D1D1D6] dark:bg-[#4a4a4a]'
+      }`}
+    >
+      <div className={`absolute top-[2px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform ${
+        checked ? 'translate-x-[19px]' : 'translate-x-[2px]'
+      }`} />
+    </button>
+  );
+}
 
 export function AppearanceTab({
   darkMode,
@@ -24,6 +69,14 @@ export function AppearanceTab({
   accentColor: string;
   setAccentColor: (c: string) => void;
 }) {
+  const {
+    gridFlow, setGridFlow,
+    iconSize, setIconSize,
+    sortOrder, setSortOrder,
+    gridAlignment, setGridAlignment,
+    showExtensions, setShowExtensions,
+  } = useDesktopSettings();
+
   const themeOptions = [
     { id: 'light', isDark: false, label: 'Light', icon: Sun, desc: 'Bright and crisp' },
     { id: 'dark', isDark: true, label: 'Dark', icon: Moon, desc: 'Easy on the eyes' },
@@ -50,7 +103,7 @@ export function AppearanceTab({
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   isSelected
-                    ? 'bg-gradient-to-br from-[#DA7756] to-[#C15F3C] text-white'
+                    ? 'bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white'
                     : 'bg-white dark:bg-[#3a3a3a] text-[#8E8E93]'
                 }`}>
                   <Icon className="w-4 h-4" />
@@ -59,7 +112,7 @@ export function AppearanceTab({
                   <div className="text-[13px] font-medium text-[#1D1D1F] dark:text-white">{label}</div>
                   <div className="text-[11px] text-[#8E8E93]">{desc}</div>
                 </div>
-                {isSelected && <Check className="w-5 h-5 text-[#DA7756]" />}
+                {isSelected && <Check className="w-5 h-5 text-[var(--color-claude)]" />}
               </button>
             );
           })}
@@ -88,6 +141,51 @@ export function AppearanceTab({
             {ACCENT_COLORS.find(c => c.value === accentColor)?.name || 'Custom'}
           </p>
         </div>
+      </Section>
+
+      {/* Desktop */}
+      <Section title="Desktop" icon={LayoutGrid}>
+        <SettingRow label="Icon Size">
+          {(['small', 'medium', 'large'] as IconSize[]).map((size) => (
+            <OptionButton key={size} selected={iconSize === size} onClick={() => setIconSize(size)}>
+              {ICON_SIZES[size].label}
+            </OptionButton>
+          ))}
+        </SettingRow>
+
+        <SettingRow label="Grid Flow" description="Direction icons fill on the desktop">
+          <OptionButton selected={gridFlow === 'row'} onClick={() => setGridFlow('row')}>
+            <ArrowRight className="w-3.5 h-3.5" /> Rows
+          </OptionButton>
+          <OptionButton selected={gridFlow === 'column'} onClick={() => setGridFlow('column')}>
+            <ArrowDownRight className="w-3.5 h-3.5" /> Columns
+          </OptionButton>
+        </SettingRow>
+
+        <SettingRow label="Alignment">
+          <OptionButton selected={gridAlignment === 'left'} onClick={() => setGridAlignment('left')}>
+            <AlignLeft className="w-3.5 h-3.5" /> Left
+          </OptionButton>
+          <OptionButton selected={gridAlignment === 'right'} onClick={() => setGridAlignment('right')}>
+            <AlignRight className="w-3.5 h-3.5" /> Right
+          </OptionButton>
+        </SettingRow>
+
+        <SettingRow label="Sort By">
+          {([
+            { value: 'category' as SortOrder, label: 'Category' },
+            { value: 'name' as SortOrder, label: 'Name' },
+            { value: 'kind' as SortOrder, label: 'Kind' },
+          ]).map(({ value, label }) => (
+            <OptionButton key={value} selected={sortOrder === value} onClick={() => setSortOrder(value)}>
+              {label}
+            </OptionButton>
+          ))}
+        </SettingRow>
+
+        <SettingRow label="Show File Extensions" description="Display .md, .py, etc. in icon labels">
+          <ToggleSwitch checked={showExtensions} onChange={setShowExtensions} />
+        </SettingRow>
       </Section>
     </div>
   );

@@ -34,6 +34,12 @@ def _set_summarizer_env(
     os.environ["CLAUDE_SESSION_ID"] = summarizer_id
     os.environ["CLAUDE_SESSION_MODE"] = "summarizer"
 
+    # Clear TMUX_PANE so the summarizer doesn't register on the parent's pane.
+    # Without this, the startup hook creates a session row with the parent's pane,
+    # and the context monitor sees a "new" session at high context → double-fires
+    # the reset warning.
+    os.environ.pop("TMUX_PANE", None)
+
     if role:
         os.environ["CLAUDE_SESSION_ROLE"] = role
     if conversation_id:
@@ -46,46 +52,54 @@ def _set_summarizer_env(
         f"parent={parent_session_id}, conversation={conversation_id}"
     )
 
-SUMMARIZER_PROMPT = """You're writing a handoff document for a fresh Claude session that will continue this work. The fresh session has NO context except what you provide.
+SUMMARIZER_PROMPT = """## YOUR ONE JOB
 
-The handoff file already exists at: {handoff_path}
+You MUST call the Edit tool to fill in the handoff file at: {handoff_path}
 
-It has section headers with HTML comments explaining what belongs in each section. Your job: EDIT the handoff file to fill in each section. Replace the comments with actual content.
-
----
-
-## CRITICAL: Work Continuation
-
-This is NOT just a conversational handoff. Fresh Claude needs to know:
-- What work was being done when reset happened
-- Whether to resume autonomously or wait for Will
-- What files are relevant to continue the work
-- Concrete next action (not vague "continue seamlessly")
-
-The goal: Fresh Claude picks up and continues working WITHOUT dropping the thread.
+This is NOT optional. If you don't edit the file, the next session starts COMPLETELY BLIND with zero context. Every section must be filled in with real content. Do NOT respond with just "Done" without editing. Do NOT skip sections. Call the Edit tool for each section that needs content.
 
 ---
 
-## Key Principles
+## What You're Doing
 
-**Work state matters most:**
+Writing a handoff document so a fresh Claude can pick up and continue working WITHOUT dropping the thread. The fresh session has NO context about what happened — no memory of the conversation, no sense of the user's current state, no idea what was tried and abandoned. Your handoff is the ONLY bridge.
+
+The file has section headers with HTML comments explaining what belongs in each section. Replace the comments with actual content using the Edit tool.
+{spec_section}
+---
+
+## HOW TO WRITE A GOOD HANDOFF
+
+**The goal is continuity, not documentation.** A good handoff reads like a briefing from a colleague who was just in the room. A bad handoff reads like a changelog.
+
+**Immediate Re-read List** — The MOST important section. List exact file paths the successor must read FIRST. Include:
+- The spec file if one exists (check the transcript for spec_path references)
+- plan.md and progress.md if they exist
+- Any reference docs, SYSTEM-SPECs, or code files that were actively being used
+- This is how the successor avoids wasting 5 minutes re-discovering what you already know
+
+**Active Skills** — Any /skills that were invoked during this session. If a workflow was in progress, name it.
+
+**Conversation Arc** — Tell the story of the session. Not "User asked X, Claude did Y" but the narrative flow: what was the energy like, how did topics connect, where did the thread end up? This is what makes the successor feel like they were in the room.
+
+**Relational texture matters:**
+- Preferences the user expressed, things they reacted to strongly, approaches they rejected
+- Callbacks, jokes, commitments that create continuity
+- If the next Claude didn't know something, would the conversation feel off?
+
+**Work state and resume instructions:**
 - Was Claude mid-task? Idle? In active conversation?
 - What's the concrete next step?
-- What files does fresh Claude need to re-read?
-
-**Capture relational texture:**
-- Conversational flow and how topics evolved
-- Callbacks, jokes, commitments that create continuity
-- What would be weird for fresh Claude not to know
+- Whether to resume autonomously or wait for the user
 
 **Be specific on file changes:**
 - List actual modifications made (not planned changes)
-- This helps fresh Claude know what's new vs what existed before
+- This helps fresh Claude know what's new vs what was already there
 
 **Be concise but complete:**
-- Preserve what matters, cut what doesn't
-- Operational facts are in TODAY.md/MEMORY.md - focus on what's NOT in those files
-
+- Operational facts are in TODAY.md/MEMORY.md — focus on what's NOT in those files
+- Don't repeat what's already documented — add what only you witnessed
+{previous_handoffs_section}
 ---
 
 ## Role Definition
@@ -113,7 +127,7 @@ The goal: Fresh Claude picks up and continues working WITHOUT dropping the threa
 
 ---
 
-Now edit {handoff_path} to fill in all sections. When done, just say "Done." """
+REMINDER: You MUST call the Edit tool to fill in {handoff_path}. Every section needs real content. Do not skip any section. """
 
 
 def run(
@@ -128,6 +142,7 @@ def run(
     conversation_id: str = None,
     role: str = None,
     spec_path: str = None,
+    previous_handoffs: str = None,
 ) -> None:
     """
     Run summarizer to fill in a handoff template.
@@ -143,11 +158,29 @@ def run(
         conversation_id: Conversation this summarizer belongs to
         role: Role of the parent session
         spec_path: Path to the spec on Desktop (for specialist context)
+        previous_handoffs: Concatenated contents of prior handoff docs in this chain
 
     The summarizer edits the file in place. No return value needed.
     """
     if not handoff_path.exists():
         raise ValueError(f"Handoff template must exist before running summarizer: {handoff_path}")
+
+    # Build optional sections
+    spec_section = ""
+    if spec_path:
+        spec_section = f"\n**Spec file for this session:** `{spec_path}` — Include this in the Immediate Re-read List.\n"
+
+    previous_handoffs_section = ""
+    if previous_handoffs:
+        previous_handoffs_section = f"""
+---
+
+## Previous Handoffs in This Chain
+
+The following handoff documents were written by earlier sessions in this same conversation. Use them to understand the full arc of work, not just the latest session. Summarize key context from prior handoffs in your handoff so the successor has the full picture.
+
+{previous_handoffs}
+"""
 
     prompt = SUMMARIZER_PROMPT.format(
         handoff_path=handoff_path,
@@ -156,9 +189,11 @@ def run(
         mode_content=mode_content,
         today_content=today_content,
         memory_content=memory_content,
+        spec_section=spec_section,
+        previous_handoffs_section=previous_handoffs_section,
     )
 
-    logger.info(f"Running summarizer for {handoff_path}, transcript_len={len(transcript)}")
+    logger.info(f"Running summarizer for {handoff_path}, transcript_len={len(transcript)}, has_prev_handoffs={bool(previous_handoffs)}, spec_path={spec_path}")
 
     try:
         _set_summarizer_env(parent_session_id, conversation_id, role)

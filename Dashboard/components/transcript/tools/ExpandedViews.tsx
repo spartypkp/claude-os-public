@@ -13,12 +13,14 @@ import type { ToolExpandedProps } from './types';
 import { coreExpandedViews } from './core';
 import { claudeCodeExpandedViews } from './claude-code';
 import { mcpCoreExpandedViews } from './mcp-core';
+import { chromeExpandedViews } from './chrome';
 import { DefaultExpanded, miscExpandedViews } from './misc';
 
 const expandedViewMap: Record<string, React.ComponentType<ToolExpandedProps>> = {
 	...miscExpandedViews,
 	...claudeCodeExpandedViews,
 	...mcpCoreExpandedViews,
+	...chromeExpandedViews,
 	...coreExpandedViews,
 };
 

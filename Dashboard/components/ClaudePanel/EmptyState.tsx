@@ -79,7 +79,7 @@ export function EmptyState({ hasAnySession, onSpawnChief }: EmptyStateProps) {
 
 			<button
 				onClick={onSpawnChief}
-				className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white text-xs font-medium shadow-lg shadow-[#da7756]/20 hover:shadow-xl hover:shadow-[#da7756]/30 hover:scale-105 transition-all"
+				className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-b from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white text-xs font-medium shadow-lg shadow-[var(--color-claude)]/20 hover:shadow-xl hover:shadow-[var(--color-claude)]/30 hover:scale-105 transition-all"
 			>
 				<Crown className="w-3.5 h-3.5" />
 				<span>Start Chief</span>

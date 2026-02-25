@@ -98,7 +98,7 @@ function TreeItem({ node, depth, onToggle }: TreeItemProps) {
 						) : (
 							<ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'var(--text-muted)' }} />
 						)}
-						<Folder className="w-4 h-4 shrink-0" style={{ color: '#f59e0b' }} />
+						<Folder className="w-4 h-4 shrink-0" style={{ color: 'var(--color-warning)' }} />
 					</>
 				) : (
 					<>
@@ -133,8 +133,7 @@ export function ZipViewer({ filePath }: ZipViewerProps) {
 	const [stats, setStats] = useState({ files: 0, folders: 0, totalSize: 0, compressedSize: 0 });
 
 	const fileName = filePath.split('/').pop() || filePath;
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	const loadFile = useCallback(async () => {
 		setLoading(true);
@@ -276,7 +275,7 @@ export function ZipViewer({ filePath }: ZipViewerProps) {
 				}}
 			>
 				<div className="flex items-center gap-2">
-					<Archive className="w-4 h-4" style={{ color: '#f59e0b' }} />
+					<Archive className="w-4 h-4" style={{ color: 'var(--color-warning)' }} />
 					<span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
 						ZIP Archive
 					</span>

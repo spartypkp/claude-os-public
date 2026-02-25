@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Calendar, CheckSquare, Moon, Sun } from 'lucide-react';
+import { Calendar, CheckSquare } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useWindowStore } from '@/store/windowStore';
+import { WithErrorBoundary } from '@/components/errors/ErrorBoundaries';
 
 import { CalendarWidgetContent } from '../widgets/CalendarWidgetContent';
 import { PrioritiesWidgetContent } from '../widgets/PrioritiesWidgetContent';
@@ -25,8 +26,6 @@ export function Menubar() {
 	const [calendarDropdownOpen, setCalendarDropdownOpen] = useState(false);
 	const [prioritiesDropdownOpen, setPrioritiesDropdownOpen] = useState(false);
 
-	const darkMode = useWindowStore((state) => state.darkMode);
-	const toggleDarkMode = useWindowStore((state) => state.toggleDarkMode);
 	const windows = useWindowStore((state) => state.windows);
 	const windowStack = useWindowStore((state) => state.windowStack);
 
@@ -70,14 +69,14 @@ export function Menubar() {
 						"
 						title="About Claude OS"
 					>
-						<ClaudeLogo className="w-4 h-4 text-[#da7756]" />
+						<ClaudeLogo className="w-4 h-4 text-[var(--color-claude)]" />
 					</button>
 
 					<span className="px-2 text-[13px] font-semibold text-[var(--text-primary)] shrink-0">
 						{appName}
 					</span>
 
-					<ClaudeStatus />
+					<WithErrorBoundary name="ClaudeStatus" silent><ClaudeStatus /></WithErrorBoundary>
 				</div>
 
 				{/* Center: Widgets */}
@@ -113,28 +112,11 @@ export function Menubar() {
 
 				{/* Right Side: Status Items + Clock */}
 				<div className="flex items-center gap-3">
-					<button
-						data-testid="dark-mode-toggle"
-						onClick={toggleDarkMode}
-						aria-label={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-						className="
-							p-1 rounded-[4px]
-							hover:bg-[var(--surface-muted)]
-							transition-colors duration-75
-							focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-						"
-						title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-					>
-						{darkMode ? (
-							<Sun className="w-4 h-4 text-[var(--text-primary)]" />
-						) : (
-							<Moon className="w-4 h-4 text-[var(--text-primary)]" />
-						)}
-					</button>
+					{/* Dark mode toggle hidden — dark mode needs a full design pass before re-enabling */}
 
-					<ConnectionStatus />
-					<UsageBattery />
-					<Clock />
+					<WithErrorBoundary name="ConnectionStatus" silent><ConnectionStatus /></WithErrorBoundary>
+					<WithErrorBoundary name="UsageBattery" silent><UsageBattery /></WithErrorBoundary>
+					<WithErrorBoundary name="Clock" silent><Clock /></WithErrorBoundary>
 				</div>
 			</div>
 

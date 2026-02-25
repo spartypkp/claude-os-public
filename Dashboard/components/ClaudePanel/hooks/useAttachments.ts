@@ -6,6 +6,7 @@
  */
 
 import { finderCreateFolder, finderInfo, finderRead, finderUpload } from '@/lib/api';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { INBOX_PATH, MAX_PREVIEW_BYTES, MAX_PREVIEW_CHARS } from '../constants';
@@ -42,12 +43,16 @@ interface UseAttachmentsReturn {
 // HELPERS
 // =============================================================================
 
-function normalizePath(path: string): string {
-	return path.startsWith('Desktop/') ? path.slice(8) : path;
+/** Normalize a path for API calls — strips Desktop/ prefix, handles absolute paths */
+function normalizeForApi(path: string): string {
+	return toDesktopRelative(path);
 }
 
+/** Ensure path has Desktop/ prefix for storage, unless it's an external path */
 function ensureDesktopPath(path: string): string {
 	if (path.startsWith('Desktop/')) return path;
+	// Don't prefix paths outside Desktop (e.g. .engine/data/uploads/ or absolute non-Desktop paths)
+	if (path.startsWith('.engine/') || path.startsWith('/')) return path;
 	return `Desktop/${path.replace(/^\/+/, '')}`;
 }
 
@@ -151,17 +156,19 @@ export function useAttachments({ sessionId }: UseAttachmentsOptions): UseAttachm
 			}];
 		});
 
-		// Fetch file info in background
-		try {
-			const info = await finderInfo(normalizePath(normalizedPath));
-			setAttachedFiles(prev => prev.map(item => (
-				item.path === normalizedPath ? { ...item, size: info.size ?? null } : item
-			)));
-		} catch (err) {
-			const message = err instanceof Error ? err.message : 'Failed to read file info';
-			setAttachedFiles(prev => prev.map(item => (
-				item.path === normalizedPath ? { ...item, error: message } : item
-			)));
+		// Fetch file info in background (only for Desktop files — temp uploads skip this)
+		if (!normalizedPath.startsWith('.engine/')) {
+			try {
+				const info = await finderInfo(normalizeForApi(normalizedPath));
+				setAttachedFiles(prev => prev.map(item => (
+					item.path === normalizedPath ? { ...item, size: info.size ?? null } : item
+				)));
+			} catch (err) {
+				const message = err instanceof Error ? err.message : 'Failed to read file info';
+				setAttachedFiles(prev => prev.map(item => (
+					item.path === normalizedPath ? { ...item, error: message } : item
+				)));
+			}
 		}
 	}, []);
 
@@ -191,7 +198,7 @@ export function useAttachments({ sessionId }: UseAttachmentsOptions): UseAttachm
 
 		// Load preview
 		try {
-			const fileData = await finderRead(normalizePath(path));
+			const fileData = await finderRead(normalizeForApi(path));
 			const preview = fileData.content.slice(0, MAX_PREVIEW_CHARS);
 			setAttachedFiles(prev => prev.map(item => (
 				item.path === path

@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { useWindowStore } from '@/store/windowStore';
 import { useChatPanel } from '@/components/context/ChatPanelContext';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import type { CoreAppType } from '@/store/windowStore';
 
 /**
@@ -20,21 +21,17 @@ export function useOpenInDesktop() {
    */
   const openFile = useCallback((path: string, preferFinder = false) => {
     if (!path) return;
-    
-    // Normalize path - ensure it starts with Desktop/ if relative
-    const normalizedPath = path.startsWith('/') 
-      ? path 
-      : path.startsWith('Desktop/') 
-        ? path 
-        : `Desktop/${path}`;
-    
+
+    // Normalize to Desktop-relative for Finder, keep original for window
+    const relativePath = toDesktopRelative(path);
+    const normalizedPath = path.startsWith('/') ? path : (path.startsWith('Desktop/') ? path : `Desktop/${path}`);
+
     const fileName = path.split('/').pop() || 'File';
     const isDirectory = !fileName.includes('.') || fileName.endsWith('/');
-    
+
     // Directories always open in Finder
     if (isDirectory || preferFinder) {
-      // Get parent directory for Finder
-      const parts = normalizedPath.replace(/^Desktop\//, '').split('/');
+      const parts = relativePath.split('/');
       const dirPath = parts.slice(0, -1).join('/') || '';
       openAppWindow('finder', dirPath);
     } else {
@@ -47,7 +44,7 @@ export function useOpenInDesktop() {
    * Open Finder at a specific directory
    */
   const openInFinder = useCallback((dirPath?: string) => {
-    const normalized = dirPath?.replace(/^Desktop\//, '') || '';
+    const normalized = dirPath ? toDesktopRelative(dirPath) : '';
     openAppWindow('finder', normalized);
   }, [openAppWindow]);
 
@@ -62,8 +59,7 @@ export function useOpenInDesktop() {
    * Open Contacts app (optionally search for a contact)
    */
   const openContact = useCallback((contactName?: string) => {
-    // TODO: Could pass search query to contacts app
-    openAppWindow('contacts');
+    openAppWindow('contacts', contactName);
   }, [openAppWindow]);
 
   /**
@@ -172,7 +168,7 @@ export function ClickableRef({
       onClick={handleClick}
       className={`
         cursor-pointer hover:underline decoration-dotted underline-offset-2
-        hover:text-[#da7756] transition-colors
+        hover:text-[var(--color-claude)] transition-colors
         ${className}
       `}
       title={`Open ${type}: ${value}`}

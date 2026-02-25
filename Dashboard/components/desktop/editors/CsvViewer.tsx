@@ -3,6 +3,7 @@
 import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { AlertCircle, AlertTriangle, RefreshCw, Table2, TextCursorInput } from 'lucide-react';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -103,7 +104,7 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 
 	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
 	const handleExternalChange = useCallback((event: { path: string }) => {
-		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
+		const normalizeFilePath = (path: string) => toDesktopRelative(path);
 		const eventPath = normalizeFilePath(event.path);
 		const currentPath = normalizeFilePath(filePathRef.current);
 
@@ -275,7 +276,7 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 						onClick={() => setViewMode('table')}
 						className="p-1.5 rounded transition-colors"
 						style={{
-							color: viewMode === 'table' ? '#DA7756' : 'var(--text-tertiary)',
+							color: viewMode === 'table' ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: viewMode === 'table' ? 'rgba(218, 119, 86, 0.1)' : 'transparent',
 						}}
 						title="Table view"
@@ -287,7 +288,7 @@ export function CsvViewer({ filePath }: CsvViewerProps) {
 						onClick={() => setViewMode('raw')}
 						className="p-1.5 rounded transition-colors"
 						style={{
-							color: viewMode === 'raw' ? '#DA7756' : 'var(--text-tertiary)',
+							color: viewMode === 'raw' ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: viewMode === 'raw' ? 'rgba(218, 119, 86, 0.1)' : 'transparent',
 						}}
 						title="Raw view"

@@ -8,7 +8,7 @@ Structure:
   ├── server.py          ← This file: pure composition
   └── tools/
       ├── lifecycle.py   ← reset, done, status (CRITICAL - Claude's survival)
-      ├── system.py      ← team (meta-operations incl. reply)
+      ├── system.py      ← team (specialist orchestration + communication)
       └── day.py         ← day (timeline logging + priority management)
 
   modules/*/mcp.py       ← Domain tools (calendar, contacts, email, etc.)
@@ -20,7 +20,7 @@ Tools:
     - status(text)            Report what I'm doing (dashboard sidebar)
 
   System:
-    - team(op)                Operations: spawn, list, peek, close, message, subscribe, reply
+    - team(op)                Operations: spawn, list, peek, close, message
     - schedule(op)            Cron schedule management
 
   Day:
@@ -37,8 +37,6 @@ Tools:
     - analytics(op)           Operational metrics (specialists, tools, sessions, resets)
     - lineage(op)             Search Claude's private archive
 
-  Custom Apps:
-    - (add your own custom app tools here)
 """
 
 from __future__ import annotations
@@ -154,6 +152,17 @@ try:
     mcp.mount(telegram_mcp)
 except Exception as e:
     logger.warning(f"Failed to load telegram tools: {e}")
+
+# =============================================================================
+# CUSTOM APP TOOLS
+# =============================================================================
+
+# Release (private → public sync tracking)
+try:
+    from modules.release.mcp import mcp as release_mcp
+    mcp.mount(release_mcp)
+except Exception as e:
+    logger.warning(f"Failed to load release tools: {e}")
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")

@@ -136,8 +136,44 @@ Don't ignore instincts because the checklist passed. And don't suppress positive
 
 ## When You're Done
 
+### 1. Commit the work (Builder only)
+
+If this is a Builder task and there are code changes to `Dashboard/`, `.engine/src/`, or `.claude/`, commit them:
+
+```bash
+# Stage ONLY code and config — never Desktop/, conversations/, logs, or DB files
+git add Dashboard/ .engine/src/ .claude/ .gitignore
+git status  # sanity check what's staged
+git commit -m "$(cat <<'EOF'
+type(scope): description
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+```
+
+**Commit format:** Conventional commits. `feat`, `fix`, `refactor`, `docs`, `chore`. Scope is optional but helpful: `feat(dashboard): PathBar breadcrumbs`, `fix: email HTML escaping`. Imperative mood.
+
+**What to stage:** `Dashboard/`, `.engine/src/`, `.claude/`, `.gitignore`, config files. **Never stage:** `Desktop/` (Chief's domain), `Desktop/conversations/` (ephemeral), `.engine/data/` (logs/DB).
+
+**Skip the commit if:** No code changes (prompt-only or Desktop-only work), or verification is failing this back to implementation.
+
+Non-Builder roles (Writer, Researcher, Curator, Project) do not commit. Their file changes are swept into Chief's periodic commits.
+
+### 2. Call done()
+
+---
+
+**Your done() summary is read by Chief and the user.** Write it for them, not for yourself. Don't recite which criteria passed. Tell them what was accomplished across the entire specialist engagement, what decisions were made, and what they need to know.
+
+**Bad:** "Verified context-loading-overhaul-spec.md — all 9 criteria pass. Spec is clean and Builder-ready. Path bug fix is Step 1. SYSTEM-INDEX.md removed from core_files..."
+
+**Good:** "Merged two investigation reports into one build spec. The core problem: session context loading is both broken (path bug means auto_include never worked) and wasteful (SYSTEM-INDEX loaded twice). Spec orders the fix: patch start.py first, then clean up all 9 role frontmatter, then wire Builder's 7 SYSTEM-SPECs. Ready for Builder. Spec at Desktop/context-loading-overhaul-spec.md."
+
+The summary should answer: **What was the task? What was built/decided? What does Chief need to do next?** Criteria results belong in the verification details, not the summary.
+
 **Pass (all criteria met, possibly with Tier 1 fixes):**
-`done()` with summary and `passed=true`. Include Tier 4 observations if any.
+`done()` with executive summary and `passed=true`. Include Tier 4 observations if any.
 
 **Fail (Tier 2 — real issues):**
 `done()` with summary, `passed=false`, `feedback="specific actionable feedback"`.

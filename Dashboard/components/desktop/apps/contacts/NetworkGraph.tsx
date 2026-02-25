@@ -16,12 +16,12 @@ import '@xyflow/react/dist/style.css';
 import { Loader2, Users } from 'lucide-react';
 import { API_BASE } from '@/lib/api';
 
-const CLAUDE_CORAL = '#DA7756';
+const CLAUDE_CORAL = 'var(--color-claude)';
 
 // Color palette for companies
 const COMPANY_COLORS = [
-  '#DA7756', '#5B8DEF', '#22c55e', '#f59e0b', '#a855f7',
-  '#ec4899', '#14b8a6', '#ef4444', '#6366f1', '#84cc16',
+  'var(--color-claude)', '#5B8DEF', 'var(--color-success)', 'var(--color-warning)', '#a855f7',
+  '#ec4899', '#14b8a6', 'var(--color-error)', '#6366f1', '#84cc16',
 ];
 
 interface GraphNode {
@@ -104,7 +104,7 @@ function ContactNodeComponent({ data }: { data: Record<string, unknown> }) {
         {d.pinned && (
           <div
             className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2"
-            style={{ background: '#f59e0b', borderColor: 'rgba(30,30,30,0.85)' }}
+            style={{ background: 'var(--color-warning)', borderColor: 'rgba(30,30,30,0.85)' }}
           />
         )}
       </div>
@@ -286,8 +286,8 @@ function NetworkGraphInner({ onSelectContact }: NetworkGraphProps) {
   if (!graphData || graphData.nodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center px-8">
-        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#DA7756]/20 to-[#C15F3C]/30 flex items-center justify-center mb-3">
-          <Users className="w-7 h-7 text-[#DA7756]" />
+        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[var(--color-claude)]/20 to-[var(--color-primary-hover)]/30 flex items-center justify-center mb-3">
+          <Users className="w-7 h-7 text-[var(--color-claude)]" />
         </div>
         <p className="text-sm font-medium text-[var(--text-primary)] mb-1">No connections yet</p>
         <p className="text-xs text-[#8E8E93]">

@@ -33,7 +33,7 @@ Bad skills (Claude already does these):
 Ask: **"How would you ask for this? What words would you use?"**
 
 Their answer becomes the `description` field and trigger examples. Think about:
-- Slash command: `/money-check`, `/morning`, `/leetcode`
+- Slash command: `/morning`, `/leetcode`
 - Natural language: "check my portfolio", "do the morning thing"
 - Scheduled: runs at a specific time (via missions)
 

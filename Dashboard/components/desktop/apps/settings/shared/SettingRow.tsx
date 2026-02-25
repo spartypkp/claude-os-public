@@ -14,7 +14,7 @@ export function SettingRow({
   const colorClass = valueColor === 'success'
     ? 'text-green-500'
     : valueColor === 'coral'
-    ? 'text-[#DA7756]'
+    ? 'text-[var(--color-claude)]'
     : 'text-[#8E8E93]';
 
   return (

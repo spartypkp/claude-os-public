@@ -99,7 +99,6 @@ class MessagingService:
         type: MessageType,
         target: str,
         submit: bool = True,
-        delay: float = 0.3
     ) -> bool:
         """Send a message to a Claude session.
 
@@ -108,12 +107,11 @@ class MessagingService:
             type: Semantic message type
             target: tmux pane or window (use MessageTarget to resolve)
             submit: Press Enter after message
-            delay: Seconds to wait before Enter
 
         Returns:
             True if successful
         """
-        return inject_message(target, content, submit=submit, delay=delay)
+        return inject_message(target, content, submit=submit)
 
     def display(
         self,
@@ -180,7 +178,6 @@ A fresh session will spawn and continue your work seamlessly."""
             message,
             type=MessageType.WARNING,
             target=target,
-            delay=0.2
         )
 
     def warn_mission_reset(self, minutes: int) -> bool:
@@ -203,7 +200,6 @@ Your work continues in a fresh Chief session after the mission."""
             message,
             type=MessageType.WARNING,
             target=target,
-            delay=0.2
         )
 
     def notify_specialist_complete(self, session_id: str, role: str, summary: str) -> bool:
@@ -250,7 +246,6 @@ Your work continues in a fresh Chief session after the mission."""
             prompt,
             type=MessageType.PROMPT,
             target=target,
-            delay=0.3
         )
 
 

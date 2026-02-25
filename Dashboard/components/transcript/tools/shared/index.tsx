@@ -101,7 +101,7 @@ const VARIANT_COLORS: Record<SectionVariant, string> = {
 
 export function SectionHeader({ children, variant = 'default' }: SectionHeaderProps) {
 	return (
-		<div className={`text-[9px] font-medium uppercase tracking-wider mb-1 ${VARIANT_COLORS[variant]}`}>
+		<div className={`text-[10px] font-medium uppercase tracking-wider mb-1 ${VARIANT_COLORS[variant]}`}>
 			{children}
 		</div>
 	);
@@ -191,7 +191,7 @@ export function FilePathHeader({ path, variant = 'default' }: FilePathHeaderProp
 					className="p-1 rounded hover:bg-[var(--surface-accent)] transition-colors"
 					title={canView ? 'Open file' : 'Show in Finder'}
 				>
-					<ExternalLink className="w-3 h-3 text-[var(--text-muted)] hover:text-[#da7756]" />
+					<ExternalLink className="w-3 h-3 text-[var(--text-muted)] hover:text-[var(--color-claude)]" />
 				</button>
 				{canView && (
 					<button
@@ -199,7 +199,7 @@ export function FilePathHeader({ path, variant = 'default' }: FilePathHeaderProp
 						className="p-1 rounded hover:bg-[var(--surface-accent)] transition-colors"
 						title="Show in Finder"
 					>
-						<FolderOpen className="w-3 h-3 text-[var(--text-muted)] hover:text-[#da7756]" />
+						<FolderOpen className="w-3 h-3 text-[var(--text-muted)] hover:text-[var(--color-claude)]" />
 					</button>
 				)}
 				<CopyButton text={path} />
@@ -215,7 +215,7 @@ export function FilePathHeader({ path, variant = 'default' }: FilePathHeaderProp
 interface StatusBadgeProps {
 	/** The text to display */
 	label: string;
-	/** CSS color value (e.g., 'var(--color-success)', '#22c55e') */
+	/** CSS color value (e.g., 'var(--color-success)', 'var(--color-success)') */
 	color: string;
 	/** Size variant */
 	size?: 'sm' | 'md';
@@ -231,7 +231,7 @@ interface StatusBadgeProps {
  */
 export function StatusBadge({ label, color, size = 'sm' }: StatusBadgeProps) {
 	const sizeClasses = size === 'sm'
-		? 'text-[9px] px-1.5 py-0.5'
+		? 'text-[10px] px-1.5 py-0.5'
 		: 'text-[10px] px-2 py-1';
 
 	return (
@@ -271,7 +271,7 @@ export function OperationHeader({ operation, id, icon: Icon }: OperationHeaderPr
 	return (
 		<div className="flex items-center gap-2">
 			{Icon && <Icon className="w-3 h-3 text-[var(--text-muted)]" />}
-			<span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">{operation}</span>
+			<span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{operation}</span>
 			{id && (
 				<span className="text-[10px] font-mono bg-[var(--surface-muted)] px-1.5 py-0.5 rounded">
 					{id.slice(0, 8)}
@@ -380,5 +380,13 @@ export function ResultIndicator({
 export function isErrorResult(rawResult?: string): boolean {
 	if (!rawResult) return false;
 	const lower = rawResult.toLowerCase();
-	return lower.includes('error') || lower.includes('failed') || lower.includes('exception');
+	// Only match error indicators at the start of the result or structured error patterns.
+	// Don't match "error" appearing inside file contents (e.g., error handling code).
+	return lower.startsWith('error:') ||
+		lower.startsWith('error -') ||
+		lower.startsWith('failed:') ||
+		lower.startsWith('failed to') ||
+		lower.includes('traceback (most recent') ||
+		lower.startsWith('exception:') ||
+		lower.startsWith('command failed');
 }

@@ -32,8 +32,6 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 | `/desktop/[...path]` | File viewer for Desktop/ files |
 | `/activity` | Today's sessions overview |
 | `/activity/session/[id]` | Session detail with chat UI |
-| `/job-search` | Custom App: Interview prep command center |
-| `/job-search/*` | Leetcode, DS&A, Pipeline, Opportunities |
 | `/system/health` | Backend status, database, scheduler |
 | `/system/settings` | System configuration |
 | `/system/docs` | System documentation browser |
@@ -73,13 +71,19 @@ This isn't just a dashboard. It's the **shared surface** between you and your ch
 
 ### Performance Notes
 
+**Data Architecture (Feb 2026 audit):**
+- **SSE-first**: 3 SSE connections total — system events (EventStreamProvider), file events (FileEventProvider), per-conversation transcript (useConversation). All other data uses React Query with SSE-driven cache invalidation (see `eventToQueryKeys` in queryClient.ts).
+- **No polling by default**: `refetchInterval: false` globally. Exceptions: `useCalendarInlineQuery` (60s, countdown timers), `useUsageQuery` (60s, no SSE event), `useConnectionQuery` (30s, health check). Calendar/email widgets are SSE-invalidated React Query hooks. Email pipeline polls 8s when processing, 60s when idle.
+- **FileEventProvider**: Single shared SSE connection for file change events. All `useFileEvents()` calls subscribe to this provider instead of opening individual EventSource connections. Before: N connections (one per editor/Finder/desktop). After: 1 connection.
+- **Editor barrel**: `editors/index.ts` only exports utility functions + DocumentRouter. All viewer components are lazy-loaded via `next/dynamic` in DocumentRouter to prevent heavy deps (xlsx ~222KB, Monaco ~2MB) from entering the initial bundle.
+- **Chief transcript**: `limitSessions=3` caps DOM at ~5.4K nodes (was 19K with `hours=24`). Specialists are naturally bounded by lifecycle.
+
 **Desktop Icon Dragging (optimized Jan 2026):**
 - Grid cells match icon size (96x112px) to prevent overlap
 - CSS transitions disabled during drag (only color transitions remain)
 - Lightweight `DesktopIconPreview` component for DragOverlay (no logic, just visuals)
 - GPU acceleration via `willChange: transform` hint
 - `visibility: hidden` instead of opacity changes
-- See `Workspace/working/desktop-ux-audit.md` for full analysis
 
 ---
 
@@ -125,7 +129,7 @@ Custom Apps (Job Search, etc.) always open as fullscreen routes.
 ```
 
 **The Portal mirrors this:**
-- Static views = Will's content (Desktop, Calendar)
+- Static views = the user's content (Desktop, Calendar)
 - Dynamic sidebar = Active Claude work (sessions)
 - Memory view = Claude's knowledge state
 - Missions view = Scheduled autonomous work
@@ -210,10 +214,12 @@ This SYSTEM-SPEC provides the overview. See these focused specs for details:
 | File | Purpose |
 |------|---------|
 | `hooks/useClaudeActivityState.ts` | Activity indicator |
-| `hooks/useTranscriptStream.ts` | Transcript SSE stream |
-| `hooks/useEventStream.tsx` | System events SSE stream |
+| `hooks/useConversation.ts` | Per-conversation SSE stream + REST history |
+| `hooks/useEventStream.tsx` | System events SSE (single connection, cache invalidation) |
+| `hooks/useFileEvents.tsx` | File events SSE (single shared connection via FileEventProvider) |
 | `hooks/useTheme.ts` | Theme management |
 | `hooks/useDesktopLayout.ts` | Desktop icon layout |
+| `hooks/queries/*.ts` | React Query hooks (SSE-invalidated, see queryClient.ts for key mapping) |
 
 ### Windows
 
@@ -221,4 +227,4 @@ This SYSTEM-SPEC provides the overview. See these focused specs for details:
 |------|---------|
 | `components/desktop/DesktopWindow.tsx` | Window container with traffic lights |
 | `components/desktop/windows/*.tsx` | Core App window content |
-| `components/ApplicationShell.tsx` | Fullscreen app wrapper |
+| `components/ApplicationShell.tsx` | Fullscreen app wrapper — all apps full height, dock floats on top. `fullBleed` controls overflow (hidden for canvas apps, auto+spacer for scrollable) |

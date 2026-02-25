@@ -1,0 +1,3 @@
+# Account configuration — populated by /setup or manually.
+# Run /setup to connect your email, calendar, and messaging accounts.
+accounts: {}

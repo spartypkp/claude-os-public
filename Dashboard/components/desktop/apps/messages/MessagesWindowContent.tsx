@@ -13,13 +13,13 @@ import { API_BASE } from '@/lib/api';
 import { toast } from 'sonner';
 
 // Claude OS themed colors (matching Finder)
-const CLAUDE_CORAL = '#DA7756';
+const CLAUDE_CORAL = 'var(--color-claude)';
 const CLAUDE_CORAL_LIGHT = '#E8A088';
 
 // Claude logo badge component
 function ClaudeBadge() {
   return (
-    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center flex-shrink-0">
+    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center flex-shrink-0">
       <svg className="w-3 h-3 text-white" viewBox="0 0 16 16" fill="currentColor">
         <path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
       </svg>
@@ -225,7 +225,7 @@ export function MessagesWindowContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search messages..."
-              className="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-[#2a2a2a] border border-gray-300 dark:border-[#3a3a3a] rounded-md focus:outline-none focus:ring-1 focus:ring-[#DA7756] focus:border-[#DA7756]"
+              className="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-[#2a2a2a] border border-gray-300 dark:border-[#3a3a3a] rounded-md focus:outline-none focus:ring-1 focus:ring-[var(--color-claude)] focus:border-[var(--color-claude)]"
             />
           </div>
         </div>
@@ -243,7 +243,7 @@ export function MessagesWindowContent() {
         <div className="flex-1 overflow-auto" data-testid="messages-conversation-list">
           {loading ? (
             <div className="flex items-center justify-center h-32">
-              <Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+              <Loader2 className="w-6 h-6 animate-spin text-[var(--color-claude)]" />
             </div>
           ) : isSearching ? (
             // Search results — show flat message list
@@ -290,15 +290,15 @@ export function MessagesWindowContent() {
                   onClick={() => handleSelectConversation(conv)}
                   className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-colors ${
                     selectedChat?.id === conv.id
-                      ? 'bg-[#DA7756]/10 dark:bg-[#DA7756]/20'
+                      ? 'bg-[var(--color-claude)]/10 dark:bg-[var(--color-claude)]/20'
                       : 'hover:bg-black/5 dark:hover:bg-white/5'
                   }`}
                 >
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${
                       selectedChat?.id === conv.id
-                        ? 'bg-gradient-to-br from-[#DA7756] to-[#C15F3C] text-white'
-                        : 'bg-[#DA7756]/10 dark:bg-[#DA7756]/20 text-[#DA7756]'
+                        ? 'bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white'
+                        : 'bg-[var(--color-claude)]/10 dark:bg-[var(--color-claude)]/20 text-[var(--color-claude)]'
                     }`}
                   >
                     {conv.display_name.charAt(0).toUpperCase()}
@@ -317,7 +317,7 @@ export function MessagesWindowContent() {
                     </p>
                     {conv.unread_count > 0 && (
                       <div className="mt-1">
-                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-[#DA7756] text-white rounded-full">
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-[var(--color-claude)] text-white rounded-full">
                           {conv.unread_count}
                         </span>
                       </div>
@@ -349,7 +349,7 @@ export function MessagesWindowContent() {
               {/* Thread Header */}
               <div className="px-4 py-3 bg-[#FAFAFA] dark:bg-[#252525] border-b border-[#E5E5E5] dark:border-[#3a3a3a] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] text-white flex items-center justify-center text-lg font-medium">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white flex items-center justify-center text-lg font-medium">
                     {selectedChat.display_name.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -370,7 +370,7 @@ export function MessagesWindowContent() {
               <div className="flex-1 overflow-auto p-4 space-y-3 w-full">
                 {messagesLoading ? (
                   <div className="flex items-center justify-center h-32">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+                    <Loader2 className="w-6 h-6 animate-spin text-[var(--color-claude)]" />
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex items-center justify-center h-32 text-[#8E8E93]">
@@ -385,7 +385,7 @@ export function MessagesWindowContent() {
                       <div
                         className={`max-w-[70%] rounded-2xl px-4 py-2 break-words ${
                           msg.is_from_me
-                            ? 'bg-gradient-to-br from-[#DA7756] to-[#C15F3C] text-white'
+                            ? 'bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white'
                             : 'bg-[#F0F0F0] dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100'
                         }`}
                       >
@@ -425,7 +425,7 @@ export function MessagesWindowContent() {
                     }}
                     placeholder="iMessage"
                     rows={1}
-                    className="flex-1 px-3 py-2 text-sm bg-white dark:bg-[#2a2a2a] border border-[#E5E5E5] dark:border-[#3a3a3a] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#DA7756] focus:border-[#DA7756] resize-none"
+                    className="flex-1 px-3 py-2 text-sm bg-white dark:bg-[#2a2a2a] border border-[#E5E5E5] dark:border-[#3a3a3a] rounded-lg focus:outline-none focus:ring-1 focus:ring-[var(--color-claude)] focus:border-[var(--color-claude)] resize-none"
                     style={{
                       minHeight: '36px',
                       maxHeight: '120px',
@@ -434,7 +434,7 @@ export function MessagesWindowContent() {
                   <button
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || sending}
-                    className="p-2 rounded-lg bg-gradient-to-br from-[#DA7756] to-[#C15F3C] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    className="p-2 rounded-lg bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                     title="Send (Enter)"
                   >
                     {sending ? (

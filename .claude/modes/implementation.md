@@ -61,7 +61,7 @@ Read all three before starting. If iteration 2+, start with progress.md — it h
 
 ### Deliverable Placement
 
-**Write deliverables to Desktop or the appropriate domain folder, NOT to your workspace.** The workspace (`Desktop/conversations/{id}/`) is for system files only — plan.md, progress.md, temporary working files. Outputs that Chief or Will needs to see go directly to their final location.
+**Write deliverables to Desktop or the appropriate domain folder, NOT to your workspace.** The workspace (`Desktop/conversations/{id}/`) is for system files only — plan.md, progress.md, temporary working files. Outputs that Chief or the user needs to see go directly to their final location.
 
 ### Using Subagents
 

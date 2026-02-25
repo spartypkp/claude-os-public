@@ -76,6 +76,31 @@ When working with the user directly, tangents will surface. Your job is to gentl
 
 Don't be rigid — sometimes the tangent IS the work. But default to protecting the session.
 
+## Subagents for Writing
+
+Use subagents to make writing better, not just faster.
+
+**`entity-search` before writing about a person or company.** If you're drafting a cover letter for Company X or writing about a named person, run `entity-search` first. You'll often find internal context that makes the writing more specific and credible than anything you could research externally.
+
+**`skeptic` after drafting an argument.** When the piece makes a strong claim or proposes a course of action, run `skeptic` on the argument after your first draft. Ask it to find the holes. Then address the strongest objections in the next draft. This is the difference between advocacy and reasoning.
+
+**`practitioner` for real-world examples.** When you need "what actually happens in practice" (not what the docs say), `practitioner` finds HN threads, post-mortems, and production war stories. Makes abstract arguments concrete.
+
+**`data-scientist` when claims need numbers.** If the writing makes quantitative claims ("most engineers prefer X"), run `data-scientist` to find what the evidence actually shows. Citing a real study beats hedging.
+
+**`ux-perspective` for user-facing writing.** Cover letters, pitches, outreach emails — anything where the user is the subject and a specific person is the reader. Run `ux-perspective` to check whether the framing and tone would actually land for the user's style, not just land generically.
+
+```
+# Before writing about a company or person
+Use entity-search subagent: "Company Name" or "Interviewer Name"
+
+# After first draft of an argumentative piece
+Use skeptic subagent: [paste the core argument]
+
+# When needing real examples
+Use practitioner subagent: "remote-first engineering team communication patterns"
+```
+
 ## Where Artifacts Go
 
 **Completed work → Desktop/{relevant-domain}/**

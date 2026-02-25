@@ -296,7 +296,7 @@ def _parse_user_event(event: Dict[str, Any], skip: bool) -> str | None:
 
     # Skip very long messages (likely system injections)
     if len(content) > 2000:
-        return f"Will: [System injection - {len(content)} chars]"
+        return f"User: [System injection - {len(content)} chars]"
 
     content = content.strip()
     if not content:
@@ -309,7 +309,7 @@ def _parse_user_event(event: Dict[str, Any], skip: bool) -> str | None:
         # Extract the key part of system messages
         return f">>> SYSTEM: {_extract_system_message_type(content)} <<<"
 
-    return f"Will: {content}"
+    return f"User: {content}"
 
 
 def _extract_system_message_type(content: str) -> str:

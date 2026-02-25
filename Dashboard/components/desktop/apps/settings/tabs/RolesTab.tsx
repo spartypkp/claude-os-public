@@ -29,7 +29,7 @@ export function RolesTab({ roles, loading }: { roles: RolesTabRole[]; loading: b
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-5 h-5 border-2 border-[#DA7756] border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-[var(--color-claude)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -45,7 +45,7 @@ export function RolesTab({ roles, loading }: { roles: RolesTabRole[]; loading: b
             const Icon = ICON_MAP[role.display.icon || ''] || Users;
             return (
               <div key={role.slug} className="flex items-start gap-3 px-4 py-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center flex-shrink-0 mt-0.5">
                   <Icon className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -59,7 +59,7 @@ export function RolesTab({ roles, loading }: { roles: RolesTabRole[]; loading: b
                   {role.modes.length > 0 && (
                     <div className="flex gap-1 mt-1.5">
                       {role.modes.map(mode => (
-                        <span key={mode} className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#DA7756]/10 text-[#DA7756] font-medium">
+                        <span key={mode} className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-claude)]/10 text-[var(--color-claude)] font-medium">
                           {mode}
                         </span>
                       ))}

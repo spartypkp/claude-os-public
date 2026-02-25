@@ -35,14 +35,14 @@ class PromptAssemblyService:
         Same files that Chief/Specialists get auto-loaded:
         - TODAY.md (daily memory, schedule, priorities)
         - MEMORY.md (persistent patterns)
-        - IDENTITY.md (who Will is)
+        - IDENTITY.md (who the user is)
         - SYSTEM-INDEX.md (system overview)
         """
         desktop = self.repo_root / "Desktop"
         context_files = [
             ("TODAY.md", "Daily Memory"),
             ("MEMORY.md", "Persistent Memory"),
-            ("IDENTITY.md", "About Will"),
+            ("IDENTITY.md", "About the User"),
             ("SYSTEM-INDEX.md", "System Overview"),
         ]
 

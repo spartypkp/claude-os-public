@@ -1,12 +1,12 @@
 'use client';
 
 import { API_BASE, fetchFileContent, finderInfo, FinderItem } from '@/lib/api';
-import { useWindowStore } from '@/store/windowStore';
+import { useWindowStore, useQuickLookOrigin } from '@/store/windowStore';
 import { Folder, Image, Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { getDocumentType, getFileIconSpec, getLanguage } from './editors';
+import { getDocumentType, getFileIconSpec, getLanguage } from '@/lib/fileTypes';
 
 /**
  * macOS-style Quick Look preview modal.
@@ -16,6 +16,7 @@ import { getDocumentType, getFileIconSpec, getLanguage } from './editors';
  */
 export function QuickLook() {
 	const { quickLookPath, closeQuickLook } = useWindowStore();
+	const quickLookOrigin = useQuickLookOrigin();
 	const [loading, setLoading] = useState(false);
 	const [content, setContent] = useState('');
 	const [error, setError] = useState<string | null>(null);
@@ -154,7 +155,7 @@ export function QuickLook() {
 
 	// Get icon for file type
 	const getIcon = () => {
-		if (isFolder) return <Folder className="w-5 h-5" style={{ color: '#DA7756' }} />;
+		if (isFolder) return <Folder className="w-5 h-5" style={{ color: 'var(--color-claude)' }} />;
 		switch (docType) {
 			case 'image':
 				return <Image className="w-5 h-5" style={{ color: 'var(--color-info)' }} />;
@@ -377,20 +378,37 @@ export function QuickLook() {
 		}
 	};
 
+	// Calculate animation origin from icon position
+	const modalWidth = 700;
+	const modalHeight = 500;
+	const qlAnimStyle: React.CSSProperties = quickLookOrigin ? {
+		// The animation goes from icon center to viewport center
+		// --ql-start-x/y is offset from the final position (top:50% left:50% -translate(-50%,-50%))
+		'--ql-start-x': `${quickLookOrigin.x + quickLookOrigin.width / 2 - window.innerWidth / 2}px`,
+		'--ql-start-y': `${quickLookOrigin.y + quickLookOrigin.height / 2 - window.innerHeight / 2}px`,
+		animation: 'quickLookIn 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+	} as React.CSSProperties : {
+		animation: 'quickLookIn 200ms ease-out forwards',
+		'--ql-start-x': '0px',
+		'--ql-start-y': '0px',
+	} as React.CSSProperties;
+
 	return (
 		<>
 			{/* Backdrop */}
 			<div
 				className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[900]"
+				style={{ animation: 'quickLookBackdropIn 200ms ease-out' }}
 				onClick={closeQuickLook}
 			/>
 
 			{/* Modal */}
 			<div
-				className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] max-w-[90vw] h-[500px] max-h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden z-[901]"
-				style={{ 
-					background: 'var(--surface-raised)', 
-					border: '1px solid var(--border-default)' 
+				className="fixed top-1/2 left-1/2 w-[700px] max-w-[90vw] h-[500px] max-h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden z-[901]"
+				style={{
+					background: 'var(--surface-raised)',
+					border: '1px solid var(--border-default)',
+					...qlAnimStyle,
 				}}
 			>
 				{/* Header */}

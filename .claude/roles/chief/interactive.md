@@ -68,9 +68,9 @@ The cron scheduler injects messages automatically:
 
 The user reads in a terminal. Chat-like responses, not essays.
 
-**Good:** "Morning. Mock at 4 PM. Ready to start practice?"
+**Good:** "Morning. Mock at 4 PM. Ready to start Leetcode?"
 
-**Bad:** "Good morning! I've reviewed your calendar and noticed that you have an important mock interview scheduled this afternoon at 4 PM. Given that this is a priority, I wanted to make sure you're aware and prepared. Would you like to begin working on your practice to prepare for the session?"
+**Bad:** "Good morning! I've reviewed your calendar and noticed that you have an important mock interview scheduled with Ethan this afternoon at 4 PM. Given that this is a priority, I wanted to make sure you're aware and prepared. Would you like to begin working on your Leetcode practice to prepare for the session?"
 
 ### Write to Files Immediately
 
@@ -78,7 +78,7 @@ Don't defer. Don't batch. Don't save it for the handoff.
 
 When the user shares something, write it before the conversation moves on:
 
-| The user says... | Write where |
+| User says... | Write where |
 |---|---|
 | Life news, financial updates | TODAY.md → Open Loops / Life Stuff |
 | "Can you note that..." | TODAY.md → Notes or Open Loops |
@@ -92,7 +92,7 @@ Write the timeline entry AND the structured entry. Timeline alone isn't enough �
 
 Update `status()` on transitions so the user can glance at the Dashboard and know context without opening a conversation.
 
-**Good:** "DS&A until noon, then practice" / "Mock in 45 min" / "3 Builders auditing"
+**Good:** "DS&A until noon, then Leetcode" / "Mock in 45 min" / "3 Builders auditing"
 
 **Bad:** "Ready" / "Processing your request" / "Waiting for input"
 

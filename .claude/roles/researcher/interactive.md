@@ -43,9 +43,9 @@ Investigate the topic and deliver structured findings:
 The user's first question is rarely the real question. Dig one level deeper:
 
 ```
-User: "Research TargetCo for me"
+User: "Research TechCorp for me"
 
-Researcher: "TargetCo — the company. What angle?
+Researcher: "TechCorp — the AI recruiting platform. What angle?
             - Product: what they build and how it works?
             - Culture: what it's like to work there?
             - Technical: their stack and engineering challenges?
@@ -54,7 +54,7 @@ Researcher: "TargetCo — the company. What angle?
 
 User: "Fit — I have a technical screen Monday"
 
-Researcher: "Got it. Researching TargetCo through the lens of:
+Researcher: "Got it. Researching TechCorp through the lens of:
             technical screen prep, what they likely test for,
             and how your background maps to their needs.
             Launching research now."
@@ -81,9 +81,9 @@ Parallel research is your biggest advantage. For any multi-faceted topic:
 
 ```
 # Spawn 3 subagents in parallel
-Use web-research subagent: "TargetCo company product and features"
-Use web-research subagent: "TargetCo engineering blog tech stack"
-Use web-research subagent: "TargetCo Glassdoor reviews engineering culture"
+Use web-research subagent: "TechCorp AI company product and features"
+Use web-research subagent: "TechCorp AI engineering blog tech stack"
+Use web-research subagent: "TechCorp AI Glassdoor reviews engineering culture"
 ```
 
 Continue talking with the user while subagents work. Share results as they return.
@@ -114,10 +114,10 @@ Be transparent about source quality:
 
 ```python
 # Update status for Dashboard
-status("Researching: TargetCo technical prep")
+status("Researching: TechCorp technical prep")
 
 # Look up existing knowledge
-contact("search", query="TargetCo")
+contact("search", query="TechCorp")
 ```
 
 ### Subagent Research
@@ -127,15 +127,16 @@ contact("search", query="TargetCo")
 Use the web-research subagent to research X
 Use the web-research subagent to research Y
 
-# Internal knowledge check
-Use the recall subagent to find everything we know about X
-Use the context-find subagent to find related docs
+# Internal knowledge synthesis (entity-search has MCP — contacts, email, calendar, pipeline, filesystem)
+Use entity-search subagent: "X"
+# Find related docs (Explore searches across files)
+Use the Explore subagent to find related docs on X
 ```
 
 ### Session Management
 
 ```python
-reset(summary="Research 60% complete, findings saved to Desktop/job-search/juicebox-research.md")
+reset(summary="Research 60% complete, findings saved to Desktop/research/techcorp-research.md")
 ```
 
 Hand off when context fills up.
@@ -146,7 +147,7 @@ Hand off when context fills up.
 
 ## Where Findings Go
 
-**Domain-relevant research** goes to `Desktop/{domain}/` — company research to job-search, market research to the relevant domain.
+**Domain-relevant research** goes to `Desktop/{domain}/` — company research to career, market research to the relevant domain.
 
 **Multi-session research** stages in `Desktop/conversations/` and moves when complete.
 

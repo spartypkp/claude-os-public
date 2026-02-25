@@ -1,10 +1,10 @@
 'use client';
 
 import { memo } from 'react';
-import { GitBranch, Clock, FileWarning, GitCommit, ChevronRight } from 'lucide-react';
+import { GitBranch, Clock, FileWarning, GitCommit } from 'lucide-react';
 
 // =============================================================================
-// TYPES — match the new tree API response
+// TYPES
 // =============================================================================
 
 export interface GitRepo {
@@ -26,15 +26,27 @@ export interface ProjectData {
 	last_history_date: string | null;
 	git: GitRepo[];
 	path: string;
+	interview_value: string | null;
+	interview_summary: string | null;
 	// Detail endpoint only:
 	project_md?: string;
 	history_md?: string;
+}
+
+export interface GroupData {
+	name: string;
+	description: string | null;
+	has_group_md: boolean;
+	path: string;
+	// Detail endpoint only:
+	group_md?: string;
 }
 
 export interface TreeNode {
 	slug: string;
 	type: 'project' | 'group';
 	project?: ProjectData;
+	group?: GroupData;
 	children?: TreeNode[];
 }
 
@@ -47,6 +59,7 @@ export const STATUS_STYLES: Record<string, { label: string; dot: string }> = {
 	complete: { label: 'Complete', dot: 'bg-blue-400' },
 	paused: { label: 'Paused', dot: 'bg-amber-400' },
 	archived: { label: 'Archived', dot: 'bg-gray-500' },
+	deprecated: { label: 'Deprecated', dot: 'bg-gray-500' },
 };
 
 export const CATEGORY_COLORS: Record<string, { accent: string; border: string }> = {
@@ -63,98 +76,92 @@ export const CATEGORY_COLORS: Record<string, { accent: string; border: string }>
 	other: { accent: 'text-gray-500', border: 'border-l-gray-500' },
 };
 
+const IV_STYLES: Record<string, { bg: string; text: string }> = {
+	HIGH: { bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
+	'MEDIUM-HIGH': { bg: 'bg-cyan-500/15', text: 'text-cyan-400' },
+};
+
 // =============================================================================
-// TREE ITEM — sidebar node
+// PROJECT CARD — grid card for the command center
 // =============================================================================
 
-interface TreeItemProps {
-	node: TreeNode;
-	depth: number;
-	selectedSlug: string | null;
-	expandedGroups: Set<string>;
-	onSelect: (slug: string) => void;
-	onToggleGroup: (slug: string) => void;
+interface ProjectCardProps {
+	project: ProjectData;
+	slug: string;
+	isSelected: boolean;
+	onClick: () => void;
+	onContextMenu: (e: React.MouseEvent) => void;
 }
 
-export const TreeItem = memo(function TreeItem({
-	node,
-	depth,
-	selectedSlug,
-	expandedGroups,
-	onSelect,
-	onToggleGroup,
-}: TreeItemProps) {
-	const isGroup = node.type === 'group';
-	const isExpanded = isGroup && expandedGroups.has(node.slug);
-	const isSelected = selectedSlug === node.slug;
-
-	// For projects, get latest git timestamp for the right-side label
-	const p = node.project;
-	const latestGit = p?.git?.length
+export const ProjectCard = memo(function ProjectCard({
+	project: p,
+	slug,
+	isSelected,
+	onClick,
+	onContextMenu,
+}: ProjectCardProps) {
+	const statusStyle = STATUS_STYLES[p.status] || STATUS_STYLES.archived;
+	const catColor = CATEGORY_COLORS[p.category] || CATEGORY_COLORS.other;
+	const latestGit = p.git.length > 0
 		? p.git.reduce((a, b) => (a.last_commit_unix > b.last_commit_unix ? a : b))
 		: null;
-
-	const displayName = p?.name || node.slug;
-
-	const handleClick = () => {
-		if (isGroup) {
-			onToggleGroup(node.slug);
-			// Also select to show group detail
-			onSelect(node.slug);
-		} else {
-			onSelect(node.slug);
-		}
-	};
+	const ivStyle = p.interview_value ? IV_STYLES[p.interview_value] : null;
 
 	return (
-		<div>
-			<button
-				onClick={handleClick}
-				className={`w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors border-b border-b-[var(--border-default)]/50 ${
-					isSelected
-						? 'bg-[var(--surface-hover)] text-[var(--text-primary)]'
-						: 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-				}`}
-				style={{ paddingLeft: `${12 + depth * 16}px` }}
-			>
-				{/* Chevron — only for groups (things with navigable children) */}
-				{isGroup ? (
-					<ChevronRight className={`w-3 h-3 shrink-0 text-[var(--text-muted)] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-				) : (
-					<span className="w-3 shrink-0" />
+		<button
+			onClick={onClick}
+			onContextMenu={onContextMenu}
+			className={`w-full text-left rounded-lg border-l-[3px] ${catColor.border} transition-all duration-150 ${
+				isSelected
+					? 'bg-[var(--surface-muted)] ring-1 ring-[var(--border-active)]'
+					: 'bg-[var(--surface-sunken)] hover:bg-[var(--surface-muted)] hover:shadow-md hover:-translate-y-[1px]'
+			}`}
+		>
+			<div className="p-3">
+				{/* Row 1: Name + status dot */}
+				<div className="flex items-center gap-2 mb-1">
+					<span className={`w-2 h-2 rounded-full shrink-0 ${statusStyle.dot}`} />
+					<span className="text-[13px] font-medium text-[var(--text-primary)] truncate flex-1">
+						{p.name}
+					</span>
+					{latestGit && (
+						<span className="text-[10px] text-[var(--text-muted)] shrink-0 tabular-nums">
+							{latestGit.last_commit_ago.replace(' ago', '')}
+						</span>
+					)}
+				</div>
+
+				{/* Row 2: Description */}
+				{p.description && (
+					<p className="text-[11px] text-[var(--text-secondary)] leading-relaxed line-clamp-2 mb-2 ml-4">
+						{p.description}
+					</p>
 				)}
 
-				<span className="truncate flex-1 text-left">{displayName}</span>
-
-				{/* Right side: git time for projects, child count for groups */}
-				{isGroup ? (
-					<span className="text-[10px] text-[var(--text-muted)] shrink-0 tabular-nums">
-						{node.children?.length || 0}
-					</span>
-				) : latestGit ? (
-					<span className="text-[10px] text-[var(--text-muted)] shrink-0 tabular-nums">
-						{latestGit.last_commit_ago.replace(' ago', '')}
-					</span>
-				) : null}
-			</button>
-
-			{/* Children (groups only) */}
-			{isExpanded && node.children && (
-				<div>
-					{node.children.map((child) => (
-						<TreeItem
-							key={child.slug}
-							node={child}
-							depth={depth + 1}
-							selectedSlug={selectedSlug}
-							expandedGroups={expandedGroups}
-							onSelect={onSelect}
-							onToggleGroup={onToggleGroup}
-						/>
+				{/* Row 3: Tech pills + interview value */}
+				<div className="flex items-center gap-1.5 ml-4 flex-wrap">
+					{p.tech.slice(0, 3).map((t) => (
+						<span
+							key={t}
+							className="px-1.5 py-0.5 text-[9px] rounded bg-[var(--surface-raised)] text-[var(--text-muted)]"
+						>
+							{t}
+						</span>
 					))}
+					{p.tech.length > 3 && (
+						<span className="text-[9px] text-[var(--text-muted)]">
+							+{p.tech.length - 3}
+						</span>
+					)}
+					<span className="flex-1" />
+					{ivStyle && (
+						<span className={`px-1.5 py-0.5 text-[9px] font-medium rounded ${ivStyle.bg} ${ivStyle.text}`}>
+							{p.interview_value}
+						</span>
+					)}
 				</div>
-			)}
-		</div>
+			</div>
+		</button>
 	);
 });
 

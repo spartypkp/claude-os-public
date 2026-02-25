@@ -1,11 +1,10 @@
 'use client';
 
-import { finderMove, finderRename } from '@/lib/api';
+import { finderMove, finderRename, finderUpload } from '@/lib/api';
 import { CLAUDE_SYSTEM_FILES } from '@/lib/systemFiles';
 import { getFolderCategory, getFolderColorClass } from '@/lib/folderCategories';
 import { FileTreeNode } from '@/lib/types';
 import { useWindowStore } from '@/store/windowStore';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { getFileIconSpec } from '@/lib/fileTypes';
 import {
 	Folder,
@@ -13,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useDesktopSettings, ICON_SIZES } from '@/store/desktopSettingsStore';
 
 // Icon types determine visual treatment
 type IconType = 'folder' | 'file';
@@ -20,7 +20,7 @@ type IconType = 'folder' | 'file';
 // Claude logo SVG for the badge
 function ClaudeBadge() {
 	return (
-		<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#1e1e1e]">
+		<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#1e1e1e]">
 			<svg className="w-3 h-3 text-white" viewBox="0 0 16 16" fill="currentColor">
 				<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
 			</svg>
@@ -79,47 +79,112 @@ export function DesktopIcon({
 	onOpen,
 	onContextMenu,
 }: DesktopIconProps) {
-	const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
-		id: node.path,
-		data: { node },
-	});
-
-	const { setNodeRef: setDropRef, isOver } = useDroppable({
-		id: node.path,
-	});
-
 	const { renamingPath, stopRename } = useWindowStore();
+	const iconSize = useDesktopSettings((s) => s.iconSize);
+	const showExtensions = useDesktopSettings((s) => s.showExtensions);
+	const sizeConfig = ICON_SIZES[iconSize];
 	const isRenaming = renamingPath === node.path;
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [editName, setEditName] = useState(node.name);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [isNativeDragOver, setIsNativeDragOver] = useState(false);
+	const [isDragOver, setIsDragOver] = useState(false);
+	const [isDragging, setIsDragging] = useState(false);
 
-	// Native drag handlers for cross-view drops (Finder → Desktop folder)
-	const handleNativeDragOver = useCallback((e: React.DragEvent) => {
+	// ─── Native HTML5 Drag Start ───
+	const handleDragStart = useCallback((e: React.DragEvent) => {
+		// Set data types for all consumers
+		e.dataTransfer.setData('text/plain', node.path);
+		e.dataTransfer.setData('application/claude-file', node.path);
+		e.dataTransfer.effectAllowed = 'copyMove';
+
+		// Multi-select: if this icon is selected and there are multiple selected, drag all
+		const selected = useWindowStore.getState().selectedIcons;
+		const paths = selected.includes(node.path) && selected.length > 1
+			? selected
+			: [node.path];
+		e.dataTransfer.setData('application/claude-files', JSON.stringify(paths));
+
+		// Use hidden drag ghost element if available
+		const ghost = document.getElementById('drag-ghost');
+		if (ghost) {
+			// Update ghost content before capturing
+			window.dispatchEvent(new CustomEvent('drag-ghost-update', { detail: { paths, primaryNode: node } }));
+			// Small delay to let ghost render, then set image
+			e.dataTransfer.setDragImage(ghost, 48, 64);
+		}
+
+		setIsDragging(true);
+	}, [node]);
+
+	const handleDragEnd = useCallback(() => {
+		setIsDragging(false);
+	}, []);
+
+	// ─── Native HTML5 Drop Target (folders accept drops) ───
+	const handleDragOver = useCallback((e: React.DragEvent) => {
 		if (node.type !== 'directory') return;
-		if (e.dataTransfer.types.includes('application/claude-file') || e.dataTransfer.types.includes('text/plain')) {
+		if (
+			e.dataTransfer.types.includes('application/claude-file') ||
+			e.dataTransfer.types.includes('application/claude-files') ||
+			e.dataTransfer.types.includes('text/plain') ||
+			e.dataTransfer.types.includes('Files')
+		) {
 			e.preventDefault();
 			e.stopPropagation();
 			e.dataTransfer.dropEffect = 'move';
-			setIsNativeDragOver(true);
+			setIsDragOver(true);
 		}
 	}, [node.type]);
 
-	const handleNativeDragLeave = useCallback(() => {
-		setIsNativeDragOver(false);
+	const handleDragLeave = useCallback(() => {
+		setIsDragOver(false);
 	}, []);
 
-	const handleNativeDrop = useCallback(async (e: React.DragEvent) => {
+	const handleDrop = useCallback(async (e: React.DragEvent) => {
 		if (node.type !== 'directory') return;
-		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
-		if (!sourcePath || sourcePath === node.path) {
-			setIsNativeDragOver(false);
-			return;
-		}
 		e.preventDefault();
 		e.stopPropagation();
-		setIsNativeDragOver(false);
+		setIsDragOver(false);
+
+		// Handle macOS file uploads directly into this folder
+		const droppedFiles = Array.from(e.dataTransfer.files);
+		if (droppedFiles.length > 0) {
+			try {
+				for (const file of droppedFiles) {
+					await finderUpload(file, node.path);
+				}
+				toast.success(`Imported ${droppedFiles.length} file${droppedFiles.length > 1 ? 's' : ''} to ${node.name}`);
+				window.dispatchEvent(new CustomEvent('refresh-desktop'));
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to import');
+			}
+			return;
+		}
+
+		// Handle multi-file internal moves
+		const multiPaths = e.dataTransfer.getData('application/claude-files');
+		if (multiPaths) {
+			try {
+				const paths: string[] = JSON.parse(multiPaths);
+				const validPaths = paths.filter(p => p !== node.path && !p.startsWith(node.path + '/'));
+				if (validPaths.length === 0) return;
+				for (const p of validPaths) {
+					await finderMove(p, node.path);
+				}
+				window.dispatchEvent(new CustomEvent('refresh-desktop'));
+				toast.success(validPaths.length === 1
+					? `Moved to ${node.name}`
+					: `Moved ${validPaths.length} items to ${node.name}`
+				);
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to move');
+			}
+			return;
+		}
+
+		// Handle single file move (fallback)
+		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+		if (!sourcePath || sourcePath === node.path) return;
 		try {
 			await finderMove(sourcePath, node.path);
 			window.dispatchEvent(new CustomEvent('refresh-desktop'));
@@ -128,12 +193,6 @@ export function DesktopIcon({
 			toast.error(err instanceof Error ? err.message : 'Failed to move');
 		}
 	}, [node.path, node.name, node.type]);
-
-	// Merge drag and drop refs
-	const setNodeRef = useCallback((node: HTMLElement | null) => {
-		setDragRef(node);
-		setDropRef(node);
-	}, [setDragRef, setDropRef]);
 
 	// Focus input when entering rename mode
 	useEffect(() => {
@@ -202,9 +261,9 @@ export function DesktopIcon({
 		? (node.name.split('.').pop() || '').toLowerCase()
 		: null;
 
-	// Format display name: strip .md extension, underscores to spaces for folders
+	// Format display name: strip extensions (unless showExtensions is on), underscores to spaces for folders
 	const baseName = node.type === 'file'
-		? node.name.replace(/\.md$/, '')
+		? (showExtensions ? node.name : node.name.replace(/\.[^.]+$/, ''))
 		: node.name;
 	const displayName = node.type === 'directory'
 		? baseName.replace(/[-_]/g, ' ')
@@ -218,27 +277,22 @@ export function DesktopIcon({
 		: displayName;
 
 	const style: React.CSSProperties = {
-		transform: transform
-			? `translate3d(${transform.x}px, ${transform.y}px, 0)`
-			: undefined,
-		zIndex: isDragging ? 1000 : 1,
-		visibility: isDragging ? 'hidden' : 'visible',
-		willChange: isDragging ? 'transform' : 'auto',
+		opacity: isDragging ? 0.4 : 1,
+		transition: 'transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, opacity 150ms ease',
 	};
 
 	// Unified icon rendering
 	const renderIconVisual = () => {
-		// Folders and files use category color
-		const iconSize = 'w-14 h-14';
+		const iconSizeClass = sizeConfig.iconSize;
 		const iconColor = config.iconColor;
 
 		return (
 			<div className="relative">
-				<div className="w-16 h-16 flex items-center justify-center">
+				<div className={`${sizeConfig.iconContainer} flex items-center justify-center`}>
 					{config.type === 'folder' ? (
-						<FolderOpen className={`${iconSize} ${iconColor} drop-shadow-lg`} fill="currentColor" fillOpacity={0.15} />
+						<FolderOpen className={`${iconSizeClass} ${iconColor} drop-shadow-lg`} fill="currentColor" fillOpacity={0.15} />
 					) : (
-						<Icon className={`${iconSize} ${iconColor} drop-shadow-lg`} />
+						<Icon className={`${iconSizeClass} ${iconColor} drop-shadow-lg`} />
 					)}
 				</div>
 				{isClaudeSystem && <ClaudeBadge />}
@@ -251,31 +305,33 @@ export function DesktopIcon({
 
 	return (
 		<div
-			ref={setNodeRef}
 			data-testid={`desktop-icon-${node.name.toLowerCase().replace(/\s+/g, '-')}`}
-			style={style}
+			data-icon-path={node.path}
+			style={{ ...style, width: sizeConfig.cellWidth, height: sizeConfig.cellHeight,
+				transform: isDragOver && node.type === 'directory' ? 'scale(1.08)' : undefined,
+			}}
 			className={`
         flex flex-col items-center justify-start gap-1
-        w-[96px] h-[112px] pt-2 pb-1 px-1 rounded-lg cursor-pointer
-        ${!isDragging && 'transition-colors duration-150'}
+        pt-2 pb-1 px-1 rounded-lg cursor-pointer
 		${isSelected
-					? 'bg-[#DA7756]/30 ring-1 ring-[#DA7756]'
-					: (isOver || isNativeDragOver) && !isDragging && node.type === 'directory'
-					? 'bg-[#DA7756]/20 ring-2 ring-[#DA7756]/50 ring-dashed'
-					: 'hover:bg-black/5 dark:hover:bg-white/15'
+					? 'bg-[var(--color-claude)]/30 ring-1 ring-[var(--color-claude)]'
+					: isDragOver && node.type === 'directory'
+					? 'bg-[var(--color-claude)]/20 ring-2 ring-[var(--color-claude)] shadow-lg shadow-[var(--color-claude)]/20'
+					: 'hover:bg-[var(--surface-hover)]'
 				}
       `}
+			draggable={!isRenaming}
+			onDragStart={handleDragStart}
+			onDragEnd={handleDragEnd}
 			onClick={onSelect}
 			onDoubleClick={(e) => {
 				e.stopPropagation();
 				onOpen();
 			}}
 			onContextMenu={onContextMenu}
-			onDragOver={handleNativeDragOver}
-			onDragLeave={handleNativeDragLeave}
-			onDrop={handleNativeDrop}
-			{...listeners}
-			{...attributes}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
 		>
 			{/* Icon */}
 			{renderIconVisual()}
@@ -293,17 +349,19 @@ export function DesktopIcon({
 					onDoubleClick={(e) => e.stopPropagation()}
 					disabled={isSubmitting}
 					className={`
-            px-1 py-0.5 text-[11px] text-center leading-tight
+            px-1 py-0.5 text-center leading-tight
             w-full
-            bg-white dark:bg-gray-800 text-gray-900 dark:text-white
-            border border-[#DA7756] rounded
-            outline-none focus:ring-1 focus:ring-[#DA7756]
+            bg-[var(--surface-base)] text-[var(--text-primary)]
+            border border-[var(--color-claude)] rounded
+            outline-none focus:ring-1 focus:ring-[var(--color-claude)]
             ${isSubmitting ? 'opacity-50' : ''}
           `}
 				/>
 			) : (
 				<span
-				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-gray-800 dark:text-white font-medium"
+				className={`text-center leading-[1.3] w-full px-0.5 break-words text-[var(--text-primary)] font-medium`}
+				style={{ fontSize: sizeConfig.fontSize, WebkitLineClamp: sizeConfig.lineClamp, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+				title={node.name}
 			>
 				{capitalizedName}
 			</span>

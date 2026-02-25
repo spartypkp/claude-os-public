@@ -222,6 +222,65 @@ def spawn_replacement(
         return False, None
 
 
+def verify_handoff_filled(handoff_path: str) -> bool:
+    """Check if a handoff file was actually filled in by the summarizer.
+
+    Returns True if the handoff has real content (HTML comment guidance removed).
+    Returns False if the template is still mostly empty/unfilled.
+    """
+    try:
+        content = Path(handoff_path).read_text()
+    except Exception:
+        return False
+
+    if not content.strip():
+        return False
+
+    # Count HTML comment blocks remaining (guidance that should be replaced)
+    import re
+    comment_count = len(re.findall(r'<!--.*?-->', content, re.DOTALL))
+
+    # A filled handoff should have 0-1 comments at most (maybe a lock marker).
+    # The templates have 5-7 HTML comment blocks each. If 3+ remain, it wasn't filled.
+    if comment_count >= 3:
+        logger.warning(f"Handoff still has {comment_count} HTML comment blocks - likely unfilled")
+        return False
+
+    # Check content length - a real handoff should have substantial content
+    # Strip markdown headers to check actual content
+    lines = [l for l in content.split('\n') if l.strip() and not l.strip().startswith('#')]
+    content_lines = len(lines)
+    if content_lines < 5:
+        logger.warning(f"Handoff has only {content_lines} content lines - likely unfilled")
+        return False
+
+    return True
+
+
+def write_fallback_handoff(handoff_path: str, summary: str, spec_path: str = None):
+    """Write a minimal fallback handoff when summarizer fails to fill the template.
+
+    This is better than an empty template - the successor at least gets
+    the reset summary and spec path.
+    """
+    parts = ["# Fallback Handoff (Summarizer Failed)\n"]
+    parts.append("*The summarizer agent did not fill in the handoff template. This is a minimal fallback.*\n")
+
+    if spec_path:
+        parts.append("## Immediate Re-read List")
+        parts.append(f"- `{spec_path}`\n")
+
+    if summary:
+        parts.append("## Reset Summary")
+        parts.append(f"{summary}\n")
+
+    parts.append("## Resume Instructions")
+    parts.append("Read the spec and plan.md in your workspace to continue where the previous session left off.\n")
+
+    Path(handoff_path).write_text("\n".join(parts))
+    logger.info(f"Wrote fallback handoff to {handoff_path}")
+
+
 def get_transcript_text(session_id: str) -> str:
     """Get formatted transcript text for a session using the parser."""
     transcript_path = get_transcript_path_for_session(session_id, DB_PATH)
@@ -373,6 +432,43 @@ def execute_handoff(handoff_id: str):
 
                 handoff["handoff_path"] = str(handoff_path)
                 logger.info(f"Generated handoff at: {handoff_path}")
+
+                # Verify the handoff was actually filled in
+                if not verify_handoff_filled(str(handoff_path)):
+                    logger.warning("Handoff verification failed - template not filled in. Retrying once...")
+
+                    # Retry: re-run the summarizer on the same file
+                    try:
+                        if handoff["role"] == "chief":
+                            handoff_path = handoff_service.create_chief_handoff(
+                                transcript=transcript_text,
+                                session_id=handoff["session_id"],
+                            )
+                        else:
+                            handoff_path = handoff_service.create_specialist_handoff(
+                                transcript=transcript_text,
+                                role=handoff["role"],
+                                conversation_id=handoff.get("conversation_id", "unknown"),
+                                mode=handoff.get("mode", "interactive"),
+                                session_id=handoff["session_id"],
+                                spec_path=handoff.get("spec_path"),
+                            )
+                        handoff["handoff_path"] = str(handoff_path)
+                    except Exception as retry_err:
+                        logger.error(f"Retry failed: {retry_err}")
+
+                    # Check again after retry
+                    if not verify_handoff_filled(str(handoff_path)):
+                        logger.error("Handoff still empty after retry. Writing fallback.")
+                        write_fallback_handoff(
+                            str(handoff_path),
+                            summary=handoff.get("reason", ""),
+                            spec_path=handoff.get("spec_path"),
+                        )
+                    else:
+                        logger.info("Retry succeeded - handoff filled in on second attempt")
+                else:
+                    logger.info("Handoff verification passed - template properly filled in")
 
                 _notify_backend_event("session.handoff_complete", handoff["session_id"], {
                     "handoff_id": handoff_id,

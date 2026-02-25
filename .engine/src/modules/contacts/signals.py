@@ -9,24 +9,34 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .standalone import StandaloneContactsRepository
+from .activity import log_activity
 
 logger = logging.getLogger(__name__)
 
 
-def touch_contact_date(identifier: str, repo: StandaloneContactsRepository) -> None:
+def touch_contact_date(
+    identifier: str,
+    repo: StandaloneContactsRepository,
+    source: Optional[str] = None,
+) -> None:
     """Update last_contact_date for a contact found by email or phone.
 
     Idempotent: skips if already set to today.
-    Silent on failure — this is a side effect, not a primary operation.
+    Silent on failure -- this is a side effect, not a primary operation.
+
+    Args:
+        identifier: Email or phone to match
+        repo: Contacts repository
+        source: Signal source (email, calendar, imessage) for activity logging
     """
     today = date.today().isoformat()
 
     # Try email lookup first (case-insensitive)
     row = repo.storage.fetchone(
-        "SELECT id, last_contact_date FROM contacts WHERE LOWER(email) = LOWER(?)",
+        "SELECT id, name, last_contact_date FROM contacts WHERE LOWER(email) = LOWER(?)",
         (identifier,)
     )
 
@@ -36,7 +46,7 @@ def touch_contact_date(identifier: str, repo: StandaloneContactsRepository) -> N
         normalized = normalize_phone(identifier)
         if normalized:
             row = repo.storage.fetchone(
-                "SELECT id, last_contact_date FROM contacts WHERE phone = ?",
+                "SELECT id, name, last_contact_date FROM contacts WHERE phone = ?",
                 (normalized,)
             )
 
@@ -53,6 +63,16 @@ def touch_contact_date(identifier: str, repo: StandaloneContactsRepository) -> N
     )
     logger.debug(f"Touched last_contact_date for {identifier}")
 
+    # Log activity event
+    source_label = source or "unknown"
+    descriptions = {
+        "email": "Emailed today",
+        "calendar": "Calendar event today",
+        "imessage": "iMessage today",
+    }
+    desc = descriptions.get(source_label, f"Contacted today ({source_label})")
+    log_activity(repo.storage, row["id"], "signal_touch", desc, source=source_label)
+
 
 def process_email_signals(messages_data: List[Dict[str, Any]], repo: StandaloneContactsRepository) -> None:
     """Extract sender emails from email message dicts and touch contacts."""
@@ -66,7 +86,7 @@ def process_email_signals(messages_data: List[Dict[str, Any]], repo: StandaloneC
         # Extract email from "Name <email>" format
         email = _extract_email(sender)
         if email:
-            touch_contact_date(email, repo)
+            touch_contact_date(email, repo, source="email")
 
 
 def process_message_signals(messages_data: List[Dict[str, Any]], repo: StandaloneContactsRepository) -> None:
@@ -80,7 +100,7 @@ def process_message_signals(messages_data: List[Dict[str, Any]], repo: Standalon
         if not handle or handle in seen:
             continue
         seen.add(handle)
-        touch_contact_date(handle, repo)
+        touch_contact_date(handle, repo, source="imessage")
 
 
 def process_calendar_signals(event_data: Dict[str, Any], repo: StandaloneContactsRepository) -> None:
@@ -96,7 +116,7 @@ def process_calendar_signals(event_data: Dict[str, Any], repo: StandaloneContact
         elif isinstance(attendee, str):
             email = attendee
         if email:
-            touch_contact_date(email, repo)
+            touch_contact_date(email, repo, source="calendar")
 
 
 def _extract_email(sender: str) -> str | None:

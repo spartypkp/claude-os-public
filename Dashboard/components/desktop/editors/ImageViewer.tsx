@@ -20,9 +20,8 @@ export function ImageViewer({ filePath }: ImageViewerProps) {
 	const [fitMode, setFitMode] = useState<'contain' | 'actual'>('contain');
 
 	const fileName = filePath.split('/').pop() || filePath;
-	// Strip "Desktop/" prefix if present (API expects paths relative to Desktop/)
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const imageUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	// Backend /api/files/raw/ accepts absolute paths directly
+	const imageUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	// Reset state when file changes
 	useEffect(() => {
@@ -130,7 +129,7 @@ export function ImageViewer({ filePath }: ImageViewerProps) {
 						onClick={handleFitToggle}
 						className="p-1.5 rounded transition-colors"
 						style={{ 
-							color: fitMode === 'contain' ? '#DA7756' : 'var(--text-tertiary)',
+							color: fitMode === 'contain' ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: fitMode === 'contain' ? 'rgba(218, 119, 86, 0.1)' : 'transparent'
 						}}
 						title={fitMode === 'contain' ? 'Fit to window' : 'Actual size'}

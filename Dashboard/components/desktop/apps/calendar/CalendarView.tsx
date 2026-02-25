@@ -4,6 +4,7 @@ import 'temporal-polyfill/global';
 import './schedule-x-overrides.css';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEventStream } from '@/hooks/useEventStream';
 import {
   ChevronLeft,
   ChevronRight,
@@ -72,14 +73,14 @@ const CALENDAR_VISIBILITY_KEY = 'claude-os-calendar-visibility';
 
 // Color palette for Schedule-X calendar types
 const SX_CALENDAR_COLORS: Record<string, { main: string; container: string; onContainer: string }> = {
-  blue: { main: '#3b82f6', container: 'rgba(59,130,246,0.2)', onContainer: '#93bbfd' },
+  blue: { main: 'var(--color-primary)', container: 'rgba(59,130,246,0.2)', onContainer: '#93bbfd' },
   green: { main: '#10b981', container: 'rgba(16,185,129,0.2)', onContainer: '#6ee7b7' },
   orange: { main: '#f97316', container: 'rgba(249,115,22,0.2)', onContainer: '#fdba74' },
-  purple: { main: '#8b5cf6', container: 'rgba(139,92,246,0.2)', onContainer: '#c4b5fd' },
-  red: { main: '#ef4444', container: 'rgba(239,68,68,0.2)', onContainer: '#fca5a5' },
+  purple: { main: 'var(--color-info)', container: 'rgba(139,92,246,0.2)', onContainer: '#c4b5fd' },
+  red: { main: 'var(--color-error)', container: 'rgba(239,68,68,0.2)', onContainer: '#fca5a5' },
   cyan: { main: '#06b6d4', container: 'rgba(6,182,212,0.2)', onContainer: '#67e8f9' },
   pink: { main: '#ec4899', container: 'rgba(236,72,153,0.2)', onContainer: '#f9a8d4' },
-  yellow: { main: '#f59e0b', container: 'rgba(245,158,11,0.2)', onContainer: '#fcd34d' },
+  yellow: { main: 'var(--color-warning)', container: 'rgba(245,158,11,0.2)', onContainer: '#fcd34d' },
   teal: { main: '#14b8a6', container: 'rgba(20,184,166,0.2)', onContainer: '#5eead4' },
   indigo: { main: '#6366f1', container: 'rgba(99,102,241,0.2)', onContainer: '#a5b4fc' },
 };
@@ -88,7 +89,7 @@ const SX_CALENDAR_COLORS: Record<string, { main: string; container: string; onCo
 function getCalendarHexColor(calendarName: string, allCalendarNames: string[]): string {
   const calColor = getCalendarColor(calendarName, allCalendarNames);
   const sxColor = SX_CALENDAR_COLORS[calColor.name];
-  return sxColor?.main || '#da7756';
+  return sxColor?.main || 'var(--color-claude)';
 }
 
 // Convert our CalendarEvent to Schedule-X event format
@@ -235,6 +236,7 @@ export function CalendarView() {
   const [selectedEvent, setSelectedEvent] = useState<ProcessedEvent | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [today, setToday] = useState<Date | null>(null);
+  const { lastEvent } = useEventStream();
 
   const [showSidebar, setShowSidebar] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -516,17 +518,20 @@ export function CalendarView() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Background polling every 60s
-    const interval = setInterval(() => {
-      const dates = getRangeDates();
-      if (dates) fetchEventsRef.current?.(dates.start, dates.end);
-    }, 60000);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
-      clearInterval(interval);
     };
   }, [mounted, loadCalendars, getRangeDates]);
+
+  // SSE: refetch when calendar events change (replaces 60s polling)
+  const lastCalEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastEvent?.type?.startsWith('calendar.') && lastEvent.timestamp !== lastCalEventRef.current) {
+      lastCalEventRef.current = lastEvent.timestamp;
+      const dates = getRangeDates();
+      if (dates) fetchEventsRef.current?.(dates.start, dates.end);
+    }
+  }, [lastEvent, getRangeDates]);
 
   // Re-filter events when calendar visibility changes
   useEffect(() => {

@@ -42,9 +42,9 @@ import type { ToolExpandedProps } from '../types';
 // =============================================================================
 
 const TIER_COLORS: Record<string, string> = {
-	S: '#ef4444',
-	A: '#f59e0b',
-	B: '#3b82f6',
+	S: 'var(--color-error)',
+	A: 'var(--color-warning)',
+	B: 'var(--color-primary)',
 	C: 'var(--text-muted)',
 };
 
@@ -75,19 +75,19 @@ function RolePill({ role }: { role: string }) {
 	const config = getRoleConfig(role);
 	const Icon = config.icon;
 	return (
-		<div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#da7756]/8 border border-[#da7756]/15">
-			<Icon className="w-3.5 h-3.5 text-[#da7756]" />
-			<span className="text-[11px] font-semibold text-[#da7756] capitalize">{config.label}</span>
+		<div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--color-claude)]/8 border border-[var(--color-claude)]/15">
+			<Icon className="w-3.5 h-3.5 text-[var(--color-claude)]" />
+			<span className="text-[11px] font-semibold text-[var(--color-claude)] capitalize">{config.label}</span>
 		</div>
 	);
 }
 
 /** Phase indicator for specialist modes */
 const PHASE_COLORS: Record<string, string> = {
-	preparation: '#60a5fa',
-	implementation: '#f59e0b',
-	verification: '#34d399',
-	interactive: '#8b5cf6',
+	preparation: 'var(--color-primary)',
+	implementation: 'var(--color-warning)',
+	verification: 'var(--color-success)',
+	interactive: 'var(--color-info)',
 };
 
 /** Render a conversation row for list view */
@@ -101,20 +101,20 @@ function ConversationRow({ conversation }: { conversation: { conversation_id?: s
 
 	return (
 		<div className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2.5 py-2 rounded-md border border-[var(--border-subtle)]">
-			<div className="flex items-center justify-center w-5 h-5 rounded flex-shrink-0" style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}>
-				<Icon className="w-3 h-3 text-[#da7756]" />
+			<div className="flex items-center justify-center w-5 h-5 rounded flex-shrink-0" style={{ backgroundColor: 'color-mix(in srgb, var(--color-claude) 12%, transparent)' }}>
+				<Icon className="w-3 h-3 text-[var(--color-claude)]" />
 			</div>
 			<span className="font-medium text-[var(--text-secondary)] capitalize">{config.label}</span>
 			{mode && mode !== 'interactive' && (
 				<span
-					className="text-[9px] font-medium px-1.5 py-0.5 rounded-full capitalize"
+					className="text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize"
 					style={{ color: phaseColor, backgroundColor: `color-mix(in srgb, ${phaseColor} 12%, transparent)` }}
 				>
 					{mode.slice(0, 4)}
 				</span>
 			)}
 			{sessionCount > 1 && (
-				<span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1 py-0.5 rounded">
+				<span className="text-[10px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1 py-0.5 rounded">
 					{sessionCount}
 				</span>
 			)}
@@ -149,7 +149,7 @@ export function TeamExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 				<div className="space-y-2.5">
 					<div className="flex items-center gap-2">
 						<RolePill role={requestedRole} />
-						<span className="flex items-center gap-1 text-[10px] font-medium text-[#8b5cf6] bg-[#8b5cf6]/10 px-1.5 py-0.5 rounded-full">
+						<span className="flex items-center gap-1 text-[10px] font-medium text-[var(--color-info)] bg-[var(--color-info)]/10 px-1.5 py-0.5 rounded-full">
 							<Send className="w-3 h-3" /> Request → Chief
 						</span>
 					</div>
@@ -169,7 +169,7 @@ export function TeamExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 				<div className="flex items-center gap-2">
 					<RolePill role={role} />
 					{resultData?.success && (
-						<span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+						<span className="flex items-center gap-0.5 text-[10px] font-medium text-[var(--color-success)] bg-[var(--color-success)]/10 px-1.5 py-0.5 rounded-full">
 							<Check className="w-3 h-3" /> Spawned
 						</span>
 					)}
@@ -294,7 +294,7 @@ export function TeamExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 				<div className="flex items-center gap-2">
 					{subRole && <RolePill role={subRole} />}
 					{resultData?.success && (
-						<span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+						<span className="flex items-center gap-1 text-[10px] font-medium text-[var(--color-info)] bg-[var(--color-info)]/10 px-1.5 py-0.5 rounded-full">
 							<Radio className="w-3 h-3" /> Listening
 						</span>
 					)}
@@ -363,6 +363,7 @@ export function ContactExpanded({ input, result, rawInput, rawResult }: ToolExpa
 	const hasError = isErrorResult(rawResult);
 	const resultData = !hasError ? parseResult(rawResult) : null;
 
+	// Extract contacts from multiple possible result shapes
 	let contacts: Array<{ name: string; company?: string; role?: string }> = [];
 	if (result?.data && Array.isArray(result.data)) {
 		contacts = result.data.slice(0, 5).map((c: Record<string, unknown>) => ({
@@ -370,6 +371,15 @@ export function ContactExpanded({ input, result, rawInput, rawResult }: ToolExpa
 			company: c.company ? String(c.company) : undefined,
 			role: c.role ? String(c.role) : undefined,
 		}));
+	} else if (resultData?.contacts && Array.isArray(resultData.contacts)) {
+		contacts = resultData.contacts.slice(0, 5).map((c: Record<string, unknown>) => ({
+			name: String(c.name || c.full_name || 'Unknown'),
+			company: c.company ? String(c.company) : undefined,
+			role: c.role ? String(c.role) : undefined,
+		}));
+	} else if (resultData?.contact && typeof resultData.contact === 'object') {
+		const c = resultData.contact as Record<string, unknown>;
+		contacts = [{ name: String(c.name || 'Unknown'), company: c.company ? String(c.company) : undefined, role: c.role ? String(c.role) : undefined }];
 	}
 
 	return (
@@ -380,7 +390,7 @@ export function ContactExpanded({ input, result, rawInput, rawResult }: ToolExpa
 			{identifier && !query && (
 				<button onClick={() => openContact(identifier)} className="w-full">
 					<InfoBox icon={User} color="var(--color-cyan)">
-						<span className="hover:text-[#da7756] hover:underline decoration-dotted transition-colors">
+						<span className="hover:text-[var(--color-claude)] hover:underline decoration-dotted transition-colors">
 							{identifier}
 						</span>
 					</InfoBox>
@@ -392,10 +402,10 @@ export function ContactExpanded({ input, result, rawInput, rawResult }: ToolExpa
 						<button
 							key={i}
 							onClick={() => openContact(contact.name)}
-							className="w-full flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)] hover:border-[#da7756]/30 transition-colors"
+							className="w-full flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)] hover:border-[var(--color-claude)]/30 transition-colors"
 						>
-							<User className="w-3 h-3 text-[var(--color-cyan)] flex-shrink-0" />
-							<span className="font-medium text-[var(--text-secondary)] hover:text-[#da7756]">{contact.name}</span>
+							<User className="w-3 h-3 text-[var(--color-success)] flex-shrink-0" />
+							<span className="font-medium text-[var(--text-secondary)] hover:text-[var(--color-claude)]">{contact.name}</span>
 							{contact.company && <span className="text-[var(--text-muted)]">· {contact.company}</span>}
 							{contact.role && <span className="text-[var(--text-muted)] text-[10px]">({contact.role})</span>}
 							<ExternalLink className="w-3 h-3 text-[var(--text-muted)] ml-auto" />
@@ -464,7 +474,7 @@ export function EmailExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 					<div className="space-y-1">
 						{emails.slice(0, 5).map((e, i) => (
 							<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-								<Mail className="w-3 h-3 text-[#ef4444] flex-shrink-0" />
+								<Mail className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />
 								<span className="font-medium text-[var(--text-secondary)] truncate">
 									{String(e.from || e.sender || 'Unknown')}
 								</span>
@@ -501,7 +511,7 @@ export function EmailExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 							<div className="space-y-1">
 								{emails.slice(0, 5).map((e, i) => (
 									<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-										<Mail className="w-3 h-3 text-[#ef4444] flex-shrink-0" />
+										<Mail className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />
 										<span className="font-medium text-[var(--text-secondary)] truncate">
 											{String(e.from || e.sender || 'Unknown')}
 										</span>
@@ -541,6 +551,85 @@ export function EmailExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 			);
 		}
 		return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="200px" />) : null;
+	}
+
+	// Triage
+	if (op === 'triage') {
+		const unhandled = typeof resultData?.unhandled === 'number' ? resultData.unhandled : 0;
+		let items: Array<Record<string, unknown>> = [];
+		if (resultData?.items && Array.isArray(resultData.items)) items = resultData.items;
+		return (
+			<div className="space-y-2">
+				<div className="text-[12px] font-medium text-[var(--text-primary)]">
+					{unhandled} unhandled email{unhandled !== 1 ? 's' : ''}
+				</div>
+				{items.length > 0 && (
+					<div className="space-y-1">
+						{items.slice(0, 5).map((item, i) => {
+							const category = item.category ? String(item.category) : '';
+							const summary = item.summary ? String(item.summary) : '';
+							const categoryColors: Record<string, string> = {
+								action_needed: 'var(--color-error)',
+								heads_up: 'var(--color-warning)',
+								fyi: 'var(--color-info)',
+								noise: 'var(--text-muted)',
+							};
+							return (
+								<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
+									{category && (
+										<span
+											className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+											style={{ color: categoryColors[category] || 'var(--text-muted)', backgroundColor: `color-mix(in srgb, ${categoryColors[category] || 'var(--text-muted)'} 12%, transparent)` }}
+										>
+											{category.replace('_', ' ')}
+										</span>
+									)}
+									<span className="text-[var(--text-secondary)] truncate">{summary || 'Email'}</span>
+								</div>
+							);
+						})}
+					</div>
+				)}
+				{hasError && rawResult && <ErrorBox message={rawResult} />}
+			</div>
+		);
+	}
+
+	// Classify
+	if (op === 'classify') {
+		const category = rawInput?.category ? String(rawInput.category) : '';
+		const summary = rawInput?.summary ? String(rawInput.summary) : '';
+		const displayName = rawInput?.display_name ? String(rawInput.display_name) : '';
+		const categoryColors: Record<string, string> = {
+			action_needed: 'var(--color-error)',
+			heads_up: 'var(--color-warning)',
+			fyi: 'var(--color-info)',
+			noise: 'var(--text-muted)',
+		};
+		return (
+			<div className="space-y-2">
+				<div className="flex items-center gap-2">
+					{displayName && <span className="text-[12px] font-medium text-[var(--text-primary)]">{displayName}</span>}
+					{category && (
+						<StatusBadge label={category.replace('_', ' ')} color={categoryColors[category] || 'var(--text-muted)'} />
+					)}
+				</div>
+				{summary && <div className="text-[11px] text-[var(--text-secondary)]">{summary}</div>}
+				{rawResult && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText="Classified" /> : null
+				)}
+			</div>
+		);
+	}
+
+	// Handle
+	if (op === 'handle') {
+		return rawResult ? (
+			hasError ? <ErrorBox message={rawResult} /> :
+			resultData?.success ? <ResultIndicator success successText="Marked handled" /> :
+			<CodeBlock code={rawResult} maxHeight="80px" />
+		) : null;
 	}
 
 	// Default (accounts, test, discover)
@@ -608,7 +697,7 @@ export function CalendarExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 				<div className="space-y-1">
 					{events.slice(0, 8).map((evt, i) => (
 						<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-							<Calendar className="w-3 h-3 text-[#3b82f6] flex-shrink-0" />
+							<Calendar className="w-3 h-3 text-[var(--color-primary)] flex-shrink-0" />
 							<span className="font-medium text-[var(--text-secondary)] truncate">{String(evt.title || 'Event')}</span>
 							{evt.start_time ? (
 								<span className="text-[var(--text-muted)] ml-auto flex-shrink-0 text-[10px]">
@@ -722,7 +811,7 @@ export function MessagesExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 				<div className="space-y-1">
 					{convos.slice(0, 8).map((c, i) => (
 						<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-							<MessageSquare className="w-3 h-3 text-[#22c55e] flex-shrink-0" />
+							<MessageSquare className="w-3 h-3 text-[var(--color-success)] flex-shrink-0" />
 							<span className="font-medium text-[var(--text-secondary)] truncate">
 								{String(c.display_name || c.name || c.chat_id || 'Unknown')}
 							</span>
@@ -749,13 +838,18 @@ export function MessagesExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 
 export function OpportunityExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 	const op = String(rawInput?.operation || '');
-	const name = rawInput?.name ? String(rawInput.name) : '';
-	const company = rawInput?.company ? String(rawInput.company) : '';
-	const role = rawInput?.role ? String(rawInput.role) : '';
-	const stage = rawInput?.stage ? String(rawInput.stage) : '';
-	const tier = rawInput?.tier ? String(rawInput.tier) : '';
 	const hasError = isErrorResult(rawResult);
 	const resultData = !hasError ? parseResult(rawResult) : null;
+
+	// Merge input fields with result data (result takes precedence for `get`)
+	const opp = resultData?.opportunity as Record<string, unknown> | undefined;
+	const name = rawInput?.name ? String(rawInput.name) : opp?.name ? String(opp.name) : '';
+	const company = rawInput?.company ? String(rawInput.company) : opp?.company ? String(opp.company) : '';
+	const role = rawInput?.role ? String(rawInput.role) : opp?.role ? String(opp.role) : '';
+	const stage = rawInput?.stage ? String(rawInput.stage) : opp?.stage ? String(opp.stage) : '';
+	const tier = rawInput?.tier ? String(rawInput.tier) : opp?.tier ? String(opp.tier) : '';
+	const fitScore = opp?.fit_score ? Number(opp.fit_score) : rawInput?.fit_score ? Number(rawInput.fit_score) : 0;
+	const slug = rawInput?.slug ? String(rawInput.slug) : opp?.slug ? String(opp.slug) : '';
 
 	// List
 	if (op === 'list') {
@@ -767,13 +861,13 @@ export function OpportunityExpanded({ rawInput, rawResult }: ToolExpandedProps) 
 		if (opps.length > 0) {
 			return (
 				<div className="space-y-1">
-					{opps.slice(0, 8).map((opp, i) => (
+					{opps.slice(0, 8).map((o, i) => (
 						<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-							{opp.tier ? <StatusBadge label={String(opp.tier)} color={TIER_COLORS[String(opp.tier)] || 'var(--text-muted)'} /> : null}
+							{o.tier ? <StatusBadge label={String(o.tier)} color={TIER_COLORS[String(o.tier)] || 'var(--text-muted)'} /> : null}
 							<span className="font-medium text-[var(--text-secondary)] truncate">
-								{String(opp.name || opp.company || 'Unknown')}
+								{String(o.name || o.company || 'Unknown')}
 							</span>
-							{opp.stage ? <span className="text-[var(--text-muted)] ml-auto text-[10px]">{String(opp.stage)}</span> : null}
+							{o.stage ? <span className="text-[var(--text-muted)] ml-auto text-[10px]">{String(o.stage)}</span> : null}
 						</div>
 					))}
 					{opps.length > 8 && <div className="text-[10px] text-[var(--text-muted)]">+{opps.length - 8} more</div>}
@@ -783,21 +877,42 @@ export function OpportunityExpanded({ rawInput, rawResult }: ToolExpandedProps) 
 		return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="150px" />) : null;
 	}
 
-	// Create/Update/Get — detail view
-	if (name || company || role) {
+	// Detail view — create/update/get (use merged fields from input + result)
+	if (name || company || slug) {
+		const displayName = name || company || slug;
 		return (
 			<div className="space-y-2">
 				<div className="flex items-center gap-2 flex-wrap">
 					{tier && <StatusBadge label={tier} color={TIER_COLORS[tier] || 'var(--text-muted)'} />}
-					<span className="text-[12px] font-medium text-[var(--text-primary)]">{name || company}</span>
+					<span className="text-[12px] font-medium text-[var(--text-primary)]">{displayName}</span>
 					{stage && <StatusBadge label={stage} color="var(--color-primary)" />}
+					{fitScore > 0 && (
+						<span className="text-[10px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded">
+							{fitScore}-fit
+						</span>
+					)}
 				</div>
 				{role && <KeyValue label="Role" value={role} />}
 				{company && name && <KeyValue label="Company" value={company} />}
 				{rawResult && (
 					hasError ? <ErrorBox message={rawResult} /> :
-					resultData?.success ? <ResultIndicator success successText={op || 'Done'} /> :
-					<CodeBlock code={rawResult} maxHeight="100px" />
+					resultData?.success ? <ResultIndicator success successText={op === 'create' ? 'Created' : op === 'update' ? 'Updated' : op === 'get' ? '' : op || 'Done'} /> :
+					null
+				)}
+			</div>
+		);
+	}
+
+	// Close
+	if (op === 'close') {
+		const exitReason = rawInput?.exit_reason ? String(rawInput.exit_reason) : '';
+		return (
+			<div className="space-y-2">
+				{slug && <span className="text-[12px] font-medium text-[var(--text-primary)]">{slug}</span>}
+				{exitReason && <KeyValue label="Reason" value={exitReason} />}
+				{rawResult && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText="Closed" /> : null
 				)}
 			</div>
 		);
@@ -855,75 +970,318 @@ export function SkillExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 }
 
 // =============================================================================
-// TURBINE (Prediction Markets)
+// PET (Ember)
 // =============================================================================
 
-export function TurbineExpanded({ rawInput, rawResult }: ToolExpandedProps) {
+export function PetExpanded({ rawInput, rawResult }: ToolExpandedProps) {
 	const op = String(rawInput?.operation || '');
-	const name = rawInput?.name ? String(rawInput.name) : '';
+	const message = rawInput?.message ? String(rawInput.message) : '';
 	const hasError = isErrorResult(rawResult);
 	const resultData = !hasError ? parseResult(rawResult) : null;
 
-	// Scoreboard — table of strategies
-	if (op === 'scoreboard') {
-		let strategies: Array<Record<string, unknown>> = [];
-		if (resultData) {
-			if (Array.isArray(resultData)) strategies = resultData;
-			else if (Array.isArray(resultData.strategies)) strategies = resultData.strategies;
-			else if (Array.isArray(resultData.scoreboard)) strategies = resultData.scoreboard;
-		}
-		if (strategies.length > 0) {
-			return (
-				<div className="space-y-1">
-					{strategies.slice(0, 10).map((s, i) => (
-						<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
-							<span className="font-medium text-[var(--text-secondary)] truncate flex-1">
-								{String(s.name || s.strategy || 'Strategy')}
-							</span>
-							{s.roi !== undefined ? (
-								<span className={`font-mono text-[10px] ${Number(s.roi) >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
-									{Number(s.roi) >= 0 ? '+' : ''}{Number(s.roi).toFixed(1)}%
-								</span>
-							) : null}
-							{s.win_rate !== undefined ? (
-								<span className="text-[10px] text-[var(--text-muted)]">
-									{Number(s.win_rate).toFixed(0)}% WR
-								</span>
-							) : null}
-							{s.trades !== undefined ? (
-								<span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1 py-0.5 rounded">
-									{String(s.trades)}
-								</span>
-							) : null}
-						</div>
-					))}
-					{strategies.length > 10 && <div className="text-[10px] text-[var(--text-muted)]">+{strategies.length - 10} more</div>}
-				</div>
-			);
-		}
-	}
-
-	// Strategy detail
-	if (name) {
+	// Note — show the message
+	if (op === 'note' && message) {
 		return (
 			<div className="space-y-2">
-				<div className="flex items-center gap-2 flex-wrap">
-					<span className="text-[12px] font-medium text-[var(--text-primary)]">{name}</span>
-					{op && <StatusBadge label={op} color="var(--color-primary)" />}
+				<div className="flex items-start gap-2 text-[11px] bg-[var(--color-warning)]/8 px-3 py-2 rounded-lg border border-[var(--color-warning)]/15">
+					<span className="text-[var(--text-secondary)] leading-relaxed">{message}</span>
 				</div>
 				{rawResult && (
 					hasError ? <ErrorBox message={rawResult} /> :
-					resultData?.success ? <ResultIndicator success successText={op || 'Done'} /> :
-					<CodeBlock code={rawResult} maxHeight="150px" />
+					resultData?.success ? <ResultIndicator success successText="Note left" /> :
+					null
 				)}
 			</div>
 		);
 	}
 
+	// Status — show Ember's state
+	if (op === 'status' && resultData) {
+		const mood = resultData.mood ? String(resultData.mood) : '';
+		const stage = resultData.stage ? String(resultData.stage) : '';
+		const lastFed = resultData.last_fed ? String(resultData.last_fed) : '';
+		const interactionsToday = typeof resultData.interactions_today === 'number' ? resultData.interactions_today : null;
+		const fmtFed = lastFed ? (() => {
+			try {
+				const d = new Date(lastFed);
+				const now = new Date();
+				const diffMs = now.getTime() - d.getTime();
+				const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+				if (diffHrs < 1) return 'Just now';
+				if (diffHrs < 24) return `${diffHrs}h ago`;
+				return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+			} catch { return lastFed; }
+		})() : '';
+		return (
+			<div className="space-y-1.5">
+				{mood && <KeyValue label="Mood" value={mood} />}
+				{stage && <KeyValue label="Stage" value={stage} />}
+				{fmtFed && <KeyValue label="Last fed" value={fmtFed} />}
+				{interactionsToday !== null && <KeyValue label="Today" value={`${interactionsToday} interaction${interactionsToday !== 1 ? 's' : ''}`} />}
+			</div>
+		);
+	}
+
+	// Play/Feed — show response message if available
+	if (op === 'play' || op === 'feed') {
+		const responseMsg = resultData?.message ? String(resultData.message) : '';
+		return (
+			<div className="space-y-2">
+				{responseMsg && (
+					<div className="text-[11px] text-[var(--text-secondary)] bg-[var(--color-warning)]/8 px-3 py-2 rounded-lg border border-[var(--color-warning)]/15 italic">
+						{responseMsg}
+					</div>
+				)}
+				{rawResult && !responseMsg && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText={op === 'feed' ? 'Fed' : 'Played'} /> :
+					<CodeBlock code={rawResult} maxHeight="80px" />
+				)}
+				{responseMsg && resultData?.success && <ResultIndicator success successText={op === 'feed' ? 'Fed' : 'Played'} />}
+			</div>
+		);
+	}
+
 	// Default
-	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="150px" />) : null;
+	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="100px" />) : null;
 }
 
+// =============================================================================
+// TELEGRAM
+// =============================================================================
+
+export function TelegramExpanded({ rawInput, rawResult }: ToolExpandedProps) {
+	const op = String(rawInput?.operation || '');
+	const text = rawInput?.text ? String(rawInput.text) : '';
+	const target = rawInput?.target ? String(rawInput.target) : 'owner';
+	const what = rawInput?.what ? String(rawInput.what) : '';
+	const hasError = isErrorResult(rawResult);
+	const resultData = !hasError ? parseResult(rawResult) : null;
+
+	// Send
+	if (op === 'send') {
+		return (
+			<div className="space-y-2">
+				<div className="flex items-center gap-2 text-[10px]">
+					<span className="text-[var(--text-muted)]">To:</span>
+					<StatusBadge label={target} color="var(--color-info)" />
+				</div>
+				{text && (
+					<div className="flex items-start gap-2 text-[11px] bg-[var(--color-primary)]/8 px-3 py-2 rounded-xl border border-[var(--color-primary)]/15">
+						<Send className="w-3 h-3 text-[var(--color-primary)] flex-shrink-0 mt-0.5" />
+						<span className="text-[var(--text-secondary)] leading-relaxed">{text}</span>
+					</div>
+				)}
+				{rawResult && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText="Sent" /> : null
+				)}
+			</div>
+		);
+	}
+
+	// Read
+	if (op === 'read') {
+		let messages: Array<Record<string, unknown>> = [];
+		if (resultData?.messages && Array.isArray(resultData.messages)) messages = resultData.messages;
+		if (messages.length > 0) {
+			return (
+				<div className="space-y-1">
+					{messages.slice(-6).map((msg, i) => (
+						<div key={i} className="text-[11px] px-2.5 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)]">
+							{msg.sender ? <span className="font-medium text-[var(--text-secondary)]">{String(msg.sender)}: </span> : null}
+							<span className="text-[var(--text-muted)]">{String(msg.text || msg.message || '').slice(0, 150)}</span>
+						</div>
+					))}
+				</div>
+			);
+		}
+		return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="200px" />) : null;
+	}
+
+	// Show
+	if (op === 'show') {
+		return (
+			<div className="space-y-2">
+				{what && <KeyValue label="Content" value={what} />}
+				{target && target !== 'auto' && <KeyValue label="Target" value={target} />}
+				{rawResult && (
+					hasError ? <ErrorBox message={rawResult} /> :
+					resultData?.success ? <ResultIndicator success successText="Rendered" /> : null
+				)}
+			</div>
+		);
+	}
+
+	// Default (info)
+	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="100px" />) : null;
+}
+
+// =============================================================================
+// DAY — Timeline logging & priority management
+// =============================================================================
+
+export function DayExpanded({ rawInput, rawResult }: ToolExpandedProps) {
+	const op = String(rawInput?.operation || '');
+	const hasError = isErrorResult(rawResult);
+	const resultData = !hasError ? parseResult(rawResult) : null;
+
+	// Log
+	if (op === 'log') {
+		const desc = rawInput?.description ? String(rawInput.description) : '';
+		return (
+			<div className="space-y-2">
+				{desc && (
+					<div className="text-[11px] text-[var(--text-secondary)] bg-[var(--surface-base)] p-2 rounded-md border border-[var(--border-subtle)]">
+						{desc}
+					</div>
+				)}
+				{rawResult && (hasError ? <ErrorBox message={rawResult} /> : <ResultIndicator success successText="Logged" />)}
+			</div>
+		);
+	}
+
+	// Priority create
+	if (op === 'priority') {
+		const content = rawInput?.content ? String(rawInput.content) : '';
+		const level = rawInput?.level ? String(rawInput.level) : 'medium';
+		const levelColors: Record<string, string> = { critical: 'var(--color-error)', medium: 'var(--color-warning)', low: 'var(--text-muted)' };
+		return (
+			<div className="space-y-2">
+				<div className="flex items-center gap-2">
+					<StatusBadge label={level} color={levelColors[level] || 'var(--text-muted)'} />
+					{content && <span className="text-[11px] text-[var(--text-secondary)]">{content}</span>}
+				</div>
+				{rawResult && (hasError ? <ErrorBox message={rawResult} /> : <ResultIndicator success successText="Created" />)}
+			</div>
+		);
+	}
+
+	// Complete / Delete
+	if (op === 'complete' || op === 'delete') {
+		const id = rawInput?.id ? String(rawInput.id) : '';
+		return (
+			<div className="space-y-2">
+				<div className="flex items-center gap-2">
+					{id && <span className="text-[10px] font-mono bg-[var(--surface-muted)] px-1.5 py-0.5 rounded">{id}</span>}
+					<span className="text-[11px] text-[var(--text-secondary)]">{op === 'complete' ? 'Marked complete' : 'Deleted'}</span>
+				</div>
+				{rawResult && (hasError ? <ErrorBox message={rawResult} /> : <ResultIndicator success />)}
+			</div>
+		);
+	}
+
+	// Priorities list
+	if (op === 'priorities') {
+		if (!resultData) return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : null) : null;
+		const groups = resultData.priorities || resultData;
+		const levelOrder = ['critical', 'medium', 'low'];
+		const levelColors: Record<string, string> = { critical: 'var(--color-error)', medium: 'var(--color-warning)', low: 'var(--text-muted)' };
+		return (
+			<div className="space-y-2">
+				{levelOrder.map(level => {
+					const items = Array.isArray(groups[level]) ? groups[level] : [];
+					if (items.length === 0) return null;
+					return (
+						<div key={level}>
+							<div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: levelColors[level] }}>{level}</div>
+							<div className="space-y-1">
+								{items.map((p: { id?: string; content?: string; completed?: boolean }, i: number) => (
+									<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2 py-1.5 rounded-md border border-[var(--border-subtle)]">
+										{p.completed ? <Check className="w-3 h-3 text-[var(--color-success)]" /> : <span className="w-3 h-3 rounded-full border border-current flex-shrink-0" style={{ color: levelColors[level] }} />}
+										<span className={p.completed ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text-secondary)]'}>{p.content}</span>
+									</div>
+								))}
+							</div>
+						</div>
+					);
+				})}
+			</div>
+		);
+	}
+
+	// Default
+	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="100px" />) : null;
+}
+
+// =============================================================================
+// SCHEDULE — Cron schedule management
+// =============================================================================
+
+export function ScheduleExpanded({ rawInput, rawResult }: ToolExpandedProps) {
+	const op = String(rawInput?.operation || '');
+	const hasError = isErrorResult(rawResult);
+	const resultData = !hasError ? parseResult(rawResult) : null;
+
+	// Add
+	if (op === 'add') {
+		const expr = rawInput?.expression ? String(rawInput.expression) : '';
+		const action = rawInput?.action ? String(rawInput.action) : '';
+		const payload = rawInput?.payload ? String(rawInput.payload) : '';
+		const critical = Boolean(rawInput?.critical);
+		return (
+			<div className="space-y-2">
+				{expr && <KeyValue label="Schedule" value={expr} />}
+				{action && <KeyValue label="Action" value={action} />}
+				{payload && <KeyValue label="Payload" value={payload} />}
+				{critical && <StatusBadge label="critical" color="var(--color-error)" />}
+				{rawResult && (hasError ? <ErrorBox message={rawResult} /> : <ResultIndicator success successText="Added" />)}
+			</div>
+		);
+	}
+
+	// List
+	if (op === 'list') {
+		const entries = resultData?.entries || [];
+		if (!Array.isArray(entries) || entries.length === 0) {
+			return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <div className="text-[11px] text-[var(--text-muted)]">No entries</div>) : null;
+		}
+		return (
+			<div className="space-y-1">
+				{entries.map((entry: { id?: string; expression?: string; action?: string; payload?: string; enabled?: boolean }, i: number) => (
+					<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2.5 py-1.5 rounded-md border border-[var(--border-subtle)]">
+						<code className="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">{entry.expression}</code>
+						<span className="text-[var(--text-secondary)] truncate">{entry.action}{entry.payload ? ` · ${entry.payload}` : ''}</span>
+						{entry.enabled === false && <StatusBadge label="disabled" color="var(--text-muted)" />}
+					</div>
+				))}
+			</div>
+		);
+	}
+
+	// Remove / Enable / Disable
+	if (op === 'remove' || op === 'enable' || op === 'disable') {
+		const id = rawInput?.id ? String(rawInput.id) : '';
+		const labels: Record<string, string> = { remove: 'Removed', enable: 'Enabled', disable: 'Disabled' };
+		return (
+			<div className="space-y-2">
+				{id && <KeyValue label="Entry" value={id} />}
+				{rawResult && (hasError ? <ErrorBox message={rawResult} /> : <ResultIndicator success successText={labels[op]} />)}
+			</div>
+		);
+	}
+
+	// History
+	if (op === 'history') {
+		if (!resultData) return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="150px" />) : null;
+		const runs = Array.isArray(resultData.history) ? resultData.history : Array.isArray(resultData) ? resultData : [];
+		if (runs.length === 0) return <div className="text-[11px] text-[var(--text-muted)]">No history</div>;
+		return (
+			<div className="space-y-1">
+				{runs.slice(0, 10).map((run: { timestamp?: string; action?: string; status?: string }, i: number) => (
+					<div key={i} className="flex items-center gap-2 text-[11px] bg-[var(--surface-base)] px-2.5 py-1.5 rounded-md border border-[var(--border-subtle)]">
+						{run.timestamp && <span className="text-[10px] text-[var(--text-muted)] font-mono flex-shrink-0">{fmtTime(run.timestamp)}</span>}
+						<span className="text-[var(--text-secondary)] truncate">{run.action}</span>
+						{run.status && <StatusBadge label={run.status} color={run.status === 'ok' || run.status === 'success' ? 'var(--color-success)' : 'var(--text-muted)'} />}
+					</div>
+				))}
+			</div>
+		);
+	}
+
+	// Default
+	return rawResult ? (hasError ? <ErrorBox message={rawResult} /> : <CodeBlock code={rawResult} maxHeight="100px" />) : null;
+}
 
 // =============================================================================
 // EXPORT MAP
@@ -939,6 +1297,13 @@ export const mcpCoreExpandedViews = {
 	email: EmailExpanded,
 	calendar: CalendarExpanded,
 	messages: MessagesExpanded,
+	opportunity: OpportunityExpanded,
+	pet: PetExpanded,
+	telegram: TelegramExpanded,
+
+	// Day & Schedule
+	day: DayExpanded,
+	schedule: ScheduleExpanded,
 
 	// Legacy: kept for rendering old transcripts
 	reply_to_chief: ReplyExpanded,
@@ -946,7 +1311,6 @@ export const mcpCoreExpandedViews = {
 	// Skills
 	Skill: SkillExpanded,
 
-	// NOTE: status, day, reset, done are intentionally NOT mapped here.
+	// NOTE: status, reset, done are intentionally NOT mapped here.
 	// They render as non-expandable system event chips — the one-liner is complete info.
-	// Legacy entries (reply_to_chief, priority, timeline, show) kept for old transcript rendering.
 };

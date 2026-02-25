@@ -24,7 +24,7 @@ tools:
   messages:
     purpose: "Read and send iMessages"
     who: "Chief primarily"
-    when: "Checking messages, sending texts on Will's behalf"
+    when: "Checking messages, sending texts on the user's behalf"
     usage: |
       - Uses primary iMessage account
       - Rate limit: 50/hour

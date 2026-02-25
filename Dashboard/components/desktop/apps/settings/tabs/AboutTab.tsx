@@ -56,11 +56,11 @@ export function AboutTab({
     <div className="p-5">
       {/* Hero - Claude branded */}
       <div className="text-center py-8 mb-5">
-        <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-xl shadow-[#DA7756]/30">
+        <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center shadow-xl shadow-[var(--color-claude)]/30">
           <ClaudeLogo className="w-10 h-10 text-white" />
         </div>
         <h2 className="text-xl font-bold text-[#1D1D1F] dark:text-white">{about?.name || 'Claude OS'}</h2>
-        <p className="text-[13px] text-[#DA7756] font-medium mt-1">Version {about?.version || '4.0.0'}</p>
+        <p className="text-[13px] text-[var(--color-claude)] font-medium mt-1">Version {about?.version || '4.0.0'}</p>
         <p className="text-[13px] text-[#8E8E93] mt-2 max-w-xs mx-auto">
           {about?.description}
         </p>
@@ -74,7 +74,7 @@ export function AboutTab({
               {about.built_with.map((tech) => (
                 <span
                   key={tech}
-                  className="text-[11px] px-2.5 py-1 rounded-full bg-gradient-to-br from-[#DA7756]/10 to-[#C15F3C]/20 text-[#DA7756] font-medium border border-[#DA7756]/20"
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-gradient-to-br from-[var(--color-claude)]/10 to-[var(--color-primary-hover)]/20 text-[var(--color-claude)] font-medium border border-[var(--color-claude)]/20"
                 >
                   {tech}
                 </span>
@@ -111,7 +111,7 @@ export function AboutTab({
           Created by <span className="text-[#1D1D1F] dark:text-white font-medium">{about?.author}</span>
         </p>
         <p className="text-[11px] text-[#8E8E93] mt-1">
-          AI Partner: <span className="text-[#DA7756] font-medium">{about?.ai_partner}</span>
+          AI Partner: <span className="text-[var(--color-claude)] font-medium">{about?.ai_partner}</span>
         </p>
       </div>
     </div>

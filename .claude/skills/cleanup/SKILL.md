@@ -14,8 +14,8 @@ Aggressive but safe cleanup of Desktop root and conversations/ folder.
 ### Always Keep
 - `IDENTITY.md`, `MEMORY.md`, `TODAY.md`, `SYSTEM-INDEX.md`
 - `morning-brief.md` (daily output)
-- Domain folders: `career/`, `finance/`, `health/`, `learning/`, `job-search/`
-- App folders: `email-triage/`, `training-will/`, any with `APP-SPEC.md`
+- Domain folders: `career/`, `finance/`, `health/`, `learning/`, and any domain folders you've set up
+- App folders: `email-triage/`, any with `APP-SPEC.md`
 - System folders: `logs/`, `projects/`, `diagrams/`
 
 ### In conversations/
@@ -37,7 +37,6 @@ ls -la Desktop/
 **Move misplaced files:**
 - PDFs about learning → `learning/`
 - Resume/portfolio files → `career/`
-- Interview prep → `job-search/` or `training-will/`
 - Specs (ending in `-spec.md`) should stay on Desktop root (correct location)
 
 **Delete stale research:**

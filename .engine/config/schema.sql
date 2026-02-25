@@ -7,7 +7,7 @@
 -- This is the authoritative schema dump from the live database.
 -- To regenerate: sqlite3 .engine/data/db/system.db ".schema" > .engine/config/schema.sql
 --
--- Table count: 35 (after audit cleanup)
+-- Table count: 46 (after Feb 25 cleanup — dropped 10 deprecated tables)
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_subtype TEXT,                  -- 'main', 'system', 'memory-claude', etc.
 
     -- Mission linking (for mission sessions)
-    mission_execution_id TEXT,             -- FK to missions.id
+    mission_execution_id TEXT,             -- DEPRECATED: was FK to missions table (dropped Feb 25)
 
     -- Lifecycle timestamps
     started_at TEXT NOT NULL,
@@ -161,92 +161,7 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS job_pipeline (
-    id TEXT PRIMARY KEY,                   -- UUID
-    company TEXT NOT NULL,
-    role TEXT NOT NULL,
-    stage TEXT NOT NULL                    -- 'research' | 'applied' | 'screen' | 'interview' | 'offer' | 'rejected'
-        CHECK (stage IN ('research', 'applied', 'screen', 'interview', 'offer', 'rejected')),
-    fit_score INTEGER,                     -- 0-100
-    referrer TEXT,
-    key_contact TEXT,
-    notes TEXT,
-    opportunity_path TEXT,                 -- Path to Documents/job-search/opportunities/[company]/
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-, tier TEXT CHECK (tier IN ('S', 'S-', 'A', 'B', 'B-', 'C', NULL)), slug TEXT, job_url TEXT);
-CREATE TABLE IF NOT EXISTS mock_interviews (
-    id TEXT PRIMARY KEY,                    -- 8-char UUID
-    partner TEXT NOT NULL,                  -- Who gave the mock
-    type TEXT,                              -- "behavioral", "DSA", "system design" (free text)
-    scheduled_date TEXT,                    -- ISO datetime (when scheduled for)
-    completed_date TEXT,                    -- NULL = not yet done
-    calendar_event_id TEXT,                 -- Optional link to Apple Calendar
-    content TEXT,                           -- What we went over (problem, questions asked)
-    feedback TEXT,                          -- From interviewer
-    analysis TEXT,                          -- Will/Claude takeaways after debrief
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS leetcode_problems (
-    problem_number INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    category TEXT NOT NULL,
-    difficulty TEXT,
-    leetcode_url TEXT,
-    neetcode_url TEXT,
-    -- Flashcard fields (nullable until populated)
-    pattern TEXT,                           -- "Hash Map", "Two Pointers", etc.
-    front_text TEXT,                        -- Condensed prompt for speedrun
-    back_text TEXT,                         -- Pattern + why + approach
-    signals TEXT,                           -- JSON array: ["target sum", "indices"]
-    domain TEXT DEFAULT 'leetcode'          -- Domain: 'leetcode', 'concurrency', etc.
-);
-CREATE INDEX IF NOT EXISTS idx_leetcode_problems_domain ON leetcode_problems(domain);
-CREATE TABLE IF NOT EXISTS leetcode_impl_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    problem_number INTEGER NOT NULL REFERENCES leetcode_problems,
-    attempt_date TEXT NOT NULL,             -- YYYY-MM-DD (one per day max)
-    outcome TEXT NOT NULL,                  -- 'solved', 'revisit', 'gave_up'
-    time_minutes INTEGER,
-    notes TEXT,                             -- Learning notes, approach used
-    UNIQUE(problem_number, attempt_date)
-);
-CREATE TABLE IF NOT EXISTS leetcode_speedrun_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    problem_number INTEGER NOT NULL REFERENCES leetcode_problems,
-    attempted_at TEXT NOT NULL,             -- Full datetime (many per day OK)
-    outcome TEXT NOT NULL,                  -- 'correct', 'partial', 'missed'
-    response_seconds INTEGER,               -- How fast answered
-    -- SRS scheduling fields
-    interval_days INTEGER DEFAULT 1,
-    ease_factor REAL DEFAULT 2.5,
-    next_review TEXT                        -- YYYY-MM-DD
-);
-CREATE TABLE IF NOT EXISTS dsa_topics (
-    slug TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    tier INTEGER NOT NULL,                  -- 1, 2, or 3
-    tier_name TEXT NOT NULL,                -- "Must Be Automatic", "High Priority", "Solid Foundation"
-    implementations TEXT,                   -- JSON array
-    patterns TEXT,                          -- JSON array
-    related_leetcode TEXT,                  -- JSON array of category names
-    -- Dynamic state
-    confidence INTEGER DEFAULT 3 CHECK (confidence BETWEEN 1 AND 5),
-    first_full_impl TEXT,                   -- Date of first from-scratch implementation
-    last_practiced TEXT,                    -- Most recent practice date
-    notes TEXT
-);
-CREATE TABLE IF NOT EXISTS dsa_practice_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    topic_slug TEXT NOT NULL REFERENCES dsa_topics(slug),
-    practiced_at TEXT NOT NULL,
-    practice_type TEXT NOT NULL,            -- 'full', 'refresh', 'speedrun'
-    confidence_before INTEGER,
-    confidence_after INTEGER,
-    notes TEXT,
-    session_id TEXT                         -- Groups speedrun attempts together (optional)
-);
+
 CREATE TABLE IF NOT EXISTS installed_apps (
                 slug TEXT PRIMARY KEY,
                 installed_at TEXT NOT NULL
@@ -413,72 +328,6 @@ CREATE TABLE IF NOT EXISTS claude_usage (
     fetch_status TEXT CHECK(fetch_status IN ('success', 'error', 'parsing_failed')),
     error_message TEXT
 );
-CREATE TABLE IF NOT EXISTS missions (
-    id TEXT PRIMARY KEY,
-
-    -- Identity
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    description TEXT,
-
-    -- Source tracking
-    source TEXT NOT NULL DEFAULT 'user'
-        CHECK (source IN ('core_default', 'custom_app', 'user')),
-    app_slug TEXT,
-
-    -- Prompt configuration
-    prompt_type TEXT NOT NULL DEFAULT 'file'
-        CHECK (prompt_type IN ('file', 'inline')),
-    prompt_file TEXT,
-    prompt_inline TEXT,
-
-    -- Schedule configuration
-    schedule_type TEXT
-        CHECK (schedule_type IN ('cron', 'time', 'relative', NULL)),
-    schedule_cron TEXT,
-    schedule_time TEXT,
-    schedule_days TEXT,
-
-    -- Trigger configuration
-    trigger_type TEXT
-        CHECK (trigger_type IN ('file_change', 'calendar_event', 'app_hook', NULL)),
-    trigger_config_json TEXT,
-
-    -- Execution settings
-    timeout_minutes INTEGER DEFAULT 60,
-    role TEXT NOT NULL DEFAULT 'builder'
-        CHECK (role != 'chief'),  -- Chief work is handled by duties
-    mode TEXT DEFAULT 'mission',
-
-    -- State (NO protected column!)
-    enabled BOOLEAN NOT NULL DEFAULT 1,
-    next_run TEXT,
-    last_run TEXT,
-    last_status TEXT
-        CHECK (last_status IN ('completed', 'failed', 'timeout', NULL)),
-
-    -- Metadata
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS mission_executions (
-    id TEXT PRIMARY KEY,
-    mission_id TEXT NOT NULL,
-    mission_slug TEXT NOT NULL,
-
-    started_at TEXT NOT NULL,
-    ended_at TEXT,
-    status TEXT DEFAULT 'running'
-        CHECK (status IN ('running', 'completed', 'failed', 'timeout', 'cancelled')),
-
-    session_id TEXT,
-    transcript_path TEXT,
-    output_summary TEXT,
-    error_message TEXT,
-    duration_seconds INTEGER,
-
-    FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE
-);
 CREATE TABLE IF NOT EXISTS email_metadata (
     email_message_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
@@ -522,6 +371,10 @@ CREATE TABLE IF NOT EXISTS email_classifications (
     suggested_actions TEXT,     -- Newline-separated action suggestions for Chief
     handled BOOLEAN DEFAULT 0, -- Whether this has been triaged/processed
 
+    -- Content extraction (newsletters/digests)
+    extracted_content TEXT,     -- Structured content extracted from newsletters
+    rule_id TEXT,               -- Which sender rule was applied (if any)
+
     -- Timestamps
     received_at TEXT,           -- When email was actually received
     processing_time_ms INTEGER,
@@ -530,12 +383,42 @@ CREATE TABLE IF NOT EXISTS email_classifications (
     FOREIGN KEY (email_message_id, account_id)
         REFERENCES email_metadata(email_message_id, account_id)
 );
+CREATE TABLE IF NOT EXISTS email_sender_rules (
+    id TEXT PRIMARY KEY,
+    match_type TEXT NOT NULL CHECK (match_type IN ('domain', 'sender')),
+    match_value TEXT NOT NULL,
+    rule_type TEXT NOT NULL CHECK (rule_type IN ('always', 'never', 'suggest')),
+    category TEXT NOT NULL CHECK (category IN ('action_needed', 'heads_up', 'fyi', 'noise')),
+    instructions TEXT,
+    extract_content BOOLEAN DEFAULT 0,
+    enabled BOOLEAN DEFAULT 1,
+    created_from TEXT DEFAULT 'manual',
+    times_applied INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS email_classification_feedback (
+    id TEXT PRIMARY KEY,
+    classification_id TEXT NOT NULL,
+    email_message_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    original_category TEXT NOT NULL,
+    corrected_category TEXT NOT NULL,
+    sender TEXT,
+    subject TEXT,
+    notes TEXT,
+    rule_created BOOLEAN DEFAULT 0,
+    prompt_version TEXT,
+    created_at TEXT NOT NULL,
+    reviewed BOOLEAN DEFAULT 0,
+    promoted_to_eval BOOLEAN DEFAULT 0,
+    FOREIGN KEY (classification_id) REFERENCES email_classifications(id)
+);
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(ended_at) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
 CREATE INDEX IF NOT EXISTS idx_sessions_role ON sessions(role);
 CREATE INDEX IF NOT EXISTS idx_sessions_mode ON sessions(mode);
 CREATE INDEX IF NOT EXISTS idx_sessions_heartbeat ON sessions(last_seen_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_mission ON sessions(mission_execution_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
 CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);
 CREATE INDEX IF NOT EXISTS idx_contacts_pinned ON contacts(pinned) WHERE pinned = 1;
@@ -550,21 +433,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type, date);
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
-CREATE INDEX IF NOT EXISTS idx_job_pipeline_stage ON job_pipeline(stage);
-CREATE INDEX IF NOT EXISTS idx_job_pipeline_company ON job_pipeline(company);
-CREATE INDEX IF NOT EXISTS idx_mock_partner ON mock_interviews(partner);
-CREATE INDEX IF NOT EXISTS idx_mock_type ON mock_interviews(type);
-CREATE INDEX IF NOT EXISTS idx_mock_completed ON mock_interviews(completed_date);
-CREATE INDEX IF NOT EXISTS idx_lc_category ON leetcode_problems(category);
-CREATE INDEX IF NOT EXISTS idx_lc_pattern ON leetcode_problems(pattern);
-CREATE INDEX IF NOT EXISTS idx_impl_date ON leetcode_impl_attempts(attempt_date);
-CREATE INDEX IF NOT EXISTS idx_impl_outcome ON leetcode_impl_attempts(outcome);
-CREATE INDEX IF NOT EXISTS idx_speedrun_next ON leetcode_speedrun_attempts(next_review);
-CREATE INDEX IF NOT EXISTS idx_dsa_tier ON dsa_topics(tier);
-CREATE INDEX IF NOT EXISTS idx_dsa_confidence ON dsa_topics(confidence);
-CREATE INDEX IF NOT EXISTS idx_dsa_log_topic ON dsa_practice_log(topic_slug);
-CREATE INDEX IF NOT EXISTS idx_dsa_log_date ON dsa_practice_log(practiced_at);
-CREATE INDEX IF NOT EXISTS idx_dsa_log_session ON dsa_practice_log(session_id);
+
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
 CREATE INDEX IF NOT EXISTS idx_contacts_updated ON contacts(updated_at);
 CREATE INDEX IF NOT EXISTS idx_priorities_date_level ON priorities(date, level);
@@ -574,8 +443,6 @@ CREATE INDEX IF NOT EXISTS idx_email_send_log_status ON email_send_log(status);
 CREATE INDEX IF NOT EXISTS idx_email_send_log_send_at ON email_send_log(send_at);
 CREATE INDEX IF NOT EXISTS idx_email_send_log_hour_bucket ON email_send_log(hour_bucket);
 CREATE INDEX IF NOT EXISTS idx_email_send_log_requires_confirmation ON email_send_log(requires_confirmation) WHERE requires_confirmation = 1;
-CREATE INDEX IF NOT EXISTS idx_job_pipeline_tier ON job_pipeline(tier);
-CREATE INDEX IF NOT EXISTS idx_job_pipeline_slug ON job_pipeline(slug);
 CREATE INDEX IF NOT EXISTS idx_contacts_extension_tags ON contacts_extension_tags(tag);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
 CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(account_type);
@@ -586,15 +453,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_active_context
 ON sessions(ended_at, context_warning_level)
 WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON claude_usage(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_missions_next ON missions(next_run)
-    WHERE enabled = 1 AND next_run IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_missions_app ON missions(app_slug);
-CREATE INDEX IF NOT EXISTS idx_missions_slug ON missions(slug);
-CREATE INDEX IF NOT EXISTS idx_missions_source ON missions(source);
-CREATE INDEX IF NOT EXISTS idx_mission_executions_mission ON mission_executions(mission_id);
-CREATE INDEX IF NOT EXISTS idx_mission_executions_slug ON mission_executions(mission_slug);
-CREATE INDEX IF NOT EXISTS idx_mission_executions_status ON mission_executions(status);
-CREATE INDEX IF NOT EXISTS idx_mission_executions_recent ON mission_executions(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_meta_processed
 ON email_metadata(processed, first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_meta_classified
@@ -642,19 +500,8 @@ WHERE p.front_text IS NOT NULL
 /* leetcode_speedrun_status(problem_number,name,pattern,next_review,interval_days,ease_factor,review_status) */;
 
 -- =============================================================================
--- Team Messaging - Reply Injection Tracking
+-- Ember - Claude's Pet
 -- =============================================================================
-
-CREATE TABLE IF NOT EXISTS reply_injections (
-    specialist_session_id TEXT NOT NULL,
-    chief_session_id TEXT NOT NULL,
-    message_position INTEGER NOT NULL,
-    injected_at TEXT NOT NULL,
-    PRIMARY KEY (specialist_session_id, message_position)
-);
-
-CREATE INDEX IF NOT EXISTS idx_reply_injections_specialist
-    ON reply_injections(specialist_session_id);
 
 -- =============================================================================
 -- Cron Scheduler
@@ -774,3 +621,24 @@ CREATE TABLE IF NOT EXISTS service_defaults (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (service, key)
 );
+
+-- =============================================================================
+-- Contact Activity Feed
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS contact_activity (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN (
+        'signal_touch', 'created', 'updated', 'enriched', 'history_added'
+    )),
+    description TEXT NOT NULL,
+    source TEXT,  -- email, calendar, imessage, chief, manual
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_activity_time
+ON contact_activity(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_contact_activity_contact
+ON contact_activity(contact_id, created_at DESC);

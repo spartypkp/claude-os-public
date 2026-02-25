@@ -15,6 +15,8 @@ import {
 	Mail,
 	RefreshCw,
 	Search,
+	Settings2,
+	Shield,
 	X,
 	Zap,
 } from 'lucide-react';
@@ -24,6 +26,8 @@ import remarkGfm from 'remark-gfm';
 import { API_BASE } from '@/lib/api';
 import { ChatButton } from '@/components/shared/ChatButton';
 import { SenderCard } from './SenderCard';
+import { useEventStream } from '@/hooks/useEventStream';
+import { ClassifierSettings, ReclassifyPopover } from './ClassifierSettings';
 
 // ==========================================
 // TYPES
@@ -83,6 +87,228 @@ interface PipelineStatus {
 type Category = 'action_needed' | 'heads_up' | 'fyi' | 'noise';
 type ViewMode = 'inbox' | 'activity';
 type InboxFilter = 'triage' | 'all';
+
+// Clickable category badge with reclassify popover
+const ClickableCategoryBadge = memo(function ClickableCategoryBadge({
+	classificationId,
+	category,
+	sender,
+	onReclassified,
+}: {
+	classificationId: string;
+	category: Category;
+	sender: string | null;
+	onReclassified: (id: string, newCategory: string) => void;
+}) {
+	const [showPopover, setShowPopover] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+	const cfg = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.fyi;
+
+	// Close on outside click
+	useEffect(() => {
+		if (!showPopover) return;
+		const handler = (e: MouseEvent) => {
+			if (ref.current && !ref.current.contains(e.target as Node)) {
+				setShowPopover(false);
+			}
+		};
+		document.addEventListener('mousedown', handler);
+		return () => document.removeEventListener('mousedown', handler);
+	}, [showPopover]);
+
+	return (
+		<div ref={ref} className="relative flex-shrink-0">
+			<span
+				role="button"
+				tabIndex={0}
+				onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowPopover(!showPopover); }}
+				onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setShowPopover(!showPopover); } }}
+				className={`text-[9px] font-medium ${cfg.color} hover:underline cursor-pointer`}
+				title="Click to reclassify"
+			>
+				{cfg.label}
+			</span>
+			{showPopover && (
+				<div className="absolute right-0 top-full mt-1">
+					<ReclassifyPopover
+						classificationId={classificationId}
+						currentCategory={category}
+						sender={sender}
+						onClose={() => setShowPopover(false)}
+						onReclassified={(newCat) => onReclassified(classificationId, newCat)}
+					/>
+				</div>
+			)}
+		</div>
+	);
+});
+
+// ==========================================
+// CREATE RULE INLINE (detail panel action)
+// ==========================================
+
+const RULE_CATEGORY_OPTIONS: { value: Category; label: string; color: string }[] = [
+	{ value: 'action_needed', label: 'Action', color: 'text-red-400' },
+	{ value: 'heads_up', label: 'Heads Up', color: 'text-amber-400' },
+	{ value: 'fyi', label: 'FYI', color: 'text-blue-400' },
+	{ value: 'noise', label: 'Noise', color: 'text-zinc-500' },
+];
+
+const CreateRuleInline = memo(function CreateRuleInline({
+	sender,
+	currentCategory,
+}: {
+	sender: string;
+	currentCategory: Category;
+}) {
+	const [open, setOpen] = useState(false);
+	const [matchType, setMatchType] = useState<'domain' | 'sender'>('domain');
+	const [ruleType, setRuleType] = useState<'always' | 'suggest'>('always');
+	const [category, setCategory] = useState<Category>(currentCategory);
+	const [saving, setSaving] = useState(false);
+	const [saved, setSaved] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+
+	const senderEmail = sender.match(/<(.+?)>/)?.[1] || sender;
+	const domain = senderEmail.split('@')[1] || '';
+
+	// Close on outside click
+	useEffect(() => {
+		if (!open) return;
+		const handler = (e: MouseEvent) => {
+			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+		};
+		document.addEventListener('mousedown', handler);
+		return () => document.removeEventListener('mousedown', handler);
+	}, [open]);
+
+	const handleCreate = async () => {
+		setSaving(true);
+		try {
+			const res = await fetch(`${API_BASE}/api/email/classifier/rules`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					match_type: matchType,
+					match_value: matchType === 'domain' ? domain : senderEmail,
+					rule_type: ruleType,
+					category,
+				}),
+			});
+			if (res.ok) {
+				setSaved(true);
+				setTimeout(() => { setSaved(false); setOpen(false); }, 1500);
+			}
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	if (saved) {
+		return (
+			<span className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-emerald-400">
+				<Check className="w-3 h-3" /> Rule created
+			</span>
+		);
+	}
+
+	return (
+		<div ref={ref} className="relative">
+			<button
+				onClick={() => setOpen(!open)}
+				className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-accent)] transition-colors"
+				title="Create sender rule"
+			>
+				<Shield className="w-3 h-3" />
+				Rule
+			</button>
+
+			{open && (
+				<div
+					className="absolute right-0 top-full mt-1 z-50 bg-[var(--surface-overlay)] border border-[var(--border-subtle)] rounded-lg shadow-xl p-3 min-w-[240px]"
+					onClick={e => e.stopPropagation()}
+				>
+					<div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+						Create Sender Rule
+					</div>
+
+					{/* Match type */}
+					<div className="flex gap-1 mb-2">
+						<button
+							onClick={() => setMatchType('domain')}
+							className={`flex-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+								matchType === 'domain' ? 'bg-sky-500/15 text-sky-400' : 'text-[var(--text-muted)] hover:bg-[var(--surface-accent)]'
+							}`}
+						>
+							Domain: {domain}
+						</button>
+						<button
+							onClick={() => setMatchType('sender')}
+							className={`flex-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+								matchType === 'sender' ? 'bg-sky-500/15 text-sky-400' : 'text-[var(--text-muted)] hover:bg-[var(--surface-accent)]'
+							}`}
+						>
+							Sender: {senderEmail.split('@')[0]}
+						</button>
+					</div>
+
+					{/* Rule type */}
+					<div className="flex gap-1 mb-2">
+						<button
+							onClick={() => setRuleType('always')}
+							className={`flex-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+								ruleType === 'always' ? 'bg-emerald-500/15 text-emerald-400' : 'text-[var(--text-muted)] hover:bg-[var(--surface-accent)]'
+							}`}
+						>
+							Always
+						</button>
+						<button
+							onClick={() => setRuleType('suggest')}
+							className={`flex-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+								ruleType === 'suggest' ? 'bg-amber-500/15 text-amber-400' : 'text-[var(--text-muted)] hover:bg-[var(--surface-accent)]'
+							}`}
+						>
+							Suggest
+						</button>
+					</div>
+
+					{/* Category */}
+					<div className="flex gap-1 mb-3">
+						{RULE_CATEGORY_OPTIONS.map(opt => (
+							<button
+								key={opt.value}
+								onClick={() => setCategory(opt.value)}
+								className={`flex-1 px-1.5 py-1 text-[9px] font-medium rounded-md transition-colors ${
+									category === opt.value ? `bg-[var(--surface-accent)] ${opt.color}` : 'text-[var(--text-muted)] hover:bg-[var(--surface-accent)]'
+								}`}
+							>
+								{opt.label}
+							</button>
+						))}
+					</div>
+
+					{/* Submit */}
+					<div className="flex items-center gap-2">
+						<button
+							onClick={handleCreate}
+							disabled={saving}
+							className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50 transition-colors"
+						>
+							{saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3 h-3" />}
+							Create Rule
+						</button>
+						<button
+							onClick={() => setOpen(false)}
+							className="px-2.5 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+});
 
 const ALL_CATEGORIES: Category[] = ['action_needed', 'heads_up', 'fyi', 'noise'];
 const DEFAULT_ACTIVE: Category[] = ['action_needed', 'heads_up', 'fyi'];
@@ -179,13 +405,12 @@ function extractSenderEmail(sender: string | null): string {
 }
 
 function accountShortName(email: string): string {
-	// will@diamondquarters.com → "Work"
-	// WillDiamond3@gmail.com → "Gmail"
-	// wdiamond@contoural.com → "Contoural"
-	// willdiamond.assistant@gmail.com → "Claude"
+	// work@yourcompany.com → "Work"
+	// user@gmail.com → "Gmail"
+	// user@client.com → "Client"
+	// assistant@gmail.com → "Claude"
 	const lower = email.toLowerCase();
-	if (lower.includes('diamondquarters')) return 'Work';
-	if (lower.includes('contoural')) return 'Contoural';
+	if (lower.includes('yourcompany')) return 'Work';
 	if (lower.includes('assistant')) return 'Claude';
 	if (lower.includes('gmail')) return 'Gmail';
 	// Fallback: domain without TLD
@@ -243,9 +468,14 @@ export function EmailWindowContent() {
 	const [emailBody, setEmailBody] = useState<string | null>(null);
 	const [loadingBody, setLoadingBody] = useState(false);
 
+	const [showSettings, setShowSettings] = useState(false);
 	const [newCount, setNewCount] = useState(0);
 	const latestClassifiedRef = useRef<string | null>(null);
 	const suppressNewRef = useRef(false);
+
+	// SSE: refetch when triage state changes (e.g. Chief marks handled via MCP)
+	const { lastEvent } = useEventStream();
+	const lastTriageEventRef = useRef<string | null>(null);
 
 	// ── Category toggle ──
 
@@ -405,6 +635,12 @@ export function EmailWindowContent() {
 		} catch { /* non-fatal */ }
 	}, [classifications, inboxFilter]);
 
+	const handleReclassify = useCallback((classificationId: string, newCategory: string) => {
+		setClassifications(prev => prev.map(c =>
+			c.id === classificationId ? { ...c, category: newCategory as Category } : c
+		));
+	}, []);
+
 	const handleRefresh = useCallback(() => {
 		setRefreshing(true);
 		suppressNewRef.current = true;
@@ -444,31 +680,42 @@ export function EmailWindowContent() {
 		loadClassifications({ reset: true, filter: inboxFilter });
 	}, [inboxFilter]);
 
-	// Keep triage count updated even when not in triage view
+	// Load triage count (used by SSE handler and initial load)
+	const loadTriageCount = useCallback(async () => {
+		try {
+			const res = await fetch(`${API_BASE}/api/email/classifications/triage?limit=1`);
+			if (res.ok) {
+				const data = await res.json();
+				setTotalUnhandled(data.total_unhandled);
+				setTriageCounts(data.counts_by_category || {});
+			}
+		} catch { /* non-fatal */ }
+	}, []);
+
+	// Initial load of triage count when not in triage view
 	useEffect(() => {
-		const loadTriageCount = async () => {
-			try {
-				const res = await fetch(`${API_BASE}/api/email/classifications/triage?limit=1`);
-				if (res.ok) {
-					const data = await res.json();
-					setTotalUnhandled(data.total_unhandled);
-					setTriageCounts(data.counts_by_category || {});
-				}
-			} catch { /* non-fatal */ }
-		};
-		// Poll triage count less frequently when not in triage view
 		if (inboxFilter !== 'triage') {
 			loadTriageCount();
-			const interval = setInterval(loadTriageCount, 30000);
-			return () => clearInterval(interval);
 		}
-	}, [inboxFilter]);
+	}, [inboxFilter, loadTriageCount]);
 
-	// Pipeline polling
+	// Pipeline polling — fast when processing, slow when idle
 	useEffect(() => {
-		const interval = setInterval(loadPipeline, PIPELINE_POLL_MS);
+		const pollMs = pipeline && pipeline.pending > 0 ? PIPELINE_POLL_MS : 60000;
+		const interval = setInterval(loadPipeline, pollMs);
 		return () => clearInterval(interval);
-	}, [loadPipeline]);
+	}, [loadPipeline, pipeline?.pending]);
+
+	// SSE: refetch triage list and counts on email events
+	useEffect(() => {
+		if (!lastEvent) return;
+		const isEmailEvent = lastEvent.type?.startsWith('email.');
+		if (isEmailEvent && lastEvent.timestamp !== lastTriageEventRef.current) {
+			lastTriageEventRef.current = lastEvent.timestamp;
+			loadClassifications({ reset: true, search: searchQuery, filter: inboxFilter });
+			loadTriageCount();
+		}
+	}, [lastEvent, loadTriageCount]);
 
 	// Debounced search
 	const searchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -656,10 +903,24 @@ export function EmailWindowContent() {
 				>
 					<RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
 				</button>
+
+				<button
+					onClick={() => setShowSettings(prev => !prev)}
+					className={`p-1.5 rounded-md transition-colors ${
+						showSettings
+							? 'text-sky-400 bg-sky-500/10'
+							: 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-accent)]'
+					}`}
+					title="Classifier Settings"
+				>
+					<Settings2 className="w-3.5 h-3.5" />
+				</button>
 			</div>
 
 			{/* ── Content ── */}
-			{view === 'activity' ? (
+			{showSettings ? (
+				<ClassifierSettings onClose={() => setShowSettings(false)} />
+			) : view === 'activity' ? (
 				<ActivityView pipeline={pipeline} accountMap={accountMap} />
 			) : (
 				<div className="flex-1 flex flex-col min-h-0">
@@ -711,6 +972,7 @@ export function EmailWindowContent() {
 													accountLabel={accountMap[item.account_id]}
 													onHandle={handleMarkHandled}
 													handling={handlingIds.has(item.message_id)}
+													onReclassify={handleReclassify}
 												/>
 											))}
 										</div>
@@ -733,6 +995,7 @@ export function EmailWindowContent() {
 									accountLabel={accountMap[selectedItem.account_id]}
 									onHandle={handleMarkHandled}
 									handling={handlingIds.has(selectedItem.message_id)}
+									onReclassify={handleReclassify}
 								/>
 							</div>
 						)}
@@ -796,12 +1059,14 @@ const EmailRowFull = memo(function EmailRowFull({
 	accountLabel,
 	onHandle,
 	handling,
+	onReclassify,
 }: {
 	item: ClassifiedEmail;
 	onSelect: () => void;
 	accountLabel?: string;
 	onHandle?: (messageId: string, accountId?: string) => void;
 	handling?: boolean;
+	onReclassify?: (classificationId: string, newCategory: string) => void;
 }) {
 	const name = item.display_name || extractSenderName(item.sender);
 	const email = extractSenderEmail(item.sender);
@@ -827,9 +1092,18 @@ const EmailRowFull = memo(function EmailRowFull({
 								{email}
 							</span>
 						)}
-						<span className={`flex-shrink-0 text-[9px] font-medium ${cfg.color}`}>
-							{cfg.label}
-						</span>
+						{onReclassify ? (
+							<ClickableCategoryBadge
+								classificationId={item.id}
+								category={item.category}
+								sender={item.sender}
+								onReclassified={onReclassify}
+							/>
+						) : (
+							<span className={`flex-shrink-0 text-[9px] font-medium ${cfg.color}`}>
+								{cfg.label}
+							</span>
+						)}
 						{item.handled && (
 							<Check className="w-3 h-3 text-emerald-500/40 flex-shrink-0" />
 						)}
@@ -975,6 +1249,7 @@ function DetailPanelInner({
 	accountLabel,
 	onHandle,
 	handling,
+	onReclassify,
 }: {
 	item: ClassifiedEmail;
 	emailBody: string | null;
@@ -983,6 +1258,7 @@ function DetailPanelInner({
 	accountLabel?: string;
 	onHandle?: (messageId: string, accountId?: string) => void;
 	handling?: boolean;
+	onReclassify?: (classificationId: string, newCategory: string) => void;
 }) {
 	const cfg = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.fyi;
 	const senderName = item.display_name || extractSenderName(item.sender);
@@ -1028,6 +1304,12 @@ function DetailPanelInner({
 								<Check className="w-3 h-3" />
 								Handled
 							</span>
+						)}
+						{item.sender && (
+							<CreateRuleInline
+								sender={item.sender}
+								currentCategory={item.category}
+							/>
 						)}
 						<ChatButton
 							message={`From: ${senderName} <${senderEmail}> — ${item.subject}\n${item.summary || ''}\nTo read: email("read", message_id="${item.message_id}", account="${item.account_id}")`}
@@ -1080,9 +1362,18 @@ function DetailPanelInner({
 					<span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
 						Classification
 					</span>
-					<span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
-						{cfg.label}
-					</span>
+					{onReclassify ? (
+						<ClickableCategoryBadge
+							classificationId={item.id}
+							category={item.category}
+							sender={item.sender}
+							onReclassified={onReclassify}
+						/>
+					) : (
+						<span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
+							{cfg.label}
+						</span>
+					)}
 					{item.processing_time_ms && (
 						<span className="text-[9px] text-[var(--text-muted)] ml-auto tabular-nums">
 							{formatProcessingTime(item.processing_time_ms)}

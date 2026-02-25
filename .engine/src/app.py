@@ -104,14 +104,10 @@ def _build_lifespan(testing: bool):
                 pipeline_task = None
 
             # Start Telegram service
-            try:
-                from adapters.telegram import TelegramService
-                telegram_service = TelegramService()
-                await telegram_service.start()
-                app.state.telegram_service = telegram_service
-            except Exception as e:
-                logger.error(f"Telegram service startup failed: {e}")
-                telegram_service = None
+            from adapters.telegram import TelegramService
+            telegram_service = TelegramService()
+            await telegram_service.start()
+            app.state.telegram_service = telegram_service
 
             app.state.watcher_task = watcher_task
             app.state.scheduler_task = scheduler_task
@@ -135,8 +131,7 @@ def _build_lifespan(testing: bool):
                 await usage_tracker.stop()
 
             # Stop Telegram service gracefully
-            if telegram_service:
-                await telegram_service.stop()
+            await telegram_service.stop()
 
             # Stop email pipeline gracefully
             if hasattr(app.state, 'email_pipeline'):
@@ -256,6 +251,9 @@ def create_app(testing: bool = False, db_path: Path | None = None) -> FastAPI:
 
     # Custom apps
     app.include_router(projects_api.router, prefix="/api/projects")
+
+    from modules.release import api as release_api
+    app.include_router(release_api.router, prefix="/api/release")
 
     return app
 

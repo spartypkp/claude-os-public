@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from core.mcp_helpers import get_services
 from .standalone import StandaloneContactsRepository
+from .activity import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -90,20 +91,67 @@ def _contact_dict_to_response(contact: dict) -> dict:
     }
 
 
-@router.get("/stale")
-async def contacts_stale(limit: int = Query(50, ge=1, le=500)):
-    """Get contacts sorted by relationship staleness.
+@router.get("/activity")
+async def contacts_activity(
+    days: int = Query(7, ge=1, le=30),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get contact activity feed -- reverse-chronological events.
 
-    Returns contacts with cadence set or pinned, annotated with
-    days_since_contact and status (on_track/overdue/way_overdue/no_cadence).
+    Returns activity events joined with contact name for the last N days.
     """
     repo = _get_repo()
-    results = await _run_blocking(repo.list_stale, limit)
+    rows = await _run_blocking(
+        repo.storage.fetchall,
+        """
+        SELECT ca.id, ca.contact_id, c.name as contact_name,
+               ca.event_type, ca.description, ca.source, ca.created_at
+        FROM contact_activity ca
+        JOIN contacts c ON ca.contact_id = c.id
+        WHERE ca.created_at >= datetime('now', 'localtime', ? || ' days')
+        ORDER BY ca.created_at DESC
+        LIMIT ?
+        """,
+        (str(-days), limit),
+    )
+    return [dict(row) for row in rows]
 
-    # Enrich with tags
-    for contact in results:
-        contact["tags"] = await _run_blocking(repo.get_tags, contact["id"])
-        contact["pinned"] = bool(contact.get("pinned", False))
+
+@router.get("/today")
+async def contacts_today(limit: int = Query(20, ge=1, le=100)):
+    """Get contacts active today -- last_contact_date is today.
+
+    Returns contacts with current_state for the Today's People strip.
+    """
+    repo = _get_repo()
+    rows = await _run_blocking(
+        repo.storage.fetchall,
+        """
+        SELECT id, name, phone, email, company, role, description,
+               current_state, pinned, last_contact_date, updated_at
+        FROM contacts
+        WHERE last_contact_date = date('now', 'localtime')
+        ORDER BY updated_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+
+    results = []
+    for row in rows:
+        contact = _contact_dict_to_response(dict(row))
+        # Get the most recent activity for this contact today for the signal reason
+        activity = await _run_blocking(
+            repo.storage.fetchone,
+            """
+            SELECT description FROM contact_activity
+            WHERE contact_id = ? AND created_at >= date('now', 'localtime')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (row["id"],),
+        )
+        contact["signal_reason"] = activity["description"] if activity else "Active today"
+        results.append(contact)
 
     return results
 
@@ -188,6 +236,9 @@ async def create_contact(request: CreateContactRequest):
         if request.tags:
             await _run_blocking(repo.replace_tags, contact['id'], request.tags)
 
+        # Log activity
+        await _run_blocking(log_activity, repo.storage, contact['id'], "created", "Contact created", "manual")
+
         resp = _contact_dict_to_response(contact)
         resp['tags'] = request.tags or []
         return resp
@@ -221,6 +272,12 @@ async def update_contact(contact_id: str, request: UpdateContactRequest):
 
     if request.tags is not None:
         await _run_blocking(repo.replace_tags, actual_id, request.tags)
+
+    # Log activity
+    changed = [k for k, v in request.model_dump().items() if v is not None]
+    if changed:
+        desc = f"Updated: {', '.join(changed)}"
+        await _run_blocking(log_activity, repo.storage, actual_id, "updated", desc, "manual")
 
     # Re-fetch updated contact
     updated = await _run_blocking(repo.get, actual_id)

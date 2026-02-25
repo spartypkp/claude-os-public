@@ -35,7 +35,7 @@ function SubNavigation({ routes, basePath }: SubNavigationProps) {
 						className={`
               flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors whitespace-nowrap
               ${isActive
-								? 'bg-[#da7756]/15 text-[#da7756] dark:bg-[#da7756]/20'
+								? 'bg-[var(--color-claude)]/15 text-[var(--color-claude)] dark:bg-[var(--color-claude)]/20'
 								: 'text-gray-500 dark:text-[#888] hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-white'
 							}
             `}

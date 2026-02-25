@@ -92,7 +92,7 @@ def check_session_status_reminder(storage, session_id: str) -> str | None:
             except:
                 pass
 
-        return f"[{_timestamp()}] [SYSTEM:INFO] Consider setting a session status with `status(\"what you're working on\")` so Will can see at a glance"
+        return f"[{_timestamp()}] [SYSTEM:INFO] Consider setting a session status with `status(\"what you're working on\")` so the user can see at a glance"
 
     except Exception:
         return None

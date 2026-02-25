@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Globe,
 } from 'lucide-react';
 import {
   BarChart,
@@ -33,6 +34,7 @@ import {
   useAnalyticsSpecialistsQuery,
   useAnalyticsFilesQuery,
   useAnalyticsInsightsQuery,
+  useAnalyticsToolDetailsQuery,
   type WorkRhythmEntry,
 } from '@/hooks/queries/useAnalyticsQuery';
 
@@ -40,20 +42,21 @@ import {
 // Design Tokens
 // ==========================================
 
-const ACCENT = '#8b5cf6'; // var(--color-info) — the one purple
+const ACCENT = 'var(--color-info)'; // var(--color-info) — the one purple
 
-type TabId = 'overview' | 'specialists' | 'insights';
+type TabId = 'overview' | 'specialists' | 'subagents' | 'insights';
 
 const TABS: { id: TabId; label: string; icon: typeof BarChart3 }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'specialists', label: 'Specialists', icon: Users },
+  { id: 'subagents', label: 'Subagents', icon: Globe },
   { id: 'insights', label: 'Insights', icon: Lightbulb },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  chief: '#DA7756',
+  chief: 'var(--color-claude)',
   builder: '#6366f1',
-  researcher: '#22c55e',
+  researcher: 'var(--color-success)',
   writer: '#eab308',
   curator: '#ec4899',
   idea: '#a855f7',
@@ -92,7 +95,7 @@ function KPICard({
   accent?: string;
 }) {
   const trendColor = trend
-    ? trend.value > 0 ? '#22c55e' : trend.value < 0 ? '#ef4444' : 'var(--text-muted)'
+    ? trend.value > 0 ? 'var(--color-success)' : trend.value < 0 ? 'var(--color-error)' : 'var(--text-muted)'
     : undefined;
   const TrendIcon = trend
     ? trend.value > 0 ? ArrowUpRight : trend.value < 0 ? ArrowDownRight : Minus
@@ -305,7 +308,7 @@ function OverviewTab() {
           label="Sessions (7d)" value={totalSessions} icon={BarChart3} accent={ACCENT}
           trend={weeklyChange !== null ? { value: weeklyChange, label: 'vs last week' } : undefined}
         />
-        <KPICard label="Claude Time" value={`${overview.claude_time_today}h`} icon={Clock} accent="#22c55e" />
+        <KPICard label="Claude Time" value={`${overview.claude_time_today}h`} icon={Clock} accent="var(--color-success)" />
         <KPICard
           label="Priorities" value={`${completedPriorities}/${totalPriorities}`}
           icon={CheckCircle2} accent="#eab308"
@@ -314,7 +317,7 @@ function OverviewTab() {
           label="Drift Days"
           value={overview.drift_days !== null ? overview.drift_days : '—'}
           icon={AlertTriangle}
-          accent={overview.drift_days !== null && overview.drift_days > 2 ? '#ef4444' : '#22c55e'}
+          accent={overview.drift_days !== null && overview.drift_days > 2 ? 'var(--color-error)' : 'var(--color-success)'}
         />
       </div>
 
@@ -351,7 +354,7 @@ function OverviewTab() {
           <div className="space-y-3 mt-1">
             {(['critical', 'medium', 'low'] as const).map(level => {
               const rate = overview.completion_rates[level] || 0;
-              const colors = { critical: '#ef4444', medium: '#eab308', low: '#6b7280' };
+              const colors = { critical: 'var(--color-error)', medium: '#eab308', low: '#6b7280' };
               return (
                 <div key={level}>
                   <div className="flex justify-between mb-1">
@@ -424,7 +427,7 @@ function SpecialistsTab() {
           label="Pass Rate"
           value={summary.pass_rate !== null ? `${Math.round(summary.pass_rate * 100)}%` : '—'}
           icon={CheckCircle2}
-          accent={summary.pass_rate !== null && summary.pass_rate >= 0.8 ? '#22c55e' : '#eab308'}
+          accent={summary.pass_rate !== null && summary.pass_rate >= 0.8 ? 'var(--color-success)' : '#eab308'}
         />
         <KPICard label="Avg Iterations"
           value={summary.avg_iterations !== null ? summary.avg_iterations : '—'}
@@ -496,14 +499,131 @@ function SpecialistsTab() {
 }
 
 // ==========================================
+// Tab: Subagents
+// ==========================================
+
+// Built-in Claude Code agents (not custom .claude/agents/ definitions)
+const BUILTIN_AGENTS = new Set(['Explore', 'Bash', 'Plan', 'general-purpose', 'claude-code-guide', 'statusline-setup']);
+
+function SubagentsTab() {
+  const { data: toolDetails, isLoading, isError } = useAnalyticsToolDetailsQuery();
+
+  if (isLoading) return <LoadingState />;
+  if (isError || !toolDetails) return <EmptyState message="Subagent data not available." />;
+
+  const agents = toolDetails.subagent_types;
+  if (agents.length === 0) return <CollectingState message="No subagent calls recorded yet." />;
+
+  const total = agents.reduce((sum, a) => sum + a.count, 0);
+  const customAgents = agents.filter(a => !BUILTIN_AGENTS.has(a.type));
+  const builtinAgents = agents.filter(a => BUILTIN_AGENTS.has(a.type));
+  const topAgent = agents[0];
+  const topPct = total > 0 ? Math.round((topAgent.count / total) * 100) : 0;
+
+  const chartData = agents.map(a => ({
+    agent: a.type,
+    calls: a.count,
+    fill: BUILTIN_AGENTS.has(a.type) ? '#64748b' : ACCENT,
+  }));
+
+  return (
+    <div className="space-y-3">
+      {/* KPI strip */}
+      <div className="grid grid-cols-3 gap-2">
+        <KPICard label="Total Calls" value={total} icon={Zap} accent={ACCENT} />
+        <KPICard label="Agent Types" value={agents.length} icon={Globe} accent="var(--color-success)" />
+        <KPICard label="Top Agent" value={`${topPct}%`} icon={TrendingUp} accent="#eab308" />
+      </div>
+
+      {/* Chart + Table */}
+      <div className="grid grid-cols-3 gap-2">
+        <Section title="Calls by Agent" className="col-span-1">
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(chartData.length * 28, 80)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                <XAxis type="number" hide />
+                <YAxis dataKey="agent" type="category" width={90}
+                  tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={TOOLTIP_STYLE}
+                  formatter={(value: number | undefined) => [`${value ?? 0}`, 'Calls']} />
+                <Bar dataKey="calls" radius={[0, 3, 3, 0]} barSize={16}>
+                  {chartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} fillOpacity={0.7} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyState message="No data" />}
+        </Section>
+
+        <Section title="Agent Detail" className="col-span-2">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)' }}>
+                <th className="text-left pb-1.5 text-[10px] font-medium uppercase tracking-wider">Agent</th>
+                <th className="text-left pb-1.5 text-[10px] font-medium uppercase tracking-wider">Type</th>
+                <th className="text-right pb-1.5 text-[10px] font-medium uppercase tracking-wider">Calls</th>
+                <th className="text-right pb-1.5 text-[10px] font-medium uppercase tracking-wider">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map(a => {
+                const isBuiltin = BUILTIN_AGENTS.has(a.type);
+                const pct = total > 0 ? Math.round((a.count / total) * 100) : 0;
+                return (
+                  <tr key={a.type} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                    <td className="py-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: isBuiltin ? '#64748b' : ACCENT }} />
+                        {a.type}
+                      </div>
+                    </td>
+                    <td className="py-1.5">
+                      <span
+                        className="text-[9px] px-1.5 py-0.5 rounded font-medium"
+                        style={{
+                          background: isBuiltin ? 'var(--surface-muted)' : `${ACCENT}15`,
+                          color: isBuiltin ? 'var(--text-muted)' : ACCENT,
+                        }}
+                      >
+                        {isBuiltin ? 'built-in' : 'custom'}
+                      </span>
+                    </td>
+                    <td className="text-right py-1.5 font-mono" style={{ color: 'var(--text-secondary)' }}>{a.count}</td>
+                    <td className="text-right py-1.5 font-mono" style={{ color: 'var(--text-muted)' }}>{pct}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
+      </div>
+
+      {/* Summary callout */}
+      {customAgents.length > 0 || builtinAgents.length > 0 ? (
+        <div className="text-[10px] font-mono space-y-0.5" style={{ color: 'var(--text-muted)' }}>
+          <div>
+            <span style={{ color: ACCENT }}>■</span> Custom: {customAgents.length} agent{customAgents.length !== 1 ? 's' : ''},{' '}
+            {customAgents.reduce((s, a) => s + a.count, 0)} calls
+            {'  '}
+            <span style={{ color: '#64748b' }}>■</span> Built-in: {builtinAgents.length} agent{builtinAgents.length !== 1 ? 's' : ''},{' '}
+            {builtinAgents.reduce((s, a) => s + a.count, 0)} calls
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ==========================================
 // Tab: Insights
 // ==========================================
 
 const INSIGHT_CATEGORY_META: Record<string, { icon: typeof Zap; color: string; label: string }> = {
   specialists: { icon: Users, color: ACCENT, label: 'Specialists' },
-  files: { icon: BarChart3, color: '#22c55e', label: 'Files' },
+  files: { icon: BarChart3, color: 'var(--color-success)', label: 'Files' },
   tools: { icon: Zap, color: ACCENT, label: 'Tools' },
-  system: { icon: AlertTriangle, color: '#DA7756', label: 'System' },
+  system: { icon: AlertTriangle, color: 'var(--color-claude)', label: 'System' },
 };
 
 function InsightsTab() {
@@ -650,6 +770,7 @@ export function ObservatoryWindowContent() {
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === 'overview' && <OverviewTab />}
         {activeTab === 'specialists' && <SpecialistsTab />}
+        {activeTab === 'subagents' && <SubagentsTab />}
         {activeTab === 'insights' && <InsightsTab />}
       </div>
     </div>

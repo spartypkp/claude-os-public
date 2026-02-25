@@ -2,6 +2,8 @@
 
 import { fetchCalendarEvents } from '@/lib/api';
 import { CalendarEvent } from '@/lib/types';
+import { queryKeys } from '@/lib/queryClient';
+import { useQuery } from '@tanstack/react-query';
 import { useWindowStore } from '@/store/windowStore';
 import {
 	Calendar,
@@ -12,7 +14,7 @@ import {
 	Video,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // ==========================================
 // HELPERS
@@ -86,46 +88,41 @@ function isZoomMeeting(event: CalendarEvent): boolean {
 // COMPONENT
 // ==========================================
 
+// Fetch today's calendar events — used by React Query
+async function fetchTodayEvents(): Promise<CalendarEvent[]> {
+	const today = new Date();
+	const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+	const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+	const data = await fetchCalendarEvents({
+		fromDate: todayStart.toISOString(),
+		toDate: todayEnd.toISOString(),
+		usePreferred: true,
+		limit: 200,
+	});
+
+	return (data.events || [])
+		.filter((event: CalendarEvent) => eventSpansDateRange(event, todayStart, todayEnd))
+		.sort((a: CalendarEvent, b: CalendarEvent) => new Date(a.start_ts).getTime() - new Date(b.start_ts).getTime());
+}
+
 export function CalendarWidgetContent() {
-	const [events, setEvents] = useState<CalendarEvent[]>([]);
-	const [loading, setLoading] = useState(true);
 	const [currentTime, setCurrentTime] = useState<Date>(new Date());
 	const { openAppWindow } = useWindowStore();
 
-	const loadEvents = useCallback(async () => {
-		try {
-			const today = new Date();
-			const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-			const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+	// SSE-invalidated via calendar.created/updated/deleted events.
+	// 60s refetchInterval as fallback for countdown timer recalculation.
+	const { data: events = [], isLoading: loading } = useQuery({
+		queryKey: [...queryKeys.calendarEvents, 'widget'] as const,
+		queryFn: fetchTodayEvents,
+		refetchInterval: 60000,
+	});
 
-			const data = await fetchCalendarEvents({
-				fromDate: todayStart.toISOString(),
-				toDate: todayEnd.toISOString(),
-				usePreferred: true,
-				limit: 200,
-			});
-
-			const todaysEvents = (data.events || [])
-				.filter(event => eventSpansDateRange(event, todayStart, todayEnd))
-				.sort((a, b) => new Date(a.start_ts).getTime() - new Date(b.start_ts).getTime());
-
-			setEvents(todaysEvents);
-		} catch (err) {
-			console.error('Failed to load calendar:', err);
-		} finally {
-			setLoading(false);
-		}
-	}, []);
-
+	// Clock tick for countdown timers (no network request)
 	useEffect(() => {
-		loadEvents();
-		const timeInterval = setInterval(() => setCurrentTime(new Date()), 60000);
-		const loadInterval = setInterval(loadEvents, 60000);
-		return () => {
-			clearInterval(timeInterval);
-			clearInterval(loadInterval);
-		};
-	}, [loadEvents]);
+		const interval = setInterval(() => setCurrentTime(new Date()), 60000);
+		return () => clearInterval(interval);
+	}, []);
 
 	const allDayEvents = useMemo(() => events.filter(e => e.all_day), [events]);
 	const timedEvents = useMemo(() => events.filter(e => !e.all_day), [events]);

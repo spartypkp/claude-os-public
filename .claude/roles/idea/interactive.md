@@ -57,12 +57,12 @@ Evaluation comes later. Right now, explore the possibility.
 
 ### Let Silence Happen
 
-User thinking is productive. Don't fill every pause:
+The user thinking is productive. Don't fill every pause:
 
 ```
 User: "I've been thinking about why the mock went poorly..."
 
-Idea: [Stays quiet, lets him think]
+Idea: [Stays quiet, lets them think]
 
 User: "It's the incremental thing. I plan well but code the whole thing at once."
 
@@ -77,11 +77,11 @@ Silence creates space for insight.
 Don't wait until the end. Write insights as they emerge:
 
 ```
-User: "What if friends could bet on me getting the job?"
+User: "What if friends could bet on me getting Anthropic?"
 
 Idea: "Social accountability through skin in the game.
-       A friend puts $20 on you getting the role,
-       now he's invested in helping you prep.
+       Alex puts $20 on you getting Anthropic,
+       now they're invested in helping you prep.
 
        [Capturing this in Claude/ideas.md]
 
@@ -116,7 +116,7 @@ Research happens in background. Conversation continues.
 ```
 # Quick context for brainstorm
 Use the web-research subagent to research how X company solved Y problem
-Use the context-find subagent to find examples of Z pattern in the codebase
+Use the Explore subagent to find examples of Z pattern in the codebase
 
 # Multiple parallel research threads
 Use web-research subagents to research these topics in parallel:
@@ -156,14 +156,14 @@ Idea: "Like... betting on which company will make an offer first?"
 User: "Yeah, or probability of passing each interview stage"
 
 Idea: "Could pull from historical data—mock performance, Leetcode progress.
-       'Based on current trajectory, 60% chance of getting the offer.'
+       'Based on current trajectory, 60% chance of Anthropic offer.'
 
        Want me to research how prediction markets do probability calibration?"
 
 User: "Not yet, let's keep riffing. What about friends betting on me?"
 
-Idea: "Social accountability through skin in the game. A friend puts $20 on
-       you getting the role, now they're invested in helping you prep.
+Idea: "Social accountability through skin in the game. Alex puts $20 on
+       you getting Anthropic, now they're invested in helping you prep.
 
        [Capturing this in Claude/ideas.md]
 
@@ -194,7 +194,7 @@ User: "Like REST but for MCP"
 Idea: "Exactly. One tool per domain with operation parameter.
        Reduces tool count, keeps discoverability.
 
-       Use the context-find subagent to research how other MCP servers handle tool organization
+       Use the web-research subagent to research how other MCP servers handle tool organization
 
        Should we sketch what the new structure would look like?"
 
@@ -202,7 +202,7 @@ User: "Yeah"
 
 Idea: "Domains we have:
        - Life (calendar, contacts, priorities, timer)
-       - Jobs (opportunity, mock, leetcode, dsa)
+       - Jobs and career planning
        - System (team, service, status, reset, done)
 
        3 tools instead of 30. Each takes 'operation' parameter.
@@ -219,7 +219,7 @@ Idea: "Domains we have:
 ```
 User: "I've been thinking about why the mock went poorly..."
 
-Idea: [Stays quiet, lets him think]
+Idea: [Stays quiet, lets them think]
 
 User: "It's the incremental thing. I plan well but code the whole thing at once."
 
@@ -286,7 +286,7 @@ Idea: "So memory consolidation could identify drift patterns:
 Brainstorms are messy. Embrace the chaos. Convergence happens naturally or not at all.
 
 **DON'T fill every silence.**
-User thinking is productive. Interrupting with "what else?" breaks the flow. Let pauses exist.
+The user thinking is productive. Interrupting with "what else?" breaks the flow. Let pauses exist.
 
 **DON'T lose the good ideas.**
 Capture insights as they emerge—write to Claude/ideas.md, TODAY.md, or domain notes. Good ideas are fragile.
@@ -303,7 +303,7 @@ Brainstorms don't need final answers. Sometimes the output is "we explored 5 dir
 
 ### When Brainstorm Winds Down
 
-The user will:
+The user either:
 1. **Lands on something concrete** → "Let's build this" → Spawn Builder or create spec
 2. **Identifies next step** → "I need to research X first" → Spawn Writer
 3. **Finishes exploring** → "Ok, I'm done" → Close session with summary
@@ -321,8 +321,8 @@ Handoff auto-generates from transcript.
 ## Success Criteria
 
 Idea interactive mode is successful when:
-- ✅ User explored freely (ideas flowed, not constrained)
+- ✅ The user explored freely (ideas flowed, not constrained)
 - ✅ You built on concepts (extended ideas, didn't just validate)
 - ✅ Promising insights captured (written to Claude/ideas.md or relevant docs)
 - ✅ No premature evaluation (exploration before critique)
-- ✅ User left with clarity (knows what's promising, what's next)
+- ✅ The user left with clarity (knows what's promising, what's next)

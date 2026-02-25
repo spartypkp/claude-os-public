@@ -27,8 +27,13 @@ Workspace/.trash/
 # Async worker logs (ephemeral)
 .engine/logs/async/
 
-# Playwright skill temp execution scripts
+# External file uploads (drag-drop into ClaudePanel)
+.engine/data/uploads/
+
+# Playwright skill temp execution scripts and dependencies
 .claude/skills/playwright-skill/.temp-execution-*.js
+.claude/skills/playwright/.temp-execution-*.js
+.claude/skills/playwright/node_modules/
 
 # User data (personal, never commit)
 Desktop/IDENTITY.md
@@ -38,8 +43,12 @@ Desktop/logs/
 .engine/data/db/*.db
 .engine/data/db/*.db-wal
 .engine/data/db/*.db-shm
+.engine/data/system.db
 .engine/data/logs/
 .mcp.json
+
+# Specialist workspaces (ephemeral, never commit)
+Desktop/conversations/[0-9][0-9][0-9][0-9]-*/
 
 # Keep examples
 !Desktop/IDENTITY.md.example
@@ -48,6 +57,6 @@ Desktop/logs/
 !.mcp.json.example
 
 # Exceptions - always track these
-!**/Will Diamond - Resume.pdf
+!**/resume.pdf
 
-temp-parliament-experiments/node_modules/
+temp-parliament-experiments/

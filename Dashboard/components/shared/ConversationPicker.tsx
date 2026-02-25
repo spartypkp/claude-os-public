@@ -109,7 +109,7 @@ export function ConversationPicker({ anchorRect, onSelect, onClose }: Conversati
               >
                 <div className={`flex-shrink-0 w-6 h-6 rounded-md ${config.bgColor} flex items-center justify-center`}>
                   {isChief ? (
-                    <ClaudeLogo className="w-3.5 h-3.5 text-[#da7756]" />
+                    <ClaudeLogo className="w-3.5 h-3.5 text-[var(--color-claude)]" />
                   ) : (
                     <Icon className={`w-3.5 h-3.5 ${config.color}`} />
                   )}

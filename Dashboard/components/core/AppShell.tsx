@@ -4,6 +4,9 @@ import { ClaudePanel } from '@/components/ClaudePanel';
 import { ChatPanelProvider, useChatPanel } from '@/components/context/ChatPanelContext';
 import { Dock } from '@/components/desktop/Dock';
 import { Menubar } from '@/components/desktop/menubar';
+import { BackendBanner, PanelErrorCard, WithErrorBoundary } from '@/components/errors/ErrorBoundaries';
+import { useEventStream } from '@/hooks/useEventStream';
+import { ErrorBoundary } from 'react-error-boundary';
 import {
 	Activity,
 	BarChart3,
@@ -66,7 +69,17 @@ function ClaudePanelWithToggle() {
 		return () => document.removeEventListener('keydown', handleKeyDown);
 	}, [toggleVisibility]);
 
-	return <ClaudePanel isVisible={isOpen} />;
+	return (
+		<ErrorBoundary FallbackComponent={PanelErrorCard} onError={(e) => console.error('[ClaudePanel]', e)}>
+			<ClaudePanel isVisible={isOpen} />
+		</ErrorBoundary>
+	);
+}
+
+// Inner component for backend health (needs EventStreamProvider context)
+function BackendHealthBanner() {
+	const { connected } = useEventStream();
+	return <BackendBanner connected={connected} />;
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -178,7 +191,7 @@ export function AppShell({ children }: AppShellProps) {
 			title: 'Go to Activity',
 			description: 'Today\'s Claude sessions and tasks',
 			icon: <Activity className="w-4 h-4" />,
-			shortcut: ['3'],
+			shortcut: ['2'],
 			category: 'Navigation',
 			action: () => navigateToView('activity'),
 		},
@@ -187,7 +200,7 @@ export function AppShell({ children }: AppShellProps) {
 			title: 'Go to System',
 			description: 'Health, docs, metrics, and settings',
 			icon: <Settings className="w-4 h-4" />,
-			shortcut: ['4'],
+			shortcut: ['3'],
 			category: 'Navigation',
 			action: () => navigateToView('system'),
 		},
@@ -250,7 +263,12 @@ export function AppShell({ children }: AppShellProps) {
 		<ChatPanelProvider>
 			<div className="h-screen flex flex-col bg-gray-100 dark:bg-[#0d0d0d]">
 				{/* Menubar - in flow, displaces content below */}
-				<Menubar />
+				<WithErrorBoundary name="Menubar" silent>
+					<Menubar />
+				</WithErrorBoundary>
+
+				{/* Backend health banner - shows when SSE disconnects */}
+				<BackendHealthBanner />
 
 				{/* Main content area - fills remaining height */}
 				<main className="flex-1 flex min-h-0">
@@ -258,7 +276,9 @@ export function AppShell({ children }: AppShellProps) {
 					<div className="flex-1 relative min-w-0 flex flex-col">
 						{children}
 						{/* Dock - absolute within content area so it shrinks with panel */}
-						<Dock />
+						<WithErrorBoundary name="Dock">
+							<Dock />
+						</WithErrorBoundary>
 					</div>
 
 					{/* Claude Panel - in flow, pushes content left */}

@@ -7,7 +7,6 @@
  *
  * Message taxonomy:
  *   [SYSTEM:TYPE]  — System-generated notifications, warnings, team messages
- *   [CAPTURE:TYPE] — Quick captures (drop, bug, idea, dump)
  *   [CONTEXT:App]  — Context injections from AttachToChat (email, calendar, etc.)
  *
  * Legacy format [CLAUDE OS SYS: TYPE] kept as fallback for existing transcripts.
@@ -22,8 +21,14 @@
  */
 export function normalizeMessageContent(content: string): string {
   // Python list-of-dicts format from raw transcript: [{'type': 'text', 'text': '...'}]
-  const pyMatch = content.match(/^\[\{'type':\s*'text',\s*'text':\s*'([\s\S]+?)'\}\]$/);
+  // Handle both single and double quoted variants, and truncated content
+  const pyMatch = content.match(/^\[\{'type':\s*'text',\s*'text':\s*'([\s\S]+?)'\}\]$/)
+    || content.match(/^\[\{"type":\s*"text",\s*"text":\s*"([\s\S]+?)"\}\]$/)
+    || content.match(/^\[\{'type':\s*'text',\s*'text':\s*'([\s\S]+)$/);
   if (pyMatch) return pyMatch[1];
+  // Strip leading timestamp prefix: [2026-02-22 17:45:35] — injected by hooks/workers
+  const tsMatch = content.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*/);
+  if (tsMatch) return content.slice(tsMatch[0].length);
   return content;
 }
 
@@ -34,7 +39,6 @@ export function normalizeMessageContent(content: string): string {
 export const SYSTEM_MESSAGE_PATTERNS = [
   // New standardized prefixes
   '[SYSTEM:',           // All system messages
-  '[CAPTURE:',          // Quick captures (drop, bug, idea, dump)
   '[CONTEXT:',          // Context injections from AttachToChat
   // Legacy patterns (fallback for existing transcripts)
   '[AUTO-HANDOFF]',
@@ -55,6 +59,7 @@ export const SYSTEM_MESSAGE_PATTERNS = [
   'Specialist FAILED',              // Legacy specialist failure
   'Base directory for this skill:',  // Skill invocation
   'ARGUMENTS:',                       // Skill arguments injection
+  '---\nname:',                        // SKILL.md frontmatter (content block extraction)
   "You're writing a handoff document", // Memory Agent (summarizer) prompt
   '<task-notification>',              // Subagent completion result
 ] as const;
@@ -80,13 +85,6 @@ export function parseSystemPrefix(content: string): { type: string; body: string
   return { type: match[1], body: match[2] };
 }
 
-/** Extract type from [CAPTURE:TYPE] prefix. Returns null if not a match. */
-export function parseCapturePrefix(content: string): { type: string; body: string } | null {
-  const match = content.trimStart().match(/^\[CAPTURE:(\w+)\]\s*([\s\S]*)/);
-  if (!match) return null;
-  return { type: match[1], body: match[2] };
-}
-
 /** Extract app name from [CONTEXT:App] prefix. Returns null if not a match. */
 export function parseContextPrefix(content: string): { app: string; body: string } | null {
   const match = content.trimStart().match(/^\[CONTEXT:(\w+)\]\s*([\s\S]*)/);
@@ -97,11 +95,6 @@ export function parseContextPrefix(content: string): { app: string; body: string
 /** Check if content is a [CONTEXT:App] message. */
 export function isContextMessage(content: string): boolean {
   return content.trimStart().startsWith('[CONTEXT:');
-}
-
-/** Check if content is a [CAPTURE:TYPE] message. */
-export function isCaptureMessage(content: string): boolean {
-  return content.trimStart().startsWith('[CAPTURE:');
 }
 
 // =============================================================================
@@ -439,16 +432,6 @@ export function summarizeSystemMessage(content: string): SystemMessageSummary {
     return { icon, summary: body.split('\n')[0].slice(0, 60) || type };
   }
 
-  // ─── [CAPTURE:TYPE] ───
-  const captureParsed = parseCapturePrefix(trimmed);
-  if (captureParsed) {
-    const captureIcons: Record<string, string> = { DROP: 'arrow-down', BUG: 'bug', IDEA: 'lightbulb', DUMP: 'zap' };
-    return {
-      icon: captureIcons[captureParsed.type] || 'zap',
-      summary: `${captureParsed.type.toLowerCase()}: ${captureParsed.body.split('\n')[0].slice(0, 50)}`,
-    };
-  }
-
   // ─── [CONTEXT:App] ───
   const contextParsed = parseContextPrefix(trimmed);
   if (contextParsed) {
@@ -536,10 +519,15 @@ export function summarizeSystemMessage(content: string): SystemMessageSummary {
     return { icon: 'brain', summary: 'Memory Agent prompt' };
   }
 
-  // Skill invocation
+  // Skill invocation (all variants)
   if (trimmed.startsWith('Base directory for this skill:') || trimmed.startsWith('ARGUMENTS:')) {
     const pathMatch = content.match(/skills\/([^\/\n]+)/);
     const skillName = pathMatch ? pathMatch[1] : 'skill';
+    return { icon: 'zap', summary: `Skill: ${skillName}` };
+  }
+  if (trimmed.startsWith('---\nname:')) {
+    const nameMatch = trimmed.match(/^---\nname:\s*(.+)/);
+    const skillName = nameMatch ? nameMatch[1].trim() : 'skill';
     return { icon: 'zap', summary: `Skill: ${skillName}` };
   }
 

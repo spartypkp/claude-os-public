@@ -11,8 +11,9 @@ import type { LucideIcon } from 'lucide-react';
  * Tool category determines rendering style:
  * - 'tool': Inline chip (Read, Edit, Bash, search, MCP data tools)
  * - 'system': Full-width system event (lifecycle, meta, orchestration)
+ * - 'interactive': Inline chip for tools awaiting user input (AskUserQuestion)
  */
-export type ToolCategory = 'tool' | 'system';
+export type ToolCategory = 'tool' | 'system' | 'interactive';
 
 /**
  * Unified tool configuration — single source of truth for how a tool renders.
@@ -29,7 +30,7 @@ export interface ToolConfig {
 	getOneLiner: (input: ParsedToolInput, result?: ParsedToolResult) => string;
 	/** Whether to show the tool name as an inline prefix (e.g., "STATUS: text") */
 	showToolName?: boolean;
-	/** Override label for the prefix (defaults to formattedName) */
+	/** Override label for the prefix (defaults to formattedName). Example: pet → "EMBER" */
 	chipLabel?: string;
 }
 

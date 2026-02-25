@@ -13,6 +13,7 @@ Components are organized by domain and purpose:
 ```
 components/
 ├── core/           # Core infrastructure (shell, providers, layout)
+├── errors/         # Error boundary system (3 fallback tiers + banner)
 ├── shared/         # Reusable UI primitives
 ├── desktop/        # Desktop OS + core apps
 ├── claude/         # Claude Panel (ClaudePanel/)
@@ -26,23 +27,36 @@ components/
 
 ## Folder Purposes
 
-### `/core`: Core Infrastructure
+### `/core` — Core Infrastructure
 
 **Purpose:** App shell, providers, global components.
 
 | File | Purpose |
 |------|---------|
-| `Providers.tsx` | React Query, contexts |
+| `Providers.tsx` | QueryClientProvider, EventStreamProvider (system SSE), FileEventProvider (file SSE), GlobalErrorCatcher |
 | `AppShell.tsx` | Main app layout with panels |
 | `ApplicationShell.tsx` | Custom app wrapper |
 | `AppLayout.tsx` | Custom app layout |
-| `ErrorBoundary.tsx` | Error handling |
 | `CommandPalette.tsx` | Global command palette |
 | `Sidebar.tsx` | App sidebar navigation |
 | `HudPanel.tsx`, `HudCard.tsx` | HUD display |
 | `toast-provider.tsx` | Toast notifications |
 
-### `/shared`: Reusable UI
+### `/errors` — Error Boundary System
+
+**Purpose:** Compartmentalized error handling for a Dashboard that gets rewritten while you use it.
+
+| File | Purpose |
+|------|---------|
+| `ErrorBoundaries.tsx` | 3 fallback components (PanelErrorCard, WindowErrorCard, ComponentErrorCard), BackendBanner, WithErrorBoundary wrapper, useAutoRetry hook |
+| `error-messages.ts` | Fun error message bank (hash-stable selection, same error = same message) |
+| `copy-error.ts` | Format + copy structured error reports for pasting to Claude |
+
+**Architecture:** Errors are compartmentalized by blast radius. PanelErrorCard recreates the ClaudePanel container (dark bg, border, width). WindowErrorCard wraps window children (title bar stays functional). ComponentErrorCard is inline. Menubar items fail silently. All use auto-retry with escalating delays (5s/15s/30s). BackendBanner uses SSE connected state with 3s grace period.
+
+**Wrapped in AppShell.tsx:** ClaudePanel (ErrorBoundary + PanelErrorCard), Dock (WithErrorBoundary), Menubar (WithErrorBoundary silent). Each DesktopWindow's children wrapped in ClaudeOS.tsx.
+
+### `/shared` — Reusable UI
 
 **Purpose:** Components used across multiple domains.
 
@@ -58,7 +72,7 @@ components/
 | `BlueprintAccordion.tsx` | Accordion for app lists |
 | `ThemeToggle.tsx` | Dark/light toggle |
 
-### `/desktop`: Desktop OS
+### `/desktop` — Desktop OS
 
 **Purpose:** ClaudeOS desktop environment.
 
@@ -69,10 +83,13 @@ desktop/
 ├── Menubar.tsx        # Top menu bar
 ├── DesktopIcon.tsx    # Desktop icons
 ├── DesktopWindow.tsx  # Window chrome
-├── ContextMenu.tsx    # Right-click menu
+├── ContextMenu/       # Right-click menu (decomposed into 16 files)
 ├── QuickLook.tsx      # Quick preview
 │
-├── editors/           # File type editors
+├── editors/           # File type editors (all lazy-loaded via DocumentRouter)
+│   ├── index.ts       # Barrel: utility exports only (no component re-exports to preserve tree-shaking)
+│   ├── DocumentRouter.tsx  # Dynamic import hub for all editors
+│   ├── EditorContext.tsx    # Shared editor state for PathBar integration
 │   ├── CodeEditor.tsx
 │   ├── MarkdownEditor.tsx
 │   └── ...
@@ -93,19 +110,19 @@ desktop/
     └── widgets-manager/  # Widget configuration
 ```
 
-### `/ClaudePanel`: Claude Panel
+### `/ClaudePanel` — Claude Panel
 
 **Purpose:** Claude chat interface.
 
 See `ClaudePanel/SYSTEM-SPEC.md` for details.
 
-### `/transcript`: Transcript Viewer
+### `/transcript` — Transcript Viewer
 
 **Purpose:** Render Claude conversation turns and tool calls.
 
 See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 
-### `/activity`: Activity Views
+### `/activity` — Activity Views
 
 **Purpose:** Task and session activity displays.
 
@@ -116,7 +133,7 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 | `ActivityWorkerRow.tsx` | Task list row |
 | `ActivityWorkerDetail.tsx` | Task detail view |
 
-### `/system`: System Tab Views
+### `/system` — System Tab Views
 
 **Purpose:** System panel tab content.
 
@@ -127,7 +144,7 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 | `ConfigTab.tsx` | Configuration |
 | `DocsTab.tsx` | Documentation |
 
-### `/context`: React Contexts
+### `/context` — React Contexts
 
 **Purpose:** Shared state contexts.
 
@@ -153,15 +170,14 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 Custom apps keep their components within `app/[app-name]/`:
 
 ```
-app/job-search/
+app/my-custom-app/
 ├── page.tsx
 ├── components/       # App-specific components
-│   ├── JobPrepView.tsx
-│   └── PipelineCard.tsx
+│   └── ...
 └── ...
 ```
 
-**NOT** in `components/`: custom app UI stays with the app.
+**NOT** in `components/` — custom app UI stays with the app.
 
 ### New Transcript Tool View
 

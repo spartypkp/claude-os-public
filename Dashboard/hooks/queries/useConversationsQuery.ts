@@ -43,6 +43,7 @@ interface Session {
   tmux_pane: string | null;
   description: string | null;
   status_text: string | null;
+  waiting_for_input: boolean;
   workers: Worker[];
 }
 
@@ -128,6 +129,7 @@ function groupSessionsIntoConversations(sessions: Session[]): ActiveConversation
       session_count: sortedSessions.length,
       sessions: sortedSessions as unknown as ActiveSession[],
       workers: allWorkers,
+      waiting_for_input: latestSession.waiting_for_input || false,
     });
   }
 

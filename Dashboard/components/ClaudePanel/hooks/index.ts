@@ -9,3 +9,5 @@ export { useDragDrop } from './useDragDrop';
 
 export { usePanelResize } from './usePanelResize';
 
+export { useFileMention } from './useFileMention';
+

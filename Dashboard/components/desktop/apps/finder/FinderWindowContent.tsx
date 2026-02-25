@@ -2,6 +2,7 @@
 
 import { usePromptModal } from '@/components/desktop/PromptModal';
 import { useFileEvents } from '@/hooks/useFileEvents';
+import { toDesktopRelative, toAbsoluteDesktopPath, getDesktopRoot } from '@/lib/pathUtils';
 import {
 	finderCreateFile,
 	finderCreateFolder,
@@ -46,14 +47,14 @@ interface DragState {
 }
 
 // Claude OS themed colors
-const CLAUDE_CORAL = '#DA7756';
+const CLAUDE_CORAL = 'var(--color-claude)';
 const CLAUDE_CORAL_LIGHT = '#E8A088';
-const CLAUDE_ACCENT = '#DA7756';
+const CLAUDE_ACCENT = 'var(--color-claude)';
 
 // Tiny Claude badge for list/column views
 function ClaudeBadgeMini() {
 	return (
-		<div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center flex-shrink-0" title="Claude System File">
+		<div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center flex-shrink-0" title="Claude System File">
 			<svg className="w-2 h-2 text-white" viewBox="0 0 16 16" fill="currentColor">
 				<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
 			</svg>
@@ -207,27 +208,26 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 	const [needsReload, setNeedsReload] = useState(false);
 
 	// Listen for file system changes and reload current directory
+	// SSE events use repo-relative paths (Desktop/foo), currentPath is Desktop-relative
 	useFileEvents({
 		onCreated: (event) => {
-			// Check if the change is in the current directory
 			const eventDir = event.path.substring(0, event.path.lastIndexOf('/'));
 			const currentDir = currentPath ? `Desktop/${currentPath}` : 'Desktop';
-			if (eventDir === currentDir) {
+			if (eventDir === currentDir || toDesktopRelative(eventDir) === currentPath) {
 				setNeedsReload(true);
 			}
 		},
 		onDeleted: (event) => {
 			const eventDir = event.path.substring(0, event.path.lastIndexOf('/'));
 			const currentDir = currentPath ? `Desktop/${currentPath}` : 'Desktop';
-			if (eventDir === currentDir) {
+			if (eventDir === currentDir || toDesktopRelative(eventDir) === currentPath) {
 				setNeedsReload(true);
 			}
 		},
 		onMoved: (event) => {
-			// Reload if source or destination is in current directory
 			const sourceDir = event.path.substring(0, event.path.lastIndexOf('/'));
 			const currentDir = currentPath ? `Desktop/${currentPath}` : 'Desktop';
-			if (sourceDir === currentDir || event.dest_path?.startsWith(currentDir + '/')) {
+			if (sourceDir === currentDir || toDesktopRelative(sourceDir) === currentPath || event.dest_path?.startsWith(currentDir + '/')) {
 				setNeedsReload(true);
 			}
 		},
@@ -353,15 +353,14 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		if (renamingItem === item.path) return;
 
 		if (item.type === 'folder' || item.type === 'domain') {
-			navigateTo(item.path);
+			// Navigate using Desktop-relative path
+			navigateTo(toDesktopRelative(item.path));
 		} else if (item.type === 'app') {
 			const appName = item.name.toLowerCase().replace(/\s+/g, '-');
 			router.push(`/${appName}`);
 		} else if (item.type === 'file') {
-			// Open file in a new window on the Desktop
-			// The path needs to be prefixed with Desktop/ for the file viewer
-			const fullPath = `Desktop/${item.path}`;
-			openWindow(fullPath, item.name);
+			// item.path is already absolute from the API
+			openWindow(item.path, item.name);
 		}
 	}, [navigateTo, router, renamingItem, openWindow]);
 
@@ -472,7 +471,8 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 	const handleOpenInMacOS = useCallback(async () => {
 		if (selectedItem) {
 			try {
-				await openInMacOS(`Desktop/${selectedItem}`);
+				// selectedItem is absolute path from API
+				await openInMacOS(selectedItem);
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : 'Failed to open in macOS');
 			}
@@ -486,10 +486,9 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 
 		if (item) {
 			setSelectedItem(item.path);
-			// Use full path with Desktop/ prefix for consistency with desktop icons
-			const fullPath = `Desktop/${item.path}`;
+			// item.path is already absolute from the API
 			const isDir = item.type === 'folder' || item.type === 'domain';
-			openContextMenu(e.clientX, e.clientY, 'finder-item', fullPath, {
+			openContextMenu(e.clientX, e.clientY, 'finder-item', item.path, {
 				isDirectory: isDir,
 				hasLifeSpec: item.type === 'domain',
 				hasAppSpec: item.type === 'app',
@@ -537,7 +536,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 	const handleDragStart = useCallback((e: React.DragEvent, item: FileItem) => {
 		e.dataTransfer.setData('text/plain', item.path);
 		e.dataTransfer.setData('application/claude-file', item.path);
-		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.effectAllowed = 'copyMove';
 		setDragState({ item, overPath: null });
 	}, []);
 
@@ -613,13 +612,15 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
 		if (!sourcePath) return;
 		// Don't move if file is already in this directory
-		const sourceParent = sourcePath.split('/').slice(0, -1).join('/').replace(/^Desktop\/?/, '');
+		const sourceParentRaw = sourcePath.split('/').slice(0, -1).join('/');
+		const sourceParent = toDesktopRelative(sourceParentRaw);
 		if (sourceParent === currentPath) return;
 		e.preventDefault();
 		e.stopPropagation();
 		try {
-			const destPath = currentPath || '';
-			await finderMove(sourcePath, destPath || '');
+			// Destination: convert currentPath to absolute for the API
+			const destPath = toAbsoluteDesktopPath(currentPath);
+			await finderMove(sourcePath, destPath);
 			loadDirectory(currentPath);
 			window.dispatchEvent(new CustomEvent('refresh-desktop'));
 			toast.success(`Moved to ${currentPath || 'Desktop'}`);
@@ -649,8 +650,9 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 		// If it's a folder, load its contents into next column
 		if (item.type === 'folder' || item.type === 'domain') {
 			try {
+				// item.path is absolute — API handles absolute paths
 				const data = await finderList(item.path);
-				newColumns.push({ path: item.path, items: data.items, selected: null });
+				newColumns.push({ path: toDesktopRelative(item.path), items: data.items, selected: null });
 			} catch (err) {
 				console.error('Failed to load column:', err);
 			}
@@ -670,14 +672,13 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 	// Navigate into a folder from column view (double-click)
 	const handleColumnNavigate = useCallback((item: FileItem) => {
 		if (item.type === 'folder' || item.type === 'domain') {
-			navigateTo(item.path);
+			navigateTo(toDesktopRelative(item.path));
 		} else if (item.type === 'app') {
 			const appName = item.name.toLowerCase().replace(/\s+/g, '-');
 			router.push(`/${appName}`);
 		} else if (item.type === 'file') {
-			// Open file in a new window on the Desktop
-			const fullPath = `Desktop/${item.path}`;
-			openWindow(fullPath, item.name);
+			// item.path is already absolute
+			openWindow(item.path, item.name);
 		}
 	}, [navigateTo, router, openWindow]);
 
@@ -777,7 +778,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 							}`}
 						title="Icon view"
 					>
-						<LayoutGrid className={`w-3.5 h-3.5 ${viewMode === 'icons' ? 'text-[#DA7756]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
+						<LayoutGrid className={`w-3.5 h-3.5 ${viewMode === 'icons' ? 'text-[var(--color-claude)]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
 					</button>
 					<button
 						onClick={() => setViewMode('list')}
@@ -787,7 +788,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 							}`}
 						title="List view"
 					>
-						<List className={`w-3.5 h-3.5 ${viewMode === 'list' ? 'text-[#DA7756]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
+						<List className={`w-3.5 h-3.5 ${viewMode === 'list' ? 'text-[var(--color-claude)]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
 					</button>
 					<button
 						onClick={() => setViewMode('columns')}
@@ -797,7 +798,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 							}`}
 						title="Column view"
 					>
-						<Columns className={`w-3.5 h-3.5 ${viewMode === 'columns' ? 'text-[#DA7756]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
+						<Columns className={`w-3.5 h-3.5 ${viewMode === 'columns' ? 'text-[var(--color-claude)]' : 'text-[#6E6E73] dark:text-[#8e8e93]'}`} />
 					</button>
 				</div>
 
@@ -805,13 +806,13 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 				<button
 					onClick={() => setHideSystemFiles(!hideSystemFiles)}
 					className={`p-1.5 rounded-md border transition-colors ${hideSystemFiles
-							? 'bg-[#DA7756]/10 border-[#DA7756]/30 hover:bg-[#DA7756]/20'
+							? 'bg-[var(--color-claude)]/10 border-[var(--color-claude)]/30 hover:bg-[var(--color-claude)]/20'
 							: 'bg-white/50 dark:bg-white/10 border-[#C0C0C0] dark:border-[#4a4a4a] hover:bg-white/80 dark:hover:bg-white/20'
 						}`}
 					title={hideSystemFiles ? 'Show system files (⌘⇧H)' : 'Hide system files (⌘⇧H)'}
 				>
 					{hideSystemFiles ? (
-						<EyeOff className="w-3.5 h-3.5 text-[#DA7756]" />
+						<EyeOff className="w-3.5 h-3.5 text-[var(--color-claude)]" />
 					) : (
 						<Eye className="w-3.5 h-3.5 text-[#6E6E73] dark:text-[#8e8e93]" />
 					)}
@@ -825,7 +826,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
 						placeholder="Search"
-						className="w-32 pl-7 pr-2 py-1 text-xs bg-white/80 dark:bg-black/20 border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md placeholder-[#8E8E93] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#DA7756]/50 focus:border-[#DA7756]"
+						className="w-32 pl-7 pr-2 py-1 text-xs bg-white/80 dark:bg-black/20 border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md placeholder-[#8E8E93] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-claude)]/50 focus:border-[var(--color-claude)]"
 					/>
 				</div>
 
@@ -864,13 +865,13 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 						{/* Claude OS branding header */}
 						<div className="px-3 py-2 border-b border-[#D1D1D1] dark:border-[#3a3a3a]">
 							<div className="flex items-center gap-2">
-								<div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center">
+								<div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center">
 									<svg className="w-3.5 h-3.5 text-white" viewBox="0 0 16 16" fill="currentColor">
 										<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
 									</svg>
 								</div>
 								<div>
-									<div className="text-[10px] font-semibold text-[#DA7756]">Life Files</div>
+									<div className="text-[10px] font-semibold text-[var(--color-claude)]">Life Files</div>
 									<div className="text-[9px] text-[#8E8E93]">Claude OS</div>
 								</div>
 							</div>
@@ -889,11 +890,11 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 										key={fav.name}
 										onClick={() => navigateTo(fav.path)}
 										className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-left transition-colors ${isActive
-											? 'bg-[#DA7756] text-white'
+											? 'bg-[var(--color-claude)] text-white'
 											: 'hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)]'
 											}`}
 									>
-										<Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-[#DA7756]'}`} />
+										<Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-[var(--color-claude)]'}`} />
 										<span className="text-xs font-medium truncate">{fav.name}</span>
 									</button>
 								);
@@ -908,13 +909,14 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 								</div>
 								<div className="space-y-0.5">
 									{customApps.map((app) => {
-										const isActive = currentPath === app.path;
+										const appRelPath = toDesktopRelative(app.path);
+										const isActive = currentPath === appRelPath;
 										return (
 											<button
 												key={app.path}
-												onClick={() => navigateTo(app.path)}
+												onClick={() => navigateTo(appRelPath)}
 												className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-left transition-colors ${isActive
-													? 'bg-[#DA7756] text-white'
+													? 'bg-[var(--color-claude)] text-white'
 													: 'hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)]'
 													}`}
 											>
@@ -935,16 +937,17 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 								</div>
 								<div className="space-y-0.5">
 									{domains.map((domain) => {
-										const isActive = currentPath === domain.path;
+										const domainRelPath = toDesktopRelative(domain.path);
+										const isActive = currentPath === domainRelPath;
 										// Use shared color system for domain folders
 										const node = toFileTreeNode(domain);
 										const colorClass = getFolderColorClass(node);
 										return (
 											<button
 												key={domain.path}
-												onClick={() => navigateTo(domain.path)}
+												onClick={() => navigateTo(domainRelPath)}
 												className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-left transition-colors ${isActive
-													? 'bg-[#DA7756] text-white'
+													? 'bg-[var(--color-claude)] text-white'
 													: 'hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)]'
 													}`}
 											>
@@ -1025,9 +1028,9 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 											className={`flex items-center px-3 py-1 cursor-default transition-colors ${isDragging
 												? 'opacity-50'
 												: isDropTarget
-													? 'bg-[#DA7756]/30 ring-2 ring-[#DA7756]'
+													? 'bg-[var(--color-claude)]/30 ring-2 ring-[var(--color-claude)]'
 													: isSelected
-														? 'bg-[#DA7756] text-white'
+														? 'bg-[var(--color-claude)] text-white'
 														: 'hover:bg-[#F0F0F0] dark:hover:bg-[#2a2a2a]'
 												}`}
 										>
@@ -1054,7 +1057,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 												{item.type === 'app' && !isRenaming && (
 													<span className={`text-[10px] px-1.5 py-0.5 rounded ${isSelected
 														? 'bg-white/20 text-white'
-														: 'bg-[#DA7756]/10 text-[#DA7756]'
+														: 'bg-[var(--color-claude)]/10 text-[var(--color-claude)]'
 														}`}>
 														App
 													</span>
@@ -1100,9 +1103,9 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 											className={`flex flex-col items-center p-2 rounded-lg cursor-default transition-colors ${isDragging
 												? 'opacity-50'
 												: isDropTarget
-													? 'bg-[#DA7756]/30 ring-2 ring-[#DA7756]'
+													? 'bg-[var(--color-claude)]/30 ring-2 ring-[var(--color-claude)]'
 													: isSelected
-														? 'bg-[#DA7756]/20'
+														? 'bg-[var(--color-claude)]/20'
 														: 'hover:bg-black/5 dark:hover:bg-white/5'
 												}`}
 										>
@@ -1121,11 +1124,11 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 												<div className="w-14 h-14 mb-1 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 shadow-lg" />
 											) : CLAUDE_SYSTEM_FILES.has(item.name) ? (
 												<div className="relative w-14 h-14 mb-1 flex items-center justify-center">
-													<div className="w-14 h-14 rounded-lg bg-gradient-to-br from-[#DA7756]/20 to-[#C15F3C]/30 flex items-center justify-center ring-1 ring-[#DA7756]/40">
-														<FileText className="w-8 h-8 text-[#DA7756]" />
+													<div className="w-14 h-14 rounded-lg bg-gradient-to-br from-[var(--color-claude)]/20 to-[var(--color-primary-hover)]/30 flex items-center justify-center ring-1 ring-[var(--color-claude)]/40">
+														<FileText className="w-8 h-8 text-[var(--color-claude)]" />
 													</div>
 													{/* Claude badge */}
-													<div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#2a2a2a]">
+													<div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-[#2a2a2a]">
 														<svg className="w-3 h-3 text-white" viewBox="0 0 16 16" fill="currentColor">
 															<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
 														</svg>
@@ -1138,7 +1141,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 											)}
 											{/* Name */}
 											<span className={`text-[11px] text-center leading-tight px-1 py-0.5 rounded max-w-full truncate ${isSelected
-												? 'bg-[#DA7756] text-white'
+												? 'bg-[var(--color-claude)] text-white'
 												: 'text-[var(--text-primary)]'
 												}`}>
 												{item.name}
@@ -1181,7 +1184,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 														onDoubleClick={() => handleColumnNavigate(item)}
 														onContextMenu={(e) => handleContextMenu(e, item)}
 														className={`flex items-center gap-2 px-3 py-1.5 cursor-default transition-colors ${isSelected
-															? 'bg-[#DA7756] text-white'
+															? 'bg-[var(--color-claude)] text-white'
 															: 'hover:bg-[#F0F0F0] dark:hover:bg-[#2a2a2a]'
 															}`}
 													>
@@ -1209,10 +1212,10 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 										<div className="min-w-[280px] flex-1 bg-[#FAFAFA] dark:bg-[#1a1a1a] p-4 flex flex-col items-center justify-center text-center">
 											{isSystemFile ? (
 												<div className="relative mb-3">
-													<div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[#DA7756]/20 to-[#C15F3C]/30 flex items-center justify-center ring-1 ring-[#DA7756]/40">
-														<FileText className="w-10 h-10 text-[#DA7756]" />
+													<div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[var(--color-claude)]/20 to-[var(--color-primary-hover)]/30 flex items-center justify-center ring-1 ring-[var(--color-claude)]/40">
+														<FileText className="w-10 h-10 text-[var(--color-claude)]" />
 													</div>
-													<div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-lg ring-2 ring-[#FAFAFA] dark:ring-[#1a1a1a]">
+													<div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center shadow-lg ring-2 ring-[#FAFAFA] dark:ring-[#1a1a1a]">
 														<svg className="w-3.5 h-3.5 text-white" viewBox="0 0 16 16" fill="currentColor">
 															<path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736-.75.096-.324-.302.04-.496.154-.162 1.267-.871z" />
 														</svg>
@@ -1225,7 +1228,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 												{selectedFile.name}
 											</div>
 											{isSystemFile && (
-												<div className="text-[10px] text-[#DA7756] font-medium mb-1 px-2 py-0.5 rounded bg-[#DA7756]/10">
+												<div className="text-[10px] text-[var(--color-claude)] font-medium mb-1 px-2 py-0.5 rounded bg-[var(--color-claude)]/10">
 													Claude System File
 												</div>
 											)}
@@ -1252,7 +1255,7 @@ export function FinderWindowContent({ windowId, initialPath }: FinderWindowConte
 							className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
 						>
 							{i === 0 ? (
-								<Monitor className="w-3 h-3 text-[#DA7756]" />
+								<Monitor className="w-3 h-3 text-[var(--color-claude)]" />
 							) : (
 								<svg viewBox="0 0 24 24" className="w-3 h-3" fill={CLAUDE_CORAL}>
 									<path d="M10 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2h-8l-2-2z" />

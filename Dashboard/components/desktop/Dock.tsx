@@ -16,6 +16,9 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+// Import app manifests to trigger registration
+import '@/app/guide/manifest';
+
 // ==========================================
 // CONSTANTS
 // ==========================================
@@ -90,7 +93,7 @@ const CORE_APPS: DockItem[] = [
 		name: 'Claude Messages',
 		icon: <MessageCircle className="w-6 h-6" />,
 		type: 'app',
-		gradient: 'from-[#DA7756] to-[#C15F3C]',
+		gradient: 'from-[var(--color-claude)] to-[var(--color-primary-hover)]',
 		appWindow: 'messages',
 	},
 	{
@@ -349,6 +352,13 @@ export function Dock() {
 		};
 	}, []);
 
+	// Prefetch route on hover (dev mode compiles on-demand, this warms the cache)
+	const handleItemHover = useCallback((item: DockItem) => {
+		if (item.route) {
+			router.prefetch(item.route);
+		}
+	}, [router]);
+
 	// Handle icon clicks
 	const handleItemClick = useCallback((item: DockItem) => {
 		if (item.appWindow) {
@@ -463,11 +473,12 @@ export function Dock() {
 				onMouseLeave={handleMouseLeave}
 				className="
           flex items-end gap-2 px-4 pb-2 pt-3
-          bg-[var(--surface-base)]/60 backdrop-blur-xl
+          backdrop-blur-xl
           border border-[var(--border-default)]
           rounded-2xl
           shadow-2xl
         "
+				style={{ backgroundColor: 'rgba(255, 255, 255, 0.35)' }}
 			>
 				{/* Core Apps */}
 				{allApps.slice(0, CORE_APPS.length).map((item, index) => (
@@ -476,7 +487,7 @@ export function Dock() {
 						item={item}
 						scale={getScale(coreAppsStart + index)}
 						onClick={() => handleItemClick(item)}
-						onMouseEnter={() => { }}
+						onMouseEnter={() => handleItemHover(item)}
 						onContextMenu={item.appWindow ? (e) => handleAppContextMenu(item, e) : undefined}
 					/>
 				))}
@@ -491,7 +502,7 @@ export function Dock() {
 						item={item}
 						scale={getScale(customAppsStart + index)}
 						onClick={() => handleItemClick(item)}
-						onMouseEnter={() => { }}
+						onMouseEnter={() => handleItemHover(item)}
 					/>
 				))}
 
@@ -511,7 +522,7 @@ export function Dock() {
 						}}
 						scale={getScale(minimizedStart + index)}
 						onClick={() => handleMinimizedClick(win)}
-						onMouseEnter={() => { }}
+						onMouseEnter={() => {}}
 						onContextMenu={(e) => handleMinimizedContextMenu(win, e)}
 					/>
 				))}

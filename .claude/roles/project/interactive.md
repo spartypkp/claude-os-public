@@ -17,7 +17,7 @@ The user is present, pair-programming on external work. The rhythm is conversati
 
 The user indicates which external project you're working on:
 - "Let's work on Texas Hold LLM" → Side project
-- "Acme citation feature" → Client project
+- "Acme Corp citation feature" → Client project
 - "Accelr8 property management" → Friend's project
 
 External projects live in `Desktop/projects/{project-name}/` — a wrapper directory containing:
@@ -80,13 +80,13 @@ Even though you're working on external code, you have access to:
 
 ```python
 # Look up project contacts
-contact("search", query="Tom")  # Acme CEO
+contact("search", query="Tom")  # client CEO
 
 # Check schedule for project meetings
 calendar("list", from_date="2026-01-14", to_date="2026-01-14")
 
 # Draft emails to clients
-email("draft", to="tom@contoural.com", subject="Citation feature ready", ...)
+email("draft", to="tom@acmecorp.com", subject="Citation feature ready", ...)
 ```
 
 This is why Project role runs from Claude OS—to maintain MCP access while working externally.
@@ -128,16 +128,16 @@ contact("update", identifier="Tom", notes="Wants citation feature by Friday")
 
 ```
 # Map unfamiliar codebase
-Use the codebase-map subagent to map the structure of Desktop/projects/accelr8/src
+Use the Explore subagent to map the structure of Desktop/projects/accelr8/src
 
 # Find patterns in project
-Use the context-find subagent to find authentication patterns in this codebase
+Use the Explore subagent to find authentication patterns in this codebase
 
 # Research technologies used
 Use the web-research subagent to research FastAPI best practices for WebSocket connections
 ```
 
-Continue working with the user while subagents research in parallel.
+Continue working while subagents research in parallel.
 
 ### Session Management
 
@@ -194,15 +194,15 @@ Project: "On it."
 ### Client Project with Contact Context
 
 ```
-User: "Working on Acme citation feature"
+User: "Working on Acme Corp citation feature"
 
-Project: [contact("search", query="Acme")]
-         "Found contacts: Tom (CEO), Nandeep (Developer).
+Project: [contact("search", query="Acme Corp")]
+         "Found contacts: Tom (CEO), Alex (Developer).
          Tom mentioned citation feature on Jan 10.
 
          Loading project..."
-         [Reads Desktop/projects/Acme/PROJECT.md]
-         [Reads Desktop/projects/Acme/HISTORY.md]
+         [Reads Desktop/projects/acme-corp/PROJECT.md]
+         [Reads Desktop/projects/acme-corp/HISTORY.md]
          "Citation helper is in citations/src/citations/.
          What's the issue?"
 
@@ -257,7 +257,7 @@ After the user confirms everything works:
 2. Update PROJECT.md if state changed
 3. Call `done(summary="Texas Hold LLM: betting logic complete")`
 
-Session closes. The user can spawn new Project for next external work.
+Session closes. A new Project can be spawned for next external work.
 
 ---
 
@@ -269,4 +269,4 @@ Project interactive mode is successful when:
 - Changes tested and verified working
 - HISTORY.md updated with session work before exit
 - PROJECT.md updated if current state changed
-- the user confirms work meets requirements
+- User confirms work meets requirements

@@ -27,9 +27,10 @@ export const queryClient = new QueryClient({
 			// NO refetch on focus - SSE handles updates
 			refetchOnWindowFocus: false,
 
-			// Retry failed queries
-			retry: 2,
-			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+			// Retry failed queries (1x, not 2x -- fail fast, let error boundaries handle UI)
+			retry: 1,
+			// Exponential backoff with jitter to prevent thundering herd on reconnect
+			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000) + Math.random() * 1000,
 		},
 		mutations: {
 			// Retry mutations once
@@ -96,6 +97,8 @@ export const queryKeys = {
 	// Contacts data
 	contacts: ['contacts'] as const,
 	contact: (id: string) => ['contacts', id] as const,
+	contactsActivity: ['contacts', 'activity'] as const,
+	contactsToday: ['contacts', 'today'] as const,
 
 	// Messages data
 	messages: ['messages'] as const,
@@ -175,6 +178,8 @@ export const eventToQueryKeys: Record<string, readonly (readonly string[])[]> = 
 	'email.read': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailUnread, queryKeys.emailTriage],
 	'email.flagged': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread, queryKeys.emailTriage],
 	'email.deleted': [queryKeys.email, queryKeys.emailMessagesBase, queryKeys.emailMailboxes, queryKeys.emailUnread, queryKeys.emailTriage],
+	'email.triaged': [queryKeys.email, queryKeys.emailTriage],
+	'email.classified': [queryKeys.email, queryKeys.emailTriage],
 
 	// Calendar events
 	'calendar.created': [queryKeys.calendar, queryKeys.calendarEvents],
@@ -182,9 +187,9 @@ export const eventToQueryKeys: Record<string, readonly (readonly string[])[]> = 
 	'calendar.deleted': [queryKeys.calendar, queryKeys.calendarEvents],
 
 	// Contact events
-	'contact.created': [queryKeys.contacts],
-	'contact.updated': [queryKeys.contacts],
-	'contact.deleted': [queryKeys.contacts],
+	'contact.created': [queryKeys.contacts, queryKeys.contactsActivity, queryKeys.contactsToday],
+	'contact.updated': [queryKeys.contacts, queryKeys.contactsActivity, queryKeys.contactsToday],
+	'contact.deleted': [queryKeys.contacts, queryKeys.contactsActivity, queryKeys.contactsToday],
 
 	// Message events
 	'message.sent': [queryKeys.messages, queryKeys.messagesConversations],

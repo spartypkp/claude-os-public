@@ -8,7 +8,7 @@
 # Preferred calendars - filter out junk/noise calendars
 # These are shown in UI and returned by MCP tools
 preferred_calendars:
-  - "MyCalendar"
+  - "Personal"
   - "Calendar"
   - "Work"
   - "Home"
@@ -17,14 +17,14 @@ preferred_calendars:
 aliases:
   exchange: "Calendar"
   personal: "Calendar"
-  gmail: "MyCalendar"
+  gmail: "Personal"
   work: "Work"
 
 # Permissions - which calendars Claude can modify
 # These should match what the user is comfortable with Claude changing autonomously
 permissions:
   can_create:
-    - "MyCalendar"
+    - "Personal"
     - "Calendar"
     - "Work"
   can_delete: []  # Empty = require human confirmation for all deletes
@@ -41,7 +41,7 @@ tools:
     who: "All roles"
     when: "Scheduling events, checking availability, managing the user's time"
     usage: |
-      - Meetings with others -> Gmail (MyCalendar) for invites
+      - Meetings with others -> Gmail (Personal) for invites
       - Personal blocks -> Exchange (Calendar) for solo scheduling
-      - Work events -> Work
-      - Can create on Gmail/Exchange/Work; deletes require confirmation
+      - Work events -> Work calendar
+      - Can create on Personal/Exchange/Work; deletes require confirmation

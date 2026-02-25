@@ -48,7 +48,7 @@ const SERVICE_META: Record<string, { icon: LucideIcon; label: string; descriptio
 
 const TIER_LABELS: Record<AccessTier, { label: string; color: string; description: string }> = {
   read: { label: 'Read Only', color: 'text-blue-500', description: 'Can read data but not modify' },
-  assist: { label: 'Assist', color: 'text-[#DA7756]', description: 'Can draft and suggest actions' },
+  assist: { label: 'Assist', color: 'text-[var(--color-claude)]', description: 'Can draft and suggest actions' },
   autonomous: { label: 'Autonomous', color: 'text-green-500', description: 'Can act independently' },
 };
 
@@ -100,7 +100,7 @@ export function ServiceSettingsTab() {
       {/* Tier Legend */}
       <div className="mt-6 p-4 rounded-lg bg-[#F5F5F5] dark:bg-[#2a2a2a] border border-[#E5E5E5] dark:border-[#3a3a3a]">
         <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#8E8E93] mb-3 flex items-center gap-2">
-          <Shield className="w-3.5 h-3.5 text-[#DA7756]" />
+          <Shield className="w-3.5 h-3.5 text-[var(--color-claude)]" />
           Access Tiers
         </h4>
         <div className="space-y-2">
@@ -139,8 +139,8 @@ function ServiceCard({
     <div className="rounded-lg bg-[#F5F5F5] dark:bg-[#2a2a2a] border border-[#E5E5E5] dark:border-[#3a3a3a] overflow-hidden">
       {/* Card Header */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#DA7756]/20 to-[#C15F3C]/30 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-5 h-5 text-[#DA7756]" />
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[var(--color-claude)]/20 to-[var(--color-primary-hover)]/30 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-5 h-5 text-[var(--color-claude)]" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ function ServiceCard({
             value={service.tier}
             onChange={(e) => onTierChange(e.target.value as AccessTier)}
             disabled={updating}
-            className="appearance-none bg-white dark:bg-[#3a3a3a] border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md px-3 py-1.5 pr-8 text-[13px] text-[#1D1D1F] dark:text-white focus:outline-none focus:border-[#DA7756] focus:ring-1 focus:ring-[#DA7756]/50 cursor-pointer disabled:opacity-50 transition-colors"
+            className="appearance-none bg-white dark:bg-[#3a3a3a] border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md px-3 py-1.5 pr-8 text-[13px] text-[#1D1D1F] dark:text-white focus:outline-none focus:border-[var(--color-claude)] focus:ring-1 focus:ring-[var(--color-claude)]/50 cursor-pointer disabled:opacity-50 transition-colors"
           >
             <option value="read">Read Only</option>
             <option value="assist">Assist</option>
@@ -191,11 +191,11 @@ function ServiceCard({
             <div className="space-y-1.5">
               {service.accounts.map((account) => (
                 <div key={account.id} className="flex items-center gap-2 text-[12px]">
-                  <div className={`w-2 h-2 rounded-full ${account.is_claude_account ? 'bg-[#DA7756]' : 'bg-green-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${account.is_claude_account ? 'bg-[var(--color-claude)]' : 'bg-green-500'}`} />
                   <span className="text-[#1D1D1F] dark:text-[#E5E5E5]">{account.display_name || account.email}</span>
                   <span className="text-[#8E8E93]">{account.email}</span>
                   {account.is_claude_account && (
-                    <span className="px-1.5 py-0.5 text-[9px] font-medium bg-[#DA7756] text-white rounded-full">
+                    <span className="px-1.5 py-0.5 text-[9px] font-medium bg-[var(--color-claude)] text-white rounded-full">
                       Claude
                     </span>
                   )}
@@ -271,7 +271,7 @@ function ServiceDefaults({ service, defaults }: { service: string; defaults: Rec
                 }
               }}
               disabled={saving}
-              className="w-36 px-2 py-1 text-[12px] bg-white dark:bg-[#1e1e1e] border border-[#E5E5E5] dark:border-[#3a3a3a] rounded-md focus:outline-none focus:ring-1 focus:ring-[#DA7756] text-right"
+              className="w-36 px-2 py-1 text-[12px] bg-white dark:bg-[#1e1e1e] border border-[#E5E5E5] dark:border-[#3a3a3a] rounded-md focus:outline-none focus:ring-1 focus:ring-[var(--color-claude)] text-right"
             />
           </div>
         ))}

@@ -32,7 +32,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 			<div className="relative">
 				<FilePathHeader path={path} variant="warning" />
 				{replaceAll && (
-					<span className="absolute top-1.5 right-16 text-[9px] bg-[var(--color-warning)]/20 text-[var(--color-warning)] px-1.5 py-0.5 rounded">
+					<span className="absolute top-1.5 right-16 text-[10px] bg-[var(--color-warning)]/20 text-[var(--color-warning)] px-1.5 py-0.5 rounded">
 						replace all
 					</span>
 				)}
@@ -52,7 +52,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 					</div>
 
 					<div className="rounded-md overflow-hidden border border-[var(--color-error)]/20">
-						<div className="bg-[var(--color-error)]/10 px-2 py-1 text-[9px] font-medium text-[var(--color-error)] border-b border-[var(--color-error)]/20">
+						<div className="bg-[var(--color-error)]/10 px-2 py-1 text-[10px] font-medium text-[var(--color-error)] border-b border-[var(--color-error)]/20">
 							REMOVED
 						</div>
 						<div className="bg-[var(--color-error)]/5 p-2">
@@ -63,7 +63,7 @@ export function EditExpanded({ input, rawInput, rawResult }: ToolExpandedProps) 
 					</div>
 
 					<div className="rounded-md overflow-hidden border border-[var(--color-success)]/20">
-						<div className="bg-[var(--color-success)]/10 px-2 py-1 text-[9px] font-medium text-[var(--color-success)] border-b border-[var(--color-success)]/20">
+						<div className="bg-[var(--color-success)]/10 px-2 py-1 text-[10px] font-medium text-[var(--color-success)] border-b border-[var(--color-success)]/20">
 							ADDED
 						</div>
 						<div className="bg-[var(--color-success)]/5 p-2">
@@ -140,7 +140,7 @@ export function SearchExpanded({ input, rawInput, rawResult }: ToolExpandedProps
 			{path && (
 				<button
 					onClick={() => openInFinder(path)}
-					className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-[#da7756] transition-colors"
+					className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--color-claude)] transition-colors"
 					title="Show in Finder"
 				>
 					<FolderOpen className="w-3 h-3" />

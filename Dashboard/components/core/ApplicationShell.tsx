@@ -81,29 +81,19 @@ export function ApplicationShell({ children, title, icon, subNav, appType, fullB
           )}
         </div>
 
-        {/* App Title */}
-        <div className="flex items-center gap-2">
-          {icon && (
-            <span className="text-gray-500 dark:text-[#888]">
-              {icon}
-            </span>
-          )}
-          <span className="text-xs font-medium text-gray-700 dark:text-[#b0b0b0] truncate">
-            {title}
-          </span>
-        </div>
-
-        {/* Sub-navigation (tabs) - pushed to the right or centered */}
+        {/* Sub-navigation (tabs) */}
         {subNav && (
-          <div className="ml-6 flex-1">
+          <div className="flex-1">
             {subNav}
           </div>
         )}
       </div>
 
-      {/* Content Area */}
-      <div className={fullBleed ? "flex-1 overflow-hidden" : "flex-1 overflow-auto pb-20"}>
+      {/* Content Area — always full height, dock floats on top */}
+      <div className={`flex-1 ${fullBleed ? 'overflow-hidden' : 'overflow-auto'}`}>
         {children}
+        {/* Transparent spacer so scrollable content can clear the dock */}
+        {!fullBleed && <div className="h-20 shrink-0" aria-hidden="true" />}
       </div>
     </div>
   );

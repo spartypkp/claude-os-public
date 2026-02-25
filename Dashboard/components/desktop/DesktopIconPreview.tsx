@@ -2,7 +2,9 @@
 
 import { getFileIconSpec } from '@/lib/fileTypes';
 import { FileTreeNode } from '@/lib/types';
-import { FolderOpen } from 'lucide-react';
+import {
+	FolderOpen,
+} from 'lucide-react';
 
 // Lightweight drag preview - no interactions, no transitions
 export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
@@ -13,7 +15,7 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 	const isFolder = node.type === 'directory';
 
 	const Icon = isFolder ? FolderOpen : fileIconSpec.icon;
-	const iconColor = isClaudeSystemFile ? 'text-[#DA7756]' : (isFolder ? 'text-[#DA7756]' : fileIconSpec.colorClass);
+	const iconColor = isClaudeSystemFile ? 'text-[var(--color-claude)]' : (isFolder ? 'text-[var(--color-claude)]' : fileIconSpec.colorClass);
 	
 	// Format name
 	const displayName = node.name
@@ -25,7 +27,10 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 		: displayName;
 	
 	return (
-		<div className="flex flex-col items-center justify-start gap-1 w-[96px] h-[112px] pt-2 pb-1 px-1 rounded-lg bg-[#DA7756]/30 ring-1 ring-[#DA7756] opacity-90 cursor-grabbing">
+		<div
+			className="flex flex-col items-center justify-start gap-1 w-[96px] h-[128px] pt-2 pb-1 px-1 rounded-lg bg-[var(--color-claude)]/30 ring-1 ring-[var(--color-claude)] cursor-grabbing"
+			style={{ transform: 'scale(1.05)', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', opacity: 0.9 }}
+		>
 			{/* Icon */}
 			<div className="w-16 h-16 flex items-center justify-center">
 				{isCustomApp ? (
@@ -33,7 +38,7 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 						<Icon className="w-8 h-8 text-white drop-shadow-sm" />
 					</div>
 				) : isFolder ? (
-					<FolderOpen className="w-14 h-14 text-[#DA7756] drop-shadow-lg" fill="currentColor" fillOpacity={0.15} />
+					<FolderOpen className="w-14 h-14 text-[var(--color-claude)] drop-shadow-lg" fill="currentColor" fillOpacity={0.15} />
 				) : (
 					<Icon className={`w-14 h-14 ${iconColor} drop-shadow-lg`} />
 				)}
@@ -41,7 +46,7 @@ export function DesktopIconPreview({ node }: { node: FileTreeNode; }) {
 			
 			{/* Label */}
 			<span
-				className="text-[11px] text-center leading-snug w-full px-1 break-words line-clamp-2 text-black font-medium"
+				className="text-[12px] text-center leading-[1.3] w-full px-0.5 break-words line-clamp-3 text-[var(--text-primary)] font-medium"
 			>
 				{capitalizedName}
 			</span>

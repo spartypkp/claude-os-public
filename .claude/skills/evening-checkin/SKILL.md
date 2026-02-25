@@ -182,7 +182,7 @@ The Bland AI behavioral review also didn't happen — still want that before Mon
 
 **Chief:** Got it — deprioritizing Bland AI prep.
 
-*[Chief updates MEMORY.md: "Bland AI Round 1 Monday (low priority — the user feels solid)"]*
+*[Chief updates MEMORY.md: "Bland AI Round 1 Monday (low priority — feeling solid)"]*
 
 Anything you want run overnight?
 

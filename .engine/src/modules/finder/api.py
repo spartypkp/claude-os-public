@@ -113,7 +113,7 @@ class EmptyTrashRequest(BaseModel):
 # ============================================
 
 def build_file_tree(path: Path, depth: int = 0, max_depth: int = 8) -> Optional[Dict[str, Any]]:
-    """Recursively build a file tree structure."""
+    """Recursively build a file tree structure. Returns absolute paths."""
     if depth > max_depth:
         return None
 
@@ -121,7 +121,7 @@ def build_file_tree(path: Path, depth: int = 0, max_depth: int = 8) -> Optional[
     if path.name.startswith('.') or path.name in settings.skip_patterns:
         return None
 
-    rel_path = str(path.relative_to(settings.repo_root))
+    abs_path = str(path.resolve())
 
     if path.is_dir():
         children = []
@@ -139,7 +139,7 @@ def build_file_tree(path: Path, depth: int = 0, max_depth: int = 8) -> Optional[
             is_system = path.name in settings.claude_system_folders
             return {
                 "name": path.name,
-                "path": rel_path,
+                "path": abs_path,
                 "type": "directory",
                 "children": children,
                 "isSystem": is_system,
@@ -160,7 +160,7 @@ def build_file_tree(path: Path, depth: int = 0, max_depth: int = 8) -> Optional[
         is_system = path.name in settings.claude_system_files
         return {
             "name": path.name,
-            "path": rel_path,
+            "path": abs_path,
             "type": "file",
             "isSystem": is_system,
         }
@@ -172,7 +172,7 @@ def build_file_tree(path: Path, depth: int = 0, max_depth: int = 8) -> Optional[
 
 @router.get("/tree")
 async def files_tree(max_depth: int = Query(4, ge=1, le=8)):
-    """Return directory structure for Desktop/ and Workspace/."""
+    """Return directory structure for Desktop/. All paths are absolute."""
     def _build_tree():
         tree = []
         for dir_name in settings.root_dirs:
@@ -181,7 +181,11 @@ async def files_tree(max_depth: int = Query(4, ge=1, le=8)):
                 node = build_file_tree(dir_path, depth=0, max_depth=max_depth)
                 if node:
                     tree.append(node)
-        return tree
+        return {
+            "repoRoot": str(settings.repo_root.resolve()),
+            "desktopRoot": str((settings.repo_root / "Desktop").resolve()),
+            "tree": tree,
+        }
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _build_tree)
@@ -239,12 +243,15 @@ async def read_file(path: str):
 
 @router.get("/raw/{path:path}")
 async def raw_file(path: str):
-    """Serve raw file content (for images, PDFs, etc.)."""
+    """Serve raw file content (for images, PDFs, etc.). Can serve any readable file."""
     try:
         # URL decode the path (handles %20 for spaces, etc.)
         path = unquote(path)
-        service = get_finder_service()
-        full_path = await _run_blocking(service._resolve_path, path)
+        if path.startswith("/"):
+            full_path = Path(path).resolve()
+        else:
+            service = get_finder_service()
+            full_path = await _run_blocking(service._resolve_path, path)
 
         # If file not found, try fuzzy matching for Unicode space variants
         # (macOS uses narrow no-break space \u202f in screenshot filenames)
@@ -394,6 +401,34 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/upload-temp")
+async def upload_temp_file(
+    file: UploadFile = File(...),
+):
+    """Upload a file to .engine/data/uploads/ for temporary attachment (not visible on Desktop)."""
+    import os
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "data", "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    filename = file.filename or "uploaded_file"
+    dest = os.path.join(uploads_dir, filename)
+
+    # Rename if exists
+    attempt = 0
+    base, ext = os.path.splitext(filename)
+    while os.path.exists(dest):
+        attempt += 1
+        dest = os.path.join(uploads_dir, f"{base} ({attempt}){ext}")
+
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+
+    # Return path relative to project root
+    rel_path = os.path.relpath(dest, os.path.join(uploads_dir, "..", "..", ".."))
+    return {"path": rel_path, "name": os.path.basename(dest), "size": len(content)}
+
+
 # ============================================
 # Open file in native macOS app
 # ============================================
@@ -403,13 +438,11 @@ async def open_in_macos(request: OpenFileRequest):
     """Open a file or folder with the native macOS default application."""
     import subprocess
 
-    # Resolve and validate path
-    full_path = (settings.repo_root / request.path).resolve()
-    repo_root = settings.repo_root.resolve()
-
-    # Security: must be within repo root
-    if not str(full_path).startswith(str(repo_root)):
-        raise HTTPException(status_code=400, detail="Invalid path: outside repository")
+    # Resolve path (absolute or repo-relative)
+    if request.path.startswith("/"):
+        full_path = Path(request.path).resolve()
+    else:
+        full_path = (settings.repo_root / request.path).resolve()
 
     if not full_path.exists():
         raise HTTPException(status_code=404, detail=f"Not found: {request.path}")
@@ -430,14 +463,18 @@ async def open_in_macos(request: OpenFileRequest):
 
 @router.get("/content/{file_path:path}")
 async def files_content(file_path: str):
-    """Return file content with mtime for conflict detection."""
+    """Return file content with mtime for conflict detection.
+
+    Accepts absolute paths or repo-relative paths. Can read any file.
+    """
     file_path = unquote(file_path)
 
     def _load_content():
-        # Security: ensure path doesn't escape repo
-        full_path = (settings.repo_root / file_path).resolve()
-        if not str(full_path).startswith(str(settings.repo_root.resolve())):
-            raise HTTPException(status_code=400, detail="Invalid path")
+        # Resolve path: absolute paths used as-is, relative resolved from repo root
+        if file_path.startswith("/"):
+            full_path = Path(file_path).resolve()
+        else:
+            full_path = (settings.repo_root / file_path).resolve()
 
         if not full_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
@@ -447,7 +484,7 @@ async def files_content(file_path: str):
 
         try:
             if full_path.stat().st_size > settings.max_file_size:
-                raise HTTPException(status_code=400, detail="File too large (>100KB)")
+                raise HTTPException(status_code=400, detail="File too large (>100MB)")
         except (OSError, IOError):
             raise HTTPException(status_code=500, detail="Cannot read file")
 
@@ -472,11 +509,17 @@ async def files_content(file_path: str):
         except (OSError, IOError):
             mtime = datetime.now(timezone.utc).isoformat()
 
+        # Determine if file is within Claude OS repo (editable) or external (read-only)
+        repo_root_str = str(settings.repo_root.resolve())
+        is_external = not str(full_path).startswith(repo_root_str)
+
         return {
-            "path": file_path,
+            "path": str(full_path),
             "content": content,
             "type": file_type,
-            "mtime": mtime
+            "mtime": mtime,
+            "external": is_external,
+            "editable": not is_external,
         }
 
     return await _run_blocking(_load_content)
@@ -484,17 +527,24 @@ async def files_content(file_path: str):
 
 @router.put("/content/{file_path:path}")
 async def update_file_content(file_path: str, request: FileUpdateRequest):
-    """Update file content with conflict detection."""
+    """Update file content with conflict detection.
+
+    Accepts absolute paths or repo-relative paths.
+    Can only write to files within the Claude OS repo.
+    """
     file_path = unquote(file_path)
 
     def _update_content():
-        full_path = (settings.repo_root / file_path).resolve()
-        if not str(full_path).startswith(str(settings.repo_root.resolve())):
-            raise HTTPException(status_code=400, detail="Invalid path")
+        # Resolve path
+        if file_path.startswith("/"):
+            full_path = Path(file_path).resolve()
+        else:
+            full_path = (settings.repo_root / file_path).resolve()
 
-        allowed_prefixes = ["Desktop/", "Workspace/"]
-        if not any(file_path.startswith(prefix) for prefix in allowed_prefixes):
-            raise HTTPException(status_code=403, detail="Can only edit files in Desktop/ or Workspace/")
+        # Security: must be within repo root
+        repo_root_str = str(settings.repo_root.resolve())
+        if not str(full_path).startswith(repo_root_str):
+            raise HTTPException(status_code=403, detail="Can only edit files within Claude OS")
 
         if "<!-- BEGIN " in request.content and "<!-- END " in request.content:
             raise HTTPException(status_code=400, detail="Cannot write to files with locked sections")
@@ -542,7 +592,7 @@ async def update_file_content(file_path: str, request: FileUpdateRequest):
         except (OSError, IOError):
             new_mtime = datetime.now(timezone.utc).isoformat()
 
-        return {"success": True, "path": file_path, "mtime": new_mtime}
+        return {"success": True, "path": str(full_path), "mtime": new_mtime}
 
     return await _run_blocking(_update_content)
 
@@ -553,11 +603,12 @@ async def update_file_content(file_path: str, request: FileUpdateRequest):
 
 @router.get("/simple-read")
 async def read_file_simple(path: str):
-    """Simple file read endpoint using query param."""
+    """Simple file read endpoint using query param. Can read any file."""
     def _read_simple():
-        full_path = (settings.repo_root / path).resolve()
-        if not str(full_path).startswith(str(settings.repo_root.resolve())):
-            raise HTTPException(status_code=400, detail="Invalid path")
+        if path.startswith("/"):
+            full_path = Path(path).resolve()
+        else:
+            full_path = (settings.repo_root / path).resolve()
 
         if not full_path.exists():
             return {"content": "", "exists": False}
@@ -576,14 +627,15 @@ async def read_file_simple(path: str):
 
 @router.post("/append")
 async def append_to_file(request: FileAppendRequest):
-    """Append content to a file (creates if doesn't exist)."""
-    full_path = (settings.repo_root / request.path).resolve()
-    if not str(full_path).startswith(str(settings.repo_root.resolve())):
-        raise HTTPException(status_code=400, detail="Invalid path")
+    """Append content to a file (creates if doesn't exist). Must be within repo."""
+    if request.path.startswith("/"):
+        full_path = Path(request.path).resolve()
+    else:
+        full_path = (settings.repo_root / request.path).resolve()
 
-    allowed_prefixes = ["Desktop/", "Workspace/"]
-    if not any(request.path.startswith(prefix) for prefix in allowed_prefixes):
-        raise HTTPException(status_code=403, detail="Can only append to files in Desktop/ or Workspace/")
+    repo_root_str = str(settings.repo_root.resolve())
+    if not str(full_path).startswith(repo_root_str):
+        raise HTTPException(status_code=403, detail="Can only append to files within Claude OS")
 
     ext = full_path.suffix.lower()
     if ext not in {".md", ".txt", ".yaml", ".yml", ".json"}:
@@ -594,7 +646,7 @@ async def append_to_file(request: FileAppendRequest):
             full_path.parent.mkdir(parents=True, exist_ok=True)
             with open(full_path, 'a', encoding='utf-8') as f:
                 f.write(request.content)
-            return {"success": True, "path": request.path}
+            return {"success": True, "path": str(full_path)}
 
         return await _run_blocking(_append)
     except Exception as e:

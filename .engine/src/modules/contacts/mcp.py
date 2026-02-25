@@ -12,6 +12,7 @@ from core.mcp_helpers import get_services, normalize_phone, notify_backend_event
 from .standalone import StandaloneContactsRepository
 from .providers.apple import AppleContactsAdapter
 from .providers.base import ContactUpdate
+from .activity import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,8 @@ def contact(
         contact("merge", source_identifier="Alex B", target_identifier="Alex Bricken")
         contact("list", pinned=True)
         contact("list", relationship="friend", limit=10)
-        contact("history", identifier="Mark Schlick", entry="Feb 18: Telegram session about Claude OS")
-        contact("history", identifier="Mark", limit=5)
+        contact("history", identifier="John Smith", entry="Feb 18: Telegram session about the system")
+        contact("history", identifier="John", limit=5)
     """
     try:
         services = get_services()
@@ -171,7 +172,9 @@ def _contact_create(repo, name, phone, email, company, role, location,
     if tags:
         repo.replace_tags(created["id"], tags)
 
-    # Emit SSE event for real-time Dashboard update
+    # Log activity + emit SSE event
+    services = get_services()
+    log_activity(services.storage, created["id"], "created", "Contact created", source="manual")
     notify_backend_event("contact.created", {"id": created["id"][:8], "name": created["name"]})
 
     return {
@@ -238,6 +241,22 @@ def _contact_update(repo, identifier, name, phone, email, company, role, locatio
         except Exception as e:
             logger.warning(f"Apple write-back failed for {macos_id}: {e}")
 
+    # Log activity only if something actually changed
+    if field_count > 0 or tags is not None:
+        changed = [k for k, v in {
+            "name": name, "phone": phone, "email": email, "company": company,
+            "role": role, "location": location, "description": description,
+            "relationship": relationship, "context_notes": context_notes,
+            "value_exchange": value_exchange, "notes": notes, "pinned": pinned,
+            "current_state": current_state, "linkedin_url": linkedin_url,
+            "contact_cadence": contact_cadence,
+        }.items() if v is not None]
+        if tags is not None:
+            changed.append("tags")
+        desc = f"Updated: {', '.join(changed)}" if changed else "Updated"
+        services = get_services()
+        log_activity(services.storage, contact_id, "updated", desc, source="chief")
+
     # Emit SSE event for real-time Dashboard update
     notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
 
@@ -286,6 +305,22 @@ def _contact_enrich(repo, identifier, name, phone, email, company, role, locatio
     tags_added = 0
     if tags:
         tags_added = repo.merge_tags(contact_id, tags)
+
+    # Log activity only if something actually changed
+    if fields_count > 0 or tags_added > 0:
+        enriched_fields = [k for k, v in {
+            "name": name, "phone": phone, "email": email, "company": company,
+            "role": role, "location": location, "description": description,
+            "relationship": relationship, "context_notes": context_notes,
+            "value_exchange": value_exchange, "notes": notes,
+            "current_state": current_state, "linkedin_url": linkedin_url,
+            "contact_cadence": contact_cadence,
+        }.items() if v is not None]
+        if tags_added > 0:
+            enriched_fields.append("tags")
+        desc = f"Enriched: {', '.join(enriched_fields)}" if enriched_fields else "Enriched"
+        services = get_services()
+        log_activity(services.storage, contact_id, "enriched", desc, source="chief")
 
     # Emit SSE event for real-time Dashboard update
     notify_backend_event("contact.updated", {"id": contact_id[:8], "name": name or found["name"]})
@@ -357,6 +392,10 @@ def _contact_history(repo, identifier, entry, source, limit) -> Dict[str, Any]:
             entry=entry,
             source=source or "chief",
         )
+        # Log activity
+        preview = entry[:80] + ("..." if len(entry) > 80 else "")
+        services = get_services()
+        log_activity(services.storage, contact_id, "history_added", f"History: {preview}", source=source or "chief")
         return {
             "success": True,
             "mode": "write",

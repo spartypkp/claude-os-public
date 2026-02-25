@@ -3,6 +3,7 @@
 import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { isProtectedFile as isProtectedFileName } from '@/lib/systemFiles';
 import { AlertCircle, AlertTriangle, Edit3, FileJson, GitBranch, Loader2, RefreshCw } from 'lucide-react';
 
@@ -72,7 +73,7 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 
 	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
 	const handleExternalChange = useCallback((event: { path: string }) => {
-		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, "");
+		const normalizeFilePath = (path: string) => toDesktopRelative(path);
 		const eventPath = normalizeFilePath(event.path);
 		const currentPath = normalizeFilePath(filePathRef.current);
 
@@ -315,7 +316,7 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 						}}
 						className="p-1.5 rounded transition-colors"
 						style={{
-							color: !isEditing ? '#DA7756' : 'var(--text-tertiary)',
+							color: !isEditing ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: !isEditing ? 'rgba(218, 119, 86, 0.1)' : 'transparent',
 						}}
 						title="View (formatted)"
@@ -329,7 +330,7 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 						}}
 						className="p-1.5 rounded transition-colors"
 						style={{
-							color: viewMode === 'tree' && !isEditing ? '#DA7756' : 'var(--text-tertiary)',
+							color: viewMode === 'tree' && !isEditing ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: viewMode === 'tree' && !isEditing ? 'rgba(218, 119, 86, 0.1)' : 'transparent',
 						}}
 						title="Tree view"
@@ -341,7 +342,7 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 							onClick={() => setIsEditing(true)}
 							className="p-1.5 rounded transition-colors"
 							style={{
-								color: isEditing ? '#DA7756' : 'var(--text-tertiary)',
+								color: isEditing ? 'var(--color-claude)' : 'var(--text-tertiary)',
 								background: isEditing ? 'rgba(218, 119, 86, 0.1)' : 'transparent',
 							}}
 							title="Edit (raw)"
@@ -361,7 +362,7 @@ export function JsonEditor({ filePath }: JsonEditorProps) {
 							Large file
 						</span>
 					) : isReadOnly ? (
-						<span className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ background: 'rgba(218, 119, 86, 0.1)', color: '#DA7756' }}>
+						<span className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ background: 'rgba(218, 119, 86, 0.1)', color: 'var(--color-claude)' }}>
 							<svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 								<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
 								<path d="M7 11V7a5 5 0 0 1 10 0v4" />

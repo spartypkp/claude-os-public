@@ -397,6 +397,8 @@ export interface ActiveConversation {
   sessions: ActiveSession[];
   // Workers across all sessions in this conversation
   workers: ActiveWorker[];
+  // Server-detected pending AskUserQuestion
+  waiting_for_input?: boolean;
 }
 
 export interface ClaudeActivityData {

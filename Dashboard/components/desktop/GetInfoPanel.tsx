@@ -1,6 +1,7 @@
 'use client';
 
 import { finderInfo, FinderItem } from '@/lib/api';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { useWindowStore } from '@/store/windowStore';
 import {
 	Calendar,
@@ -98,11 +99,11 @@ interface InfoRowProps {
 
 function InfoRow({ label, value, mono }: InfoRowProps) {
 	return (
-		<div className="flex gap-4 py-2 border-b border-white/5 last:border-0">
-			<span className="w-24 shrink-0 text-[11px] text-[#808080] font-medium uppercase tracking-wide">
+		<div className="flex gap-4 py-2 last:border-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+			<span className="w-24 shrink-0 text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
 				{label}
 			</span>
-			<span className={`flex-1 text-[13px] text-[#e0e0e0] break-all ${mono ? 'font-mono text-[12px]' : ''}`}>
+			<span className={`flex-1 text-[13px] break-all ${mono ? 'font-mono text-[12px]' : ''}`} style={{ color: 'var(--text-primary)' }}>
 				{value}
 			</span>
 		</div>
@@ -114,27 +115,13 @@ interface GetInfoPanelProps {
 	onClose: () => void;
 }
 
-// Normalize path to be relative to Desktop/ (strip prefix if present)
-function normalizePath(path: string): string {
-	if (path.startsWith('Desktop/')) {
-		return path.slice('Desktop/'.length);
-	}
-	if (path.startsWith('/Desktop/')) {
-		return path.slice('/Desktop/'.length);
-	}
-	if (path.startsWith('/')) {
-		return path.slice(1);
-	}
-	return path;
-}
-
 export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 	const [info, setInfo] = useState<FinderItem | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	
-	// Normalize the path (strip Desktop/ prefix if present)
-	const normalizedPath = normalizePath(path);
+
+	// Convert to Desktop-relative for API calls
+	const normalizedPath = toDesktopRelative(path);
 	
 	// Fetch file info
 	useEffect(() => {
@@ -188,17 +175,20 @@ export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 			
 			{/* Panel */}
 			<div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] z-[9999] animate-scale-in">
-				<div className="bg-[#1e1e1e]/95 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl overflow-hidden">
+				<div className="backdrop-blur-xl rounded-xl overflow-hidden" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-default)', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
 					{/* Header with close button */}
-					<div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-						<h2 className="text-[13px] font-semibold text-[#e0e0e0]">
+					<div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+						<h2 className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
 							{info?.name || 'Get Info'}
 						</h2>
 						<button
 							onClick={onClose}
-							className="p-1 rounded-md hover:bg-white/10 transition-colors"
+							className="p-1 rounded-md transition-colors"
+							style={{ color: 'var(--text-tertiary)' }}
+							onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-muted)'; }}
+							onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
 						>
-							<X className="w-4 h-4 text-[#808080]" />
+							<X className="w-4 h-4" />
 						</button>
 					</div>
 					
@@ -206,7 +196,7 @@ export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 					<div className="p-4">
 						{loading ? (
 							<div className="flex items-center justify-center py-8">
-								<Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+								<Loader2 className="w-6 h-6 animate-spin text-[var(--color-claude)]" />
 							</div>
 						) : error ? (
 							<div className="text-center py-8">
@@ -215,15 +205,15 @@ export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 						) : info ? (
 							<>
 								{/* Icon and name header */}
-								<div className="flex items-center gap-4 mb-6 pb-4 border-b border-white/10">
-									<div className="w-16 h-16 rounded-xl bg-[#2a2a2a] flex items-center justify-center">
-										<IconComponent className="w-8 h-8 text-[#DA7756]" />
+								<div className="flex items-center gap-4 mb-6 pb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
+									<div className="w-16 h-16 rounded-xl flex items-center justify-center" style={{ background: 'var(--surface-muted)' }}>
+										<IconComponent className="w-8 h-8 text-[var(--color-claude)]" />
 									</div>
 									<div className="flex-1 min-w-0">
-										<h3 className="text-lg font-semibold text-[#e0e0e0] truncate">
+										<h3 className="text-lg font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
 											{info.name}
 										</h3>
-										<p className="text-[12px] text-[#808080]">
+										<p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
 											{getKindDescription(info)}
 										</p>
 									</div>
@@ -234,21 +224,21 @@ export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 									<InfoRow label="Kind" value={getKindDescription(info)} />
 									<InfoRow label="Size" value={
 										<span className="flex items-center gap-2">
-											<HardDrive className="w-3 h-3 text-[#808080]" />
+											<HardDrive className="w-3 h-3 text-[var(--text-tertiary)]" />
 											{formatBytes(info.size)}
 										</span>
 									} />
 									<InfoRow label="Path" value={info.path} mono />
 									<InfoRow label="Modified" value={
 										<span className="flex items-center gap-2">
-											<Calendar className="w-3 h-3 text-[#808080]" />
+											<Calendar className="w-3 h-3 text-[var(--text-tertiary)]" />
 											{formatDate(info.modified)}
 										</span>
 									} />
 									{info.created && (
 										<InfoRow label="Created" value={
 											<span className="flex items-center gap-2">
-												<Calendar className="w-3 h-3 text-[#808080]" />
+												<Calendar className="w-3 h-3 text-[var(--text-tertiary)]" />
 												{formatDate(info.created)}
 											</span>
 										} />
@@ -258,7 +248,7 @@ export function GetInfoPanel({ path, onClose }: GetInfoPanelProps) {
 									)}
 									{info.has_app_spec && (
 										<InfoRow label="Type" value={
-											<span className="px-2 py-0.5 bg-[#DA7756]/20 text-[#DA7756] rounded text-[11px] font-medium">
+											<span className="px-2 py-0.5 bg-[var(--color-claude)]/20 text-[var(--color-claude)] rounded text-[11px] font-medium">
 												Custom App
 											</span>
 										} />

@@ -101,7 +101,7 @@ export function ModelsTab({
         <div className="grid grid-cols-3 divide-x divide-[#E5E5E5] dark:divide-[#3a3a3a]">
           {modelConfig?.available.map((model) => {
             const tierColors: Record<string, string> = {
-              premium: 'text-[#DA7756]',
+              premium: 'text-[var(--color-claude)]',
               standard: 'text-blue-500',
               fast: 'text-green-500',
             };
@@ -133,8 +133,8 @@ export function ModelsTab({
                 key={role.slug}
                 className="flex items-center gap-3 px-3 py-3"
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#DA7756]/20 to-[#C15F3C]/30 flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-4 h-4 text-[#DA7756]" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-claude)]/20 to-[var(--color-primary-hover)]/30 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-[var(--color-claude)]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-[13px] text-[#1D1D1F] dark:text-white">{role.name}</div>
@@ -147,7 +147,7 @@ export function ModelsTab({
                       value={currentModel}
                       onChange={(e) => handleUpdate(role.slug, e.target.value)}
                       disabled={updating === role.slug}
-                      className="appearance-none bg-white dark:bg-[#3a3a3a] border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md px-3 py-1.5 pr-8 text-[13px] text-[#1D1D1F] dark:text-white focus:outline-none focus:border-[#DA7756] focus:ring-1 focus:ring-[#DA7756]/50 cursor-pointer disabled:opacity-50 transition-colors"
+                      className="appearance-none bg-white dark:bg-[#3a3a3a] border border-[#C0C0C0] dark:border-[#4a4a4a] rounded-md px-3 py-1.5 pr-8 text-[13px] text-[#1D1D1F] dark:text-white focus:outline-none focus:border-[var(--color-claude)] focus:ring-1 focus:ring-[var(--color-claude)]/50 cursor-pointer disabled:opacity-50 transition-colors"
                     >
                       {modelConfig.available.map((model) => (
                         <option key={model.alias} value={model.alias}>
@@ -170,7 +170,7 @@ export function ModelsTab({
                   )}
 
                   {updating === role.slug && (
-                    <Loader2 className="w-4 h-4 animate-spin text-[#DA7756]" />
+                    <Loader2 className="w-4 h-4 animate-spin text-[var(--color-claude)]" />
                   )}
                 </div>
               </div>
@@ -182,7 +182,7 @@ export function ModelsTab({
       {/* Info footer */}
       <div className="px-1 py-3 border-t border-[#E5E5E5] dark:border-[#3a3a3a] mt-4">
         <p className="text-[11px] text-[#8E8E93]">
-          Models can also be changed per-session using <code className="px-1 py-0.5 rounded bg-[#F5F5F5] dark:bg-[#2a2a2a] text-[#DA7756]">/model</code> in Claude Code.
+          Models can also be changed per-session using <code className="px-1 py-0.5 rounded bg-[#F5F5F5] dark:bg-[#2a2a2a] text-[var(--color-claude)]">/model</code> in Claude Code.
         </p>
       </div>
     </div>

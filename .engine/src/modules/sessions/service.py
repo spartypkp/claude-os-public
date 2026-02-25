@@ -21,7 +21,7 @@ from typing import Optional
 
 from core.config import settings
 from core.event_log import emit_event
-from core.tmux import send_text, inject_message
+from core.tmux import send_keys, send_text, inject_message
 
 from .models import Session, SpawnResult
 from .repository import SessionRepository
@@ -398,7 +398,7 @@ class SessionService:
             return False
         return inject_message(session.tmux_pane, message, source="Dashboard")
 
-    def send_keystroke(self, session_id: str, text: str) -> bool:
+    def send_keystroke(self, session_id: str, text: str, submit: bool = True) -> bool:
         """Send raw keystrokes to a session (no prefix).
 
         Used for interactive prompts like AskUserQuestion where
@@ -407,7 +407,28 @@ class SessionService:
         session = self.get_session(session_id)
         if not session or not session.tmux_pane:
             return False
-        return send_text(session.tmux_pane, text, submit=True)
+        return send_text(session.tmux_pane, text, submit=submit)
+
+    def send_keys_to_session(self, session_id: str, keys: list[str]) -> bool:
+        """Send raw key sequences to a session.
+
+        Used for TUI menus (like plan mode's approval menu) that need
+        arrow key navigation rather than literal text input.
+        Each key is sent with a small delay for the TUI to process.
+        """
+        import time
+
+        session = self.get_session(session_id)
+        if not session or not session.tmux_pane:
+            return False
+
+        try:
+            for key in keys:
+                send_keys(session.tmux_pane, key)
+                time.sleep(0.05)  # 50ms between keys for TUI to process
+            return True
+        except Exception:
+            return False
 
     def focus(self, session_id: str) -> bool:
         """Switch tmux to session's window."""
@@ -448,19 +469,6 @@ SCHEDULE:
 
 SESSIONS:
 {sessions}""",
-        "drop": """[CAPTURE:DROP] {message}
-
-No response needed. File this and continue what you were doing.""",
-        "bug": """[CAPTURE:BUG] {message}
-
-Add to TODAY.md Open Loops with bug tag. Brief acknowledgment.""",
-        "idea": """[CAPTURE:IDEA] {message}
-
-Capture to Claude/ideas.md or appropriate place. Brief acknowledgment.""",
-        "dump": """[CAPTURE:DUMP]
-{message}
-
-Rapid capture mode. File each item silently. Say "Done." when complete.""",
         "say": "{message}",
     }
 
@@ -556,7 +564,7 @@ Rapid capture mode. File each item silently. Say "Done." when complete.""",
 
         message = """[SYSTEM:FORCE-HANDOFF]
 
-Will has requested you perform an immediate session handoff.
+The user has requested an immediate session handoff.
 
 Your context may be running low or a fresh session is needed.
 
@@ -567,7 +575,7 @@ Your context may be running low or a fresh session is needed.
 
 Do this NOW before continuing any other work."""
 
-        return inject_message(session.tmux_pane, message, delay=0.2)
+        return inject_message(session.tmux_pane, message)
 
     def send_to_chief(self, message_type: str, message: str = "", **kwargs) -> bool:
         """Send a formatted message to Chief."""
@@ -604,7 +612,7 @@ Do this NOW before continuing any other work."""
             formatted = message
 
         target = f"{TMUX_SESSION}:chief"
-        return inject_message(target, formatted, delay=0.2)
+        return inject_message(target, formatted)
 
     # =========================================================================
     # TMUX HELPERS
@@ -775,7 +783,7 @@ Do this NOW before continuing any other work."""
             env_vars.append(f"WORKSPACE={workspace_path}")
 
         env_cmd = "export " + " ".join(env_vars)
-        send_text(target, env_cmd, delay=0.3)
+        send_text(target, env_cmd)
 
         claude_session_uuid = str(uuid.uuid4())
         cmd_parts = [
@@ -924,6 +932,18 @@ Do this NOW before continuing any other work."""
         if description:
             parts.append(f"\n\n<session-description>\n{description}\n</session-description>")
 
+        if conversation_id and mode == "interactive" and spec_path:
+            # Interactive mode: inject spec as context, not as a task
+            parts.append(f"""
+
+<specialist-context>
+## Context
+
+Chief spawned this session with context at `{spec_path}`.
+
+**Read the spec before starting.** It contains background, goals, and instructions for this session.
+</specialist-context>""")
+
         if conversation_id and mode in ("preparation", "implementation", "verification"):
             workspace_abs = self.repo_root / "Desktop" / "conversations" / conversation_id
             if spec_path:
@@ -1001,7 +1021,7 @@ Reason: {reason_text}
 
 <mission-context>
 You are executing Mission ID: {mission_id}
-This is autonomous mode - Will is not available for questions.
+This is autonomous mode - the user is not available for questions.
 
 **BEFORE EXITING:**
 1. Call: mcp__life__mission_complete("{mission_id}", "completed", "brief summary")

@@ -1,15 +1,18 @@
-"""Email API - inbox read endpoints + safety settings for sending."""
+"""Email API - inbox read endpoints + classifier settings + safety settings."""
 import asyncio
 import json
 import logging
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.database import get_db
+from core.events import event_bus
 from core.storage import SystemStorage
 from core.config import settings
 
@@ -460,9 +463,10 @@ async def handle_classification(
     message_id: str,
     account: Optional[str] = Query(None),
 ):
-    """Mark a classification as handled."""
+    """Mark a classification as handled and read in Apple Mail."""
 
     def _handle():
+        resolved_account = account
         with get_db() as conn:
             if account:
                 result = conn.execute(
@@ -474,18 +478,39 @@ async def handle_classification(
                     "UPDATE email_classifications SET handled = 1 WHERE email_message_id = ?",
                     (message_id,),
                 )
+                # Resolve account from classification if not provided
+                row = conn.execute(
+                    "SELECT account_id FROM email_classifications WHERE email_message_id = ?",
+                    (message_id,),
+                ).fetchone()
+                if row:
+                    resolved_account = row["account_id"]
             conn.commit()
-            return result.rowcount
 
-    count = await _run_blocking(_handle)
+            if result.rowcount == 0:
+                return 0, None
+            return result.rowcount, resolved_account
+
+    count, resolved_account = await _run_blocking(_handle)
     if count == 0:
         raise HTTPException(status_code=404, detail=f"Classification not found for {message_id}")
+
+    # Mark as read in Apple Mail (non-blocking, non-critical)
+    async def _mark_read():
+        try:
+            svc = get_email_service()
+            await asyncio.to_thread(svc.mark_as_read, message_id, "INBOX", resolved_account)
+        except Exception:
+            pass
+    asyncio.create_task(_mark_read())
+
+    await event_bus.publish("email.triaged", {"message_id": message_id})
     return {"success": True, "message": f"Marked {message_id} as handled"}
 
 
 @router.post("/classifications/handle-batch")
 async def handle_batch_classifications(data: dict):
-    """Mark multiple classifications as handled."""
+    """Mark multiple classifications as handled and read in Apple Mail."""
 
     message_ids = data.get("message_ids", [])
     if not message_ids:
@@ -498,10 +523,30 @@ async def handle_batch_classifications(data: dict):
                 f"UPDATE email_classifications SET handled = 1 WHERE email_message_id IN ({placeholders})",
                 message_ids,
             )
+            # Fetch accounts for mark-read
+            rows = conn.execute(
+                f"SELECT email_message_id, account_id FROM email_classifications WHERE email_message_id IN ({placeholders})",
+                message_ids,
+            ).fetchall()
             conn.commit()
-            return len(message_ids)
+            return len(message_ids), [(r["email_message_id"], r["account_id"]) for r in rows]
 
-    count = await _run_blocking(_handle)
+    count, msg_accounts = await _run_blocking(_handle)
+
+    # Mark all as read in Apple Mail (non-blocking, non-critical)
+    async def _mark_all_read():
+        try:
+            svc = get_email_service()
+            for msg_id, acct_id in msg_accounts:
+                try:
+                    await asyncio.to_thread(svc.mark_as_read, msg_id, "INBOX", acct_id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    asyncio.create_task(_mark_all_read())
+
+    await event_bus.publish("email.triaged", {"message_ids": message_ids})
     return {"success": True, "handled": count}
 
 
@@ -977,3 +1022,563 @@ async def update_safety_settings(data: SafetySettingsUpdate):
         "updated": updated,
         "settings": await get_safety_settings()
     }
+
+
+# =============================================================================
+# CLASSIFIER PROMPT
+# =============================================================================
+
+_CLASSIFIER_PROMPT_PATH = Path(__file__).resolve().parents[4] / "Desktop" / "email" / "classifier-prompt.md"
+
+# Default prompt content (used for reset)
+_DEFAULT_CLASSIFIER_PROMPT = None
+
+
+def _get_default_prompt() -> str:
+    """Get the default classifier prompt (cached on first call)."""
+    global _DEFAULT_CLASSIFIER_PROMPT
+    if _DEFAULT_CLASSIFIER_PROMPT is None:
+        # Read from file on first call to capture the original
+        try:
+            _DEFAULT_CLASSIFIER_PROMPT = _CLASSIFIER_PROMPT_PATH.read_text()
+        except FileNotFoundError:
+            _DEFAULT_CLASSIFIER_PROMPT = "# Classifier prompt not found"
+    return _DEFAULT_CLASSIFIER_PROMPT
+
+
+@router.get("/classifier/prompt")
+async def get_classifier_prompt():
+    """Get the current classifier prompt."""
+    def _get():
+        path = _CLASSIFIER_PROMPT_PATH
+        try:
+            content = path.read_text()
+            stat = path.stat()
+            return {
+                "prompt": content,
+                "path": str(path),
+                "updated_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "size": len(content),
+            }
+        except FileNotFoundError:
+            return {
+                "prompt": "",
+                "path": str(path),
+                "updated_at": None,
+                "size": 0,
+                "error": "Prompt file not found",
+            }
+    return await _run_blocking(_get)
+
+
+class UpdatePromptRequest(BaseModel):
+    prompt: str
+
+
+@router.put("/classifier/prompt")
+async def update_classifier_prompt(data: UpdatePromptRequest):
+    """Update the classifier prompt file."""
+    def _update():
+        path = _CLASSIFIER_PROMPT_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data.prompt)
+        stat = path.stat()
+        return {
+            "success": True,
+            "path": str(path),
+            "updated_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "size": len(data.prompt),
+        }
+    return await _run_blocking(_update)
+
+
+@router.post("/classifier/prompt/reset")
+async def reset_classifier_prompt():
+    """Reset the classifier prompt to its default content."""
+    def _reset():
+        path = _CLASSIFIER_PROMPT_PATH
+        default = _get_default_prompt()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(default)
+        stat = path.stat()
+        return {
+            "success": True,
+            "path": str(path),
+            "updated_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "size": len(default),
+        }
+    return await _run_blocking(_reset)
+
+
+# =============================================================================
+# SENDER RULES
+# =============================================================================
+
+
+class CreateRuleRequest(BaseModel):
+    match_type: str  # 'domain' or 'sender'
+    match_value: str
+    rule_type: str  # 'always', 'never', 'suggest'
+    category: str  # 'action_needed', 'heads_up', 'fyi', 'noise'
+    instructions: Optional[str] = None
+    extract_content: bool = False
+    enabled: bool = True
+
+
+class UpdateRuleRequest(BaseModel):
+    match_type: Optional[str] = None
+    match_value: Optional[str] = None
+    rule_type: Optional[str] = None
+    category: Optional[str] = None
+    instructions: Optional[str] = None
+    extract_content: Optional[bool] = None
+    enabled: Optional[bool] = None
+
+
+@router.get("/classifier/rules")
+async def get_classifier_rules():
+    """List all sender rules."""
+    def _get():
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT id, match_type, match_value, rule_type, category,
+                          instructions, extract_content, enabled, created_from,
+                          times_applied, created_at, updated_at
+                   FROM email_sender_rules
+                   ORDER BY
+                       CASE match_type WHEN 'sender' THEN 0 ELSE 1 END,
+                       CASE rule_type WHEN 'always' THEN 0 WHEN 'never' THEN 1 ELSE 2 END,
+                       match_value
+                """
+            ).fetchall()
+
+            rules = []
+            for row in rows:
+                rules.append({
+                    "id": row["id"],
+                    "match_type": row["match_type"],
+                    "match_value": row["match_value"],
+                    "rule_type": row["rule_type"],
+                    "category": row["category"],
+                    "instructions": row["instructions"],
+                    "extract_content": bool(row["extract_content"]),
+                    "enabled": bool(row["enabled"]),
+                    "created_from": row["created_from"],
+                    "times_applied": row["times_applied"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                })
+
+        return {"rules": rules, "count": len(rules)}
+
+    return await _run_blocking(_get)
+
+
+@router.post("/classifier/rules")
+async def create_classifier_rule(data: CreateRuleRequest):
+    """Create a new sender rule."""
+    # Validate enums
+    if data.match_type not in ("domain", "sender"):
+        raise HTTPException(status_code=400, detail="match_type must be 'domain' or 'sender'")
+    if data.rule_type not in ("always", "never", "suggest"):
+        raise HTTPException(status_code=400, detail="rule_type must be 'always', 'never', or 'suggest'")
+    if data.category not in ("action_needed", "heads_up", "fyi", "noise"):
+        raise HTTPException(status_code=400, detail="category must be 'action_needed', 'heads_up', 'fyi', or 'noise'")
+
+    def _create():
+        rule_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO email_sender_rules
+                   (id, match_type, match_value, rule_type, category,
+                    instructions, extract_content, enabled, created_from,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)""",
+                (
+                    rule_id, data.match_type, data.match_value.lower().strip(),
+                    data.rule_type, data.category,
+                    data.instructions, int(data.extract_content), int(data.enabled),
+                    now, now,
+                ),
+            )
+            conn.commit()
+
+        return {
+            "success": True,
+            "id": rule_id,
+            "message": f"Rule created: {data.rule_type} {data.category} for {data.match_type}={data.match_value}",
+        }
+
+    return await _run_blocking(_create)
+
+
+@router.put("/classifier/rules/{rule_id}")
+async def update_classifier_rule(rule_id: str, data: UpdateRuleRequest):
+    """Update an existing sender rule."""
+    if data.match_type and data.match_type not in ("domain", "sender"):
+        raise HTTPException(status_code=400, detail="match_type must be 'domain' or 'sender'")
+    if data.rule_type and data.rule_type not in ("always", "never", "suggest"):
+        raise HTTPException(status_code=400, detail="rule_type must be 'always', 'never', or 'suggest'")
+    if data.category and data.category not in ("action_needed", "heads_up", "fyi", "noise"):
+        raise HTTPException(status_code=400, detail="category must be 'action_needed', 'heads_up', 'fyi', or 'noise'")
+
+    def _update():
+        now = datetime.now(timezone.utc).isoformat()
+        updates = []
+        params = []
+
+        if data.match_type is not None:
+            updates.append("match_type = ?")
+            params.append(data.match_type)
+        if data.match_value is not None:
+            updates.append("match_value = ?")
+            params.append(data.match_value.lower().strip())
+        if data.rule_type is not None:
+            updates.append("rule_type = ?")
+            params.append(data.rule_type)
+        if data.category is not None:
+            updates.append("category = ?")
+            params.append(data.category)
+        if data.instructions is not None:
+            updates.append("instructions = ?")
+            params.append(data.instructions)
+        if data.extract_content is not None:
+            updates.append("extract_content = ?")
+            params.append(int(data.extract_content))
+        if data.enabled is not None:
+            updates.append("enabled = ?")
+            params.append(int(data.enabled))
+
+        if not updates:
+            return {"success": False, "error": "No fields to update"}
+
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(rule_id)
+
+        with get_db() as conn:
+            result = conn.execute(
+                f"UPDATE email_sender_rules SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+
+            if result.rowcount == 0:
+                return {"success": False, "error": f"Rule {rule_id} not found"}
+
+        return {"success": True, "message": f"Rule {rule_id} updated"}
+
+    return await _run_blocking(_update)
+
+
+@router.delete("/classifier/rules/{rule_id}")
+async def delete_classifier_rule(rule_id: str):
+    """Delete a sender rule."""
+    def _delete():
+        with get_db() as conn:
+            result = conn.execute(
+                "DELETE FROM email_sender_rules WHERE id = ?", (rule_id,)
+            )
+            conn.commit()
+
+            if result.rowcount == 0:
+                return {"success": False, "error": f"Rule {rule_id} not found"}
+
+        return {"success": True, "message": f"Rule {rule_id} deleted"}
+
+    return await _run_blocking(_delete)
+
+
+# =============================================================================
+# RECLASSIFY + FEEDBACK
+# =============================================================================
+
+
+class ReclassifyRequest(BaseModel):
+    category: str
+    notes: Optional[str] = None
+    create_rule: bool = False
+
+
+@router.post("/classifications/{classification_id}/reclassify")
+async def reclassify_email(classification_id: str, data: ReclassifyRequest):
+    """Reclassify an email and log feedback.
+
+    Optionally creates a sender rule from the correction.
+    """
+    if data.category not in ("action_needed", "heads_up", "fyi", "noise"):
+        raise HTTPException(status_code=400, detail="Invalid category")
+
+    def _reclassify():
+        now = datetime.now(timezone.utc).isoformat()
+
+        with get_db() as conn:
+            # Get original classification
+            row = conn.execute(
+                "SELECT * FROM email_classifications WHERE id = ?",
+                (classification_id,),
+            ).fetchone()
+
+            if not row:
+                return {"success": False, "error": f"Classification {classification_id} not found"}
+
+            original_category = row["category"]
+            if original_category == data.category:
+                return {"success": False, "error": "New category is the same as current"}
+
+            # Update the classification
+            conn.execute(
+                "UPDATE email_classifications SET category = ? WHERE id = ?",
+                (data.category, classification_id),
+            )
+
+            # Get prompt version for feedback tracking
+            prompt_version = None
+            try:
+                prompt_version = str(_CLASSIFIER_PROMPT_PATH.stat().st_mtime)
+            except FileNotFoundError:
+                prompt_version = "unknown"
+
+            # Log feedback
+            feedback_id = str(uuid.uuid4())
+            rule_created = False
+
+            # Optionally create a sender rule
+            if data.create_rule and row["sender"]:
+                sender_email = row["sender"]
+                # Extract email from "Name <email>" format
+                import re
+                match = re.search(r'<(.+?)>', sender_email)
+                if match:
+                    sender_email = match.group(1)
+
+                rule_id = str(uuid.uuid4())
+                conn.execute(
+                    """INSERT INTO email_sender_rules
+                       (id, match_type, match_value, rule_type, category,
+                        created_from, created_at, updated_at)
+                       VALUES (?, 'sender', ?, 'always', ?, 'correction', ?, ?)""",
+                    (rule_id, sender_email.lower(), data.category, now, now),
+                )
+                rule_created = True
+
+            conn.execute(
+                """INSERT INTO email_classification_feedback
+                   (id, classification_id, email_message_id, account_id,
+                    original_category, corrected_category, sender, subject,
+                    notes, rule_created, prompt_version, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    feedback_id, classification_id,
+                    row["email_message_id"], row["account_id"],
+                    original_category, data.category,
+                    row["sender"], row["subject"],
+                    data.notes, int(rule_created),
+                    prompt_version, now,
+                ),
+            )
+            conn.commit()
+
+        return {
+            "success": True,
+            "feedback_id": feedback_id,
+            "original_category": original_category,
+            "new_category": data.category,
+            "rule_created": rule_created,
+        }
+
+    return await _run_blocking(_reclassify)
+
+
+@router.get("/classifier/feedback")
+async def get_classifier_feedback(
+    reviewed: Optional[bool] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get classification feedback entries."""
+    def _get():
+        with get_db() as conn:
+            where_clauses = []
+            params = []
+
+            if reviewed is not None:
+                where_clauses.append("reviewed = ?")
+                params.append(int(reviewed))
+
+            where_sql = ""
+            if where_clauses:
+                where_sql = "WHERE " + " AND ".join(where_clauses)
+
+            rows = conn.execute(
+                f"""SELECT id, classification_id, email_message_id, account_id,
+                           original_category, corrected_category, sender, subject,
+                           notes, rule_created, prompt_version, created_at,
+                           reviewed, promoted_to_eval
+                    FROM email_classification_feedback
+                    {where_sql}
+                    ORDER BY created_at DESC
+                    LIMIT ?""",
+                params + [limit],
+            ).fetchall()
+
+            items = []
+            for row in rows:
+                items.append({
+                    "id": row["id"],
+                    "classification_id": row["classification_id"],
+                    "message_id": row["email_message_id"],
+                    "account_id": row["account_id"],
+                    "original_category": row["original_category"],
+                    "corrected_category": row["corrected_category"],
+                    "sender": row["sender"],
+                    "subject": row["subject"],
+                    "notes": row["notes"],
+                    "rule_created": bool(row["rule_created"]),
+                    "prompt_version": row["prompt_version"],
+                    "created_at": row["created_at"],
+                    "reviewed": bool(row["reviewed"]),
+                    "promoted_to_eval": bool(row["promoted_to_eval"]),
+                })
+
+        return {"feedback": items, "count": len(items)}
+
+    return await _run_blocking(_get)
+
+
+@router.put("/classifier/feedback/{feedback_id}")
+async def update_feedback(feedback_id: str, data: dict):
+    """Update feedback entry (mark reviewed, promote to eval)."""
+    def _update():
+        updates = []
+        params = []
+
+        if "reviewed" in data:
+            updates.append("reviewed = ?")
+            params.append(int(data["reviewed"]))
+        if "promoted_to_eval" in data:
+            updates.append("promoted_to_eval = ?")
+            params.append(int(data["promoted_to_eval"]))
+
+        if not updates:
+            return {"success": False, "error": "No fields to update"}
+
+        params.append(feedback_id)
+
+        with get_db() as conn:
+            result = conn.execute(
+                f"UPDATE email_classification_feedback SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+
+            if result.rowcount == 0:
+                return {"success": False, "error": f"Feedback {feedback_id} not found"}
+
+        return {"success": True, "message": f"Feedback {feedback_id} updated"}
+
+    return await _run_blocking(_update)
+
+
+@router.get("/classifier/feedback/stats")
+async def get_feedback_stats():
+    """Get feedback statistics — correction rates, drift signals."""
+    def _get():
+        with get_db() as conn:
+            # Total feedback
+            total = conn.execute(
+                "SELECT COUNT(*) as c FROM email_classification_feedback"
+            ).fetchone()["c"]
+
+            unreviewed = conn.execute(
+                "SELECT COUNT(*) as c FROM email_classification_feedback WHERE reviewed = 0"
+            ).fetchone()["c"]
+
+            # This week's corrections
+            week_corrections = conn.execute(
+                """SELECT COUNT(*) as c FROM email_classification_feedback
+                   WHERE created_at >= datetime('now', '-7 days')"""
+            ).fetchone()["c"]
+
+            # This week's total classifications
+            week_total = conn.execute(
+                """SELECT COUNT(*) as c FROM email_classifications
+                   WHERE classified_at >= datetime('now', '-7 days')"""
+            ).fetchone()["c"]
+
+            correction_rate = (week_corrections / week_total * 100) if week_total > 0 else 0
+
+            # Category flow (what's being corrected to what)
+            flows = conn.execute(
+                """SELECT original_category, corrected_category, COUNT(*) as c
+                   FROM email_classification_feedback
+                   GROUP BY original_category, corrected_category
+                   ORDER BY c DESC
+                   LIMIT 10"""
+            ).fetchall()
+
+            # Promoted to eval count
+            eval_count = conn.execute(
+                "SELECT COUNT(*) as c FROM email_classification_feedback WHERE promoted_to_eval = 1"
+            ).fetchone()["c"]
+
+        return {
+            "total_feedback": total,
+            "unreviewed": unreviewed,
+            "week_corrections": week_corrections,
+            "week_total_classifications": week_total,
+            "correction_rate_pct": round(correction_rate, 1),
+            "drift_warning": correction_rate > 10,
+            "category_flows": [
+                {
+                    "from": row["original_category"],
+                    "to": row["corrected_category"],
+                    "count": row["c"],
+                }
+                for row in flows
+            ],
+            "eval_set_size": eval_count,
+        }
+
+    return await _run_blocking(_get)
+
+
+# =============================================================================
+# DIGESTS (extracted newsletter content)
+# =============================================================================
+
+
+@router.get("/digests")
+async def get_digests(hours: int = Query(18, ge=1, le=72)):
+    """Get extracted newsletter content for morning reset.
+
+    Returns content from emails with extracted_content, looking back
+    the specified number of hours (default 18 for morning reset).
+    """
+    def _get():
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT ec.extracted_content, ec.display_name, ec.subject,
+                          ec.sender, ec.received_at, ec.classified_at
+                   FROM email_classifications ec
+                   WHERE ec.extracted_content IS NOT NULL
+                     AND ec.extracted_content != ''
+                     AND ec.classified_at >= datetime('now', ? || ' hours')
+                   ORDER BY ec.received_at DESC""",
+                (f"-{hours}",),
+            ).fetchall()
+
+            digests = []
+            for row in rows:
+                digests.append({
+                    "source": row["display_name"] or row["sender"],
+                    "subject": row["subject"],
+                    "content": row["extracted_content"],
+                    "received_at": _ensure_utc_suffix(row["received_at"]),
+                    "classified_at": _ensure_utc_suffix(row["classified_at"]),
+                })
+
+        return {"digests": digests, "count": len(digests), "lookback_hours": hours}
+
+    return await _run_blocking(_get)

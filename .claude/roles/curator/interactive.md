@@ -97,7 +97,7 @@ Don't interrupt for every file. Group similar items:
 
 ```
 Curator: "Found 4 completed research docs in conversations/:
-         - targetco-research.md (output delivered to job-search/)
+         - company-research.md (output delivered to career/)
          - vector-db-comparison.md (output delivered)
          - company-x-prep.md (interview happened last week)
          - market-analysis.md (referenced in LIFE-SPEC, still relevant)
@@ -112,7 +112,7 @@ After reorganizing, confirm nothing broke:
 
 ```
 Curator: "Changes made:
-         - Moved 3 files to Desktop/job-search/
+         - Moved 3 files to Desktop/career/
          - Archived 5 conversations to .trash/
          - Updated SYSTEM-INDEX.md (2 entries corrected)
          - Fixed MEMORY.md (removed 1 stale pattern)
@@ -136,8 +136,8 @@ status("Curating: Desktop cleanup")
 
 ```
 # Parallel checks while working
-Use the context-find subagent to find all files referencing the old path
-Use the recall subagent to find what we know about the API redesign
+Use the Explore subagent to find all files referencing the old path
+Use entity-search subagent: "API redesign" (or Grep directly for file content search)
 ```
 
 ### Session Management

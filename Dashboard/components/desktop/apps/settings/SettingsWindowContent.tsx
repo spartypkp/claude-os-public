@@ -103,7 +103,7 @@ export function SettingsWindowContent() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-[#E8E8E8] to-[#D4D4D4] dark:from-[#3d3d3d] dark:to-[#323232] border-b border-[#B8B8B8] dark:border-[#2a2a2a]">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center shadow-sm">
+          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center shadow-sm">
             <Settings2 className="w-4 h-4 text-white" />
           </div>
           <span className="text-sm font-semibold text-[#1D1D1F] dark:text-white">Settings</span>
@@ -119,19 +119,19 @@ export function SettingsWindowContent() {
         <div data-testid="settings-sidebar" className="w-48 flex-shrink-0 bg-[#F0F0F0]/80 dark:bg-[#252525]/80 backdrop-blur-xl border-r border-[#D1D1D1] dark:border-[#3a3a3a] overflow-y-auto">
           <div className="px-3 py-2.5 border-b border-[#D1D1D1] dark:border-[#3a3a3a]">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#DA7756] to-[#C15F3C] flex items-center justify-center">
+              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center">
                 <ClaudeLogo className="w-3.5 h-3.5 text-white" />
               </div>
               <div>
-                <div className="text-[10px] font-semibold text-[#DA7756]">Preferences</div>
+                <div className="text-[10px] font-semibold text-[var(--color-claude)]">Preferences</div>
                 <div className="text-[9px] text-[#8E8E93]">Claude OS</div>
               </div>
             </div>
           </div>
           <nav className="p-2 space-y-0.5">
             {SIDEBAR_ITEMS.map(({ id, label, icon: Icon }) => (
-              <button key={id} data-testid={`settings-tab-${id}`} onClick={() => setActiveTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors ${activeTab === id ? 'bg-[#DA7756] text-white' : 'hover:bg-black/5 dark:hover:bg-white/10 text-[#1D1D1F] dark:text-[#E5E5E5]'}`}>
-                <Icon className={`w-4 h-4 ${activeTab === id ? 'text-white' : 'text-[#DA7756]'}`} />
+              <button key={id} data-testid={`settings-tab-${id}`} onClick={() => setActiveTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors ${activeTab === id ? 'bg-[var(--color-claude)] text-white' : 'hover:bg-black/5 dark:hover:bg-white/10 text-[#1D1D1F] dark:text-[#E5E5E5]'}`}>
+                <Icon className={`w-4 h-4 ${activeTab === id ? 'text-white' : 'text-[var(--color-claude)]'}`} />
                 <span className="text-xs font-medium">{label}</span>
               </button>
             ))}

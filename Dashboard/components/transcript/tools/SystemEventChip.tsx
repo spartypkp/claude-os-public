@@ -10,7 +10,7 @@
  * Expandable only when a custom expanded view exists (e.g., AskUserQuestion, team).
  */
 
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { getExpandedView, DefaultExpanded } from './ExpandedViews';
 import { getToolOneLiner, parseToolInput, parseToolResult } from './registry';
 
@@ -77,17 +77,17 @@ export function SystemEventChip({
         {/* Icon */}
         <span
           className="flex items-center justify-center w-5 h-5 rounded flex-shrink-0"
-          style={{ color }}
+          style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`, color }}
         >
           {isRunning ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-3 h-3 animate-spin" />
           ) : (
-            <Icon className="w-3.5 h-3.5" />
+            <Icon className="w-3 h-3" />
           )}
         </span>
 
         {/* One-liner with optional tool name prefix */}
-        <span className="text-[11px] text-[var(--text-muted)] truncate flex-1">
+        <span className="text-[11px] text-[var(--text-secondary)] truncate flex-1">
           {showToolName && oneLiner ? (
             <>
               <span className="uppercase text-[10px] tracking-wide opacity-70">{displayLabel}</span>
@@ -99,14 +99,7 @@ export function SystemEventChip({
           )}
         </span>
 
-        {/* Expand chevron (only if has custom expanded view) */}
-        {hasCustomExpanded && (
-          <ChevronRight
-            className={`w-3 h-3 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${
-              isExpanded ? 'rotate-90' : ''
-            }`}
-          />
-        )}
+        {/* Expand state indicated by visual styling, no chevron */}
       </button>
 
       {/* Expanded view */}

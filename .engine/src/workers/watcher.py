@@ -5,7 +5,6 @@ Responsibilities:
 1. Watch Desktop/ for file changes
 2. Send SSE events for Dashboard UI sync
 3. Trigger SYSTEM-INDEX.md refresh when specs change
-4. Handle reply.txt signals for Chief ↔ Specialist messaging
 """
 
 import asyncio
@@ -19,7 +18,6 @@ from watchfiles import awatch, Change
 
 from core.config import settings
 from core.perf import record_worker_latency
-from core.tmux import inject_message_async
 
 # Add engine src to sys.path for database imports
 sys.path.insert(0, str(settings.engine_dir / "src"))
@@ -153,10 +151,6 @@ async def _handle_change(change_type: Change, path_str: str):
         if path.name in SYSTEM_INDEX_PATTERNS:
             await _refresh_system_index()
 
-        # Handle reply.txt signals for Chief ↔ Specialist messaging
-        if path.name == "reply.txt" and "conversations/" in str(path):
-            await _handle_reply_signal(path)
-
     except Exception as e:
         logger.error(f"Error handling {path_str}: {e}")
 
@@ -191,145 +185,6 @@ async def _refresh_system_index():
         await refresh_system_index()
     except Exception as e:
         logger.error(f"SYSTEM-INDEX refresh error: {e}")
-
-
-async def _handle_reply_signal(path: Path):
-    """Handle reply.txt change - auto-inject to subscribed Chief.
-
-    Retries up to 3 times with 1s delay to handle race conditions where
-    the subscription DB write hasn't completed when the file event fires.
-    """
-    try:
-        # Extract conversation_id from path
-        conversation_id = path.parent.name
-        logger.info(f"Reply signal detected for conversation: {conversation_id}")
-
-        # Query for specialist session + subscribed_by (with retry for race conditions)
-        from core.database import get_db
-
-        specialist_row = None
-        chief_tmux_pane = None
-        max_retries = 3
-
-        for attempt in range(1, max_retries + 1):
-            with get_db() as conn:
-                cursor = conn.execute("""
-                    SELECT session_id, role, subscribed_by
-                    FROM sessions
-                    WHERE conversation_id = ? AND ended_at IS NULL
-                    LIMIT 1
-                """, (conversation_id,))
-                specialist_row = cursor.fetchone()
-
-                if not specialist_row:
-                    if attempt < max_retries:
-                        logger.info(f"No active specialist for {conversation_id} (attempt {attempt}/{max_retries}), retrying...")
-                        await asyncio.sleep(1)
-                        continue
-                    logger.warning(f"No active specialist found for {conversation_id} after {max_retries} attempts")
-                    return
-
-                subscribed_by = specialist_row["subscribed_by"]
-                if not subscribed_by:
-                    if attempt < max_retries:
-                        logger.info(f"No Chief subscribed to {conversation_id} (attempt {attempt}/{max_retries}), retrying...")
-                        await asyncio.sleep(1)
-                        continue
-                    logger.warning(f"No Chief subscribed to {conversation_id} after {max_retries} attempts")
-                    return
-
-                # Query Chief session to get tmux_pane
-                cursor = conn.execute("""
-                    SELECT tmux_pane
-                    FROM sessions
-                    WHERE session_id = ? AND ended_at IS NULL
-                    LIMIT 1
-                """, (subscribed_by,))
-                chief_row = cursor.fetchone()
-
-                if not chief_row or not chief_row["tmux_pane"]:
-                    if attempt < max_retries:
-                        logger.info(f"Chief tmux pane not ready (attempt {attempt}/{max_retries}), retrying...")
-                        await asyncio.sleep(1)
-                        continue
-                    logger.warning(f"Chief session {subscribed_by[:8]} has no tmux pane after {max_retries} attempts")
-                    return
-
-                chief_tmux_pane = chief_row["tmux_pane"]
-                break  # All lookups succeeded
-
-        specialist_session_id = specialist_row["session_id"]
-        specialist_role = specialist_row["role"] or "specialist"
-        short_id = specialist_session_id[:8]
-        subscribed_by = specialist_row["subscribed_by"]
-
-        logger.info(f"Specialist {specialist_role} {short_id} subscribed by Chief {subscribed_by[:8]}")
-        logger.info(f"Chief tmux pane found: {chief_tmux_pane}")
-
-        # Find last injected position for this specialist
-        with get_db() as conn:
-            cursor = conn.execute("""
-                SELECT MAX(message_position) as last_position
-                FROM reply_injections
-                WHERE specialist_session_id = ?
-            """, (specialist_session_id,))
-            last_position_row = cursor.fetchone()
-            last_position = last_position_row["last_position"] if last_position_row["last_position"] is not None else 0
-
-        logger.info(f"Last injected position: {last_position}")
-
-        # Read all entries from reply.txt
-        try:
-            content = path.read_text()
-            # Split by double newline, filter empty entries
-            entries = [e.strip() for e in content.split("\n\n") if e.strip()]
-            if not entries:
-                logger.info(f"reply.txt is empty, nothing to inject")
-                return
-
-            logger.info(f"Found {len(entries)} total entries in reply.txt")
-        except Exception as e:
-            logger.error(f"Failed to read reply.txt: {e}")
-            return
-
-        # Process only new entries (position > last_position)
-        new_entries = []
-        for position in range(last_position + 1, len(entries) + 1):
-            if position <= len(entries):
-                entry_text = entries[position - 1]  # Convert to 0-indexed
-                new_entries.append((position, entry_text))
-
-        if not new_entries:
-            logger.info(f"No new entries to inject (all {len(entries)} already processed)")
-            return
-
-        logger.info(f"Injecting {len(new_entries)} new entries")
-
-        # Inject each new entry
-        from datetime import datetime
-        for position, entry_text in new_entries:
-            # Format message: [SYSTEM:NOTIFY] Reply from {role} ({id}): {message}
-            formatted_message = f"[SYSTEM:NOTIFY] Reply from {specialist_role} ({short_id}): {entry_text}"
-
-            # Inject to Chief's pane
-            success = await inject_message_async(chief_tmux_pane, formatted_message, submit=True)
-
-            if success:
-                # Record injection in database
-                with get_db() as conn:
-                    conn.execute("""
-                        INSERT INTO reply_injections (specialist_session_id, chief_session_id, message_position, injected_at)
-                        VALUES (?, ?, ?, ?)
-                    """, (specialist_session_id, subscribed_by, position, datetime.now().isoformat()))
-                    conn.commit()
-
-                logger.info(f"Auto-injected reply #{position} to Chief from {specialist_role} {short_id}")
-            else:
-                logger.error(f"Failed to inject reply #{position} to Chief")
-                # Don't record failed injections - will retry on next signal
-
-    except Exception as e:
-        logger.error(f"Error handling reply signal: {e}")
 
 
 __all__ = ["start_watcher"]

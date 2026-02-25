@@ -56,7 +56,7 @@ def messages(
         messages("search", query="lunch tomorrow")
 
         # Send a message
-        messages("send", recipient="danbotmorgan@gmail.com", text="Hello from Claude!")
+        messages("send", recipient="contact@example.com", text="Hello from Claude!")
 
         # Test connection
         messages("test")

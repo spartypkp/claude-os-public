@@ -11,6 +11,7 @@
 
 import { useChatPanel } from '@/components/context/ChatPanelContext';
 import { TranscriptViewer } from '@/components/transcript/TranscriptViewer';
+import { TranscriptProvider } from '@/components/transcript/TranscriptContext';
 import { useChiefStatus } from '@/hooks/useChiefStatus';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationsQuery } from '@/hooks/queries/useConversationsQuery';
@@ -19,7 +20,7 @@ import { useEventStream } from '@/hooks/useEventStream';
 import { useHandoffState } from '@/hooks/useHandoffState';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Local components
 import { ChatInputHandle } from './ChatInput';
@@ -37,7 +38,9 @@ import {
 } from './constants';
 import { getRoleConfig } from '@/lib/sessionUtils';
 import { useAttachments, useDragDrop, usePanelResize } from './hooks';
-import { sendKeystroke } from '@/lib/api';
+import { sendKeystroke, sendKeys } from '@/lib/api';
+
+const INTERACTIVE_TOOL_NAMES = new Set(['AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode']);
 
 interface ClaudePanelProps {
   isVisible: boolean;
@@ -80,7 +83,11 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
     sendMessage: sendConversationMessage,
   } = useConversation(conversationId, {
     includeThinking: true,
-    hours: 24,
+    // Chief loads 10+ sessions/day (1,500+ events) — limit to 3 most recent.
+    // Specialists are bounded by lifecycle (typically 1-3 sessions), so hours=24 is fine.
+    ...(conversationRole === 'chief'
+      ? { limitSessions: 3 }
+      : { hours: 24 }),
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -125,6 +132,7 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
     handleDragOver,
     handleDragLeave,
     handleDrop,
+    handleFilePick,
   } = useDragDrop({
     onAttach: addAttachment,
     onError: setSendError,
@@ -134,13 +142,32 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
   // DERIVED STATE
   // ─────────────────────────────────────────────────────────────────────────
 
-  const activeConversations = conversations.filter(c => !c.ended_at);
+  const activeConversations = useMemo(() => conversations.filter(c => !c.ended_at), [conversations]);
   const roleName = conversationRole ? getRoleConfig(conversationRole).label : 'Claude';
   const error = transcriptError || sendError;
+
+  // Detect pending interactive tools — block chat input while waiting for user action
+  const hasPendingQuestion = useMemo(() => {
+    const toolUseIds = new Set<string>();
+    const answeredIds = new Set<string>();
+    for (const ev of events) {
+      if (ev.type === 'tool_use' && INTERACTIVE_TOOL_NAMES.has(ev.toolName || '') && ev.toolUseId) {
+        toolUseIds.add(ev.toolUseId);
+      }
+      if (ev.type === 'tool_result' && ev.toolUseId && toolUseIds.has(ev.toolUseId)) {
+        answeredIds.add(ev.toolUseId);
+      }
+    }
+    for (const id of toolUseIds) {
+      if (!answeredIds.has(id)) return true;
+    }
+    return false;
+  }, [events]);
   const hasAnyConversation = activeConversations.length > 0 || chiefStatus.isRunning;
   const currentWidth = !isVisible ? 0 : isMinimized ? MINIMIZED_PANEL_WIDTH : panelWidth;
 
   const activityState = useClaudeActivityState(events, isWaitingForResponse, eventCountAtSend);
+  const transcriptContextValue = useMemo(() => ({ activeSessionId: activeSessionId || null }), [activeSessionId]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // CONVERSATION SYNC EFFECTS
@@ -303,20 +330,58 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
 
   useEffect(() => {
     const handleAnswerQuestion = async (e: Event) => {
-      const customEvent = e as CustomEvent<{ text: string }>;
-      const { text } = customEvent.detail;
-      if (!activeSessionId || !text) return;
+      const customEvent = e as CustomEvent<{ steps: Array<{ text: string; submit: boolean; delayAfter?: number }> }>;
+      const { steps } = customEvent.detail;
+      if (!activeSessionId || !steps?.length) return;
 
       try {
-        await sendKeystroke(activeSessionId, text);
+        for (const step of steps) {
+          await sendKeystroke(activeSessionId, step.text, step.submit);
+          if (step.delayAfter) {
+            await new Promise(resolve => setTimeout(resolve, step.delayAfter));
+          }
+        }
       } catch (err) {
-        console.error('Failed to send keystroke:', err);
+        console.error('Failed to send answer:', err);
         setSendError(err instanceof Error ? err.message : 'Failed to answer question');
       }
     };
 
     window.addEventListener('answer-question', handleAnswerQuestion);
     return () => window.removeEventListener('answer-question', handleAnswerQuestion);
+  }, [activeSessionId]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PLAN MODE ACTION LISTENER (for EnterPlanMode / ExitPlanMode)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handlePlanAction = async (e: Event) => {
+      const customEvent = e as CustomEvent<{ keys: string[]; followUpText?: string }>;
+      const { keys, followUpText } = customEvent.detail;
+      if (!activeSessionId || !keys?.length) return;
+
+      try {
+        await sendKeys(activeSessionId, keys);
+        // If feedback text was provided (plan mode option 5), send it after menu selection
+        if (followUpText) {
+          // Wait for the menu to process and show the text input
+          setTimeout(async () => {
+            try {
+              await sendKeystroke(activeSessionId, followUpText);
+            } catch (err) {
+              console.error('Failed to send plan feedback:', err);
+            }
+          }, 500);
+        }
+      } catch (err) {
+        console.error('Failed to send plan mode action:', err);
+        setSendError(err instanceof Error ? err.message : 'Failed to send plan action');
+      }
+    };
+
+    window.addEventListener('plan-mode-action', handlePlanAction);
+    return () => window.removeEventListener('plan-mode-action', handlePlanAction);
   }, [activeSessionId]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -359,8 +424,8 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
   // MESSAGE HANDLERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (message: string) => {
-    if (!conversationId) return;
+  const sendMessage = useCallback(async (message: string): Promise<boolean> => {
+    if (!conversationId) return false;
     setSendError(null);
     setEventCountAtSend(events.length);
     setIsWaitingForResponse(true);
@@ -378,10 +443,11 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
 
       await sendConversationMessage(fullMessage);
       clearAttachments();
+      return true;
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Failed to send message');
       setIsWaitingForResponse(false);
-      throw err;
+      return false;
     }
   }, [conversationId, attachedFiles, clearAttachments, events.length, sendConversationMessage]);
 
@@ -456,10 +522,10 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
       ) : (
         <>
           {isDragOver && (
-            <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-[var(--color-claude)] bg-[var(--color-claude-dim)] pointer-events-none flex items-center justify-center">
+            <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-[var(--color-claude)] bg-[var(--surface-claude)]/95 backdrop-blur-sm pointer-events-none flex items-center justify-center">
               <div className="text-center">
                 <div className="text-xs font-medium text-[var(--color-claude)]">Drop to attach</div>
-                <div className="text-[10px] text-[var(--color-claude)]/80 mt-1">External files import to Desktop/Inbox</div>
+                <div className="text-[10px] text-[var(--color-claude)]/70 mt-1">Files will be added as context</div>
               </div>
             </div>
           )}
@@ -481,6 +547,7 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
               onMinimize={() => setIsMinimized(true)}
               sseConnected={sseConnected}
               getHandoffPhase={getHandoffPhase}
+              hasPendingQuestion={hasPendingQuestion}
             />
           </div>
         </>
@@ -506,14 +573,16 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
           ) : (
             <div className="h-full flex flex-col">
               <div className="flex-1 overflow-auto px-3 py-2" tabIndex={0} aria-label="Claude transcript">
-                <TranscriptViewer
-                  events={events}
-                  isConnected={isConnected}
-                  role={conversationRole || undefined}
-                  pagination={pagination}
-                  onLoadEarlier={loadEarlierHistory}
-                  handoffPhase={conversationId ? getHandoffPhase(conversationId) : undefined}
-                />
+                <TranscriptProvider value={transcriptContextValue}>
+                  <TranscriptViewer
+                    events={events}
+                    isConnected={isConnected}
+                    role={conversationRole || undefined}
+                    pagination={pagination}
+                    onLoadEarlier={loadEarlierHistory}
+                    handoffPhase={conversationId ? getHandoffPhase(conversationId) : undefined}
+                  />
+                </TranscriptProvider>
               </div>
             </div>
           )}
@@ -544,6 +613,10 @@ export function ClaudePanel({ isVisible }: ClaudePanelProps) {
           onInterrupt={handleInterrupt}
           onRemoveAttachment={removeAttachment}
           onTogglePreview={togglePreview}
+          onFilePick={handleFilePick}
+          onAddAttachment={addAttachment}
+          hasPendingQuestion={hasPendingQuestion}
+          isProcessing={activityState.type === 'thinking' || activityState.type === 'tool_executing'}
         />
       )}
 

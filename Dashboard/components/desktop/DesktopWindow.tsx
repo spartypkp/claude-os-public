@@ -7,10 +7,12 @@ import { useWindowStore, WindowState } from '@/store/windowStore';
 import { getExplanation, isSystemFile } from '@/lib/explanations';
 import { ExplanationTooltip } from './ExplanationTooltip';
 import { PathBar } from './PathBar';
+import { EditorProvider } from './editors/EditorContext';
 
 interface DesktopWindowProps {
   window: WindowState;
   children: ReactNode;
+  isFocused?: boolean;
 }
 
 /**
@@ -23,8 +25,8 @@ interface DesktopWindowProps {
  * - Yellow button: Minimize (currently closes)
  * - Green button: Toggle maximize (fills viewport vs. original size)
  */
-export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
-  const { closeWindow, focusWindow, moveWindow, resizeWindow, minimizeWindow, getZIndex } = useWindowStore();
+export function DesktopWindow({ window: win, children, isFocused = true }: DesktopWindowProps) {
+  const { closeWindow, removeWindow, focusWindow, moveWindow, resizeWindow, minimizeWindow, getZIndex } = useWindowStore();
   
   // Track if window is maximized and store original dimensions
   const [isMaximized, setIsMaximized] = useState(false);
@@ -95,6 +97,12 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
     focusWindow(win.id);
   }, [win.id, focusWindow]);
 
+  const handleAnimationEnd = useCallback((e: React.AnimationEvent) => {
+    if (e.animationName === 'windowClose') {
+      removeWindow(win.id);
+    }
+  }, [win.id, removeWindow]);
+
   const handleMaximize = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     
@@ -107,13 +115,18 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
     } else {
       // Save current bounds and maximize
       setOriginalBounds({ x: win.x, y: win.y, width: win.width, height: win.height });
-      
-      // Get Desktop bounds (accounting for menubar and dock)
-      // Menubar is ~32px, dock area is ~80px from bottom
-      const maxWidth = window.innerWidth - 40; // 20px padding on each side
-      const maxHeight = window.innerHeight - 130; // Menubar + dock + padding
-      
-      moveWindow(win.id, 20, 40);
+
+      // Get actual desktop bounds from the container
+      const desktop = document.querySelector('[data-testid="desktop"]');
+      const bounds = desktop?.getBoundingClientRect();
+      const padding = 8;
+      const menubarHeight = 25;
+      const dockHeight = 80;
+
+      const maxWidth = (bounds?.width ?? window.innerWidth) - padding * 2;
+      const maxHeight = (bounds?.height ?? window.innerHeight) - menubarHeight - dockHeight - padding * 2;
+
+      moveWindow(win.id, padding, menubarHeight + padding);
       resizeWindow(win.id, maxWidth, maxHeight);
       setIsMaximized(true);
     }
@@ -144,17 +157,23 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
     >
       <div
         data-testid={`app-window-${win.appType || win.id}`}
-        className="
-          flex flex-col h-full rounded-xl overflow-hidden
-          bg-[var(--surface-raised)] border border-[var(--border-default)]
-          shadow-2xl shadow-black/20
-        "
+        className="flex flex-col h-full rounded-xl overflow-hidden bg-[var(--surface-raised)] border border-[var(--border-default)]"
+        style={{
+          boxShadow: isFocused
+            ? '0 25px 50px rgba(0,0,0,0.25)'
+            : '0 10px 25px rgba(0,0,0,0.1)',
+          animation: win.closing
+            ? 'windowClose 120ms ease-in forwards'
+            : 'windowOpen 200ms ease-out',
+          pointerEvents: win.closing ? 'none' : undefined,
+        }}
         onClick={handleClick}
+        onAnimationEnd={handleAnimationEnd}
       >
         {/* Title Bar with Traffic Lights */}
         <div className="window-drag-handle flex items-center h-8 px-3 bg-[var(--surface-base)] border-b border-[var(--border-subtle)] cursor-move select-none">
           {/* Traffic Lights (Mac style - LEFT side) */}
-          <div className="flex items-center gap-2 mr-4">
+          <div className="flex items-center gap-2 mr-4" style={{ opacity: isFocused ? 1 : 0.6 }}>
             {/* Close - Red */}
             <button
               data-testid="window-close"
@@ -212,7 +231,7 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
 
           {/* Title */}
           <div className="flex-1 text-center">
-            <span className="text-xs text-[var(--text-secondary)] font-medium truncate">
+            <span className="text-xs font-medium truncate" style={{ color: isFocused ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}>
               {win.title}
             </span>
           </div>
@@ -246,15 +265,19 @@ export function DesktopWindow({ window: win, children }: DesktopWindowProps) {
           />
         )}
 
-        {/* Path Bar - only for file windows (not app windows) */}
-        {!win.appType && win.filePath && (
-          <PathBar filePath={win.filePath} />
+        {/* File windows get EditorContext for PathBar ↔ Editor state sharing */}
+        {!win.appType && win.filePath ? (
+          <EditorProvider>
+            <PathBar filePath={win.filePath} />
+            <div className="flex-1 overflow-hidden bg-[var(--surface-raised)]">
+              {children}
+            </div>
+          </EditorProvider>
+        ) : (
+          <div className="flex-1 overflow-hidden bg-[var(--surface-raised)]">
+            {children}
+          </div>
         )}
-
-        {/* Content */}
-        <div className="flex-1 overflow-hidden bg-[var(--surface-raised)]">
-          {children}
-        </div>
       </div>
     </Rnd>
   );

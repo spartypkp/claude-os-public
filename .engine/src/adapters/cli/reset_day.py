@@ -213,6 +213,11 @@ def main():
     print(f"\n📝 Creating fresh TODAY.md...")
     create_today_file()
 
+    # NOTE: Morning brief draft (.engine/data/morning-brief-draft.md) is NOT cleared here.
+    # Chief reads it in Phase 2.5/4 of the morning reset, which runs AFTER this script.
+    # The draft gets cleared by Chief after the final brief is written and sent,
+    # or naturally rebuilt (overwritten) as new emails arrive the next day.
+
     # Summary
     print("\n" + "=" * 70)
     print(f"✅ Reset complete - {total_archived} items archived")

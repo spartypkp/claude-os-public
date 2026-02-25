@@ -33,6 +33,25 @@ class HandoffService:
         except FileNotFoundError:
             return f"(File not found: {path})"
 
+    def _read_previous_handoffs(self, folder: Path, current_filename: str) -> str:
+        """Read all previous handoff docs from a conversation folder.
+
+        Returns concatenated contents of prior handoffs (excluding the one being created),
+        sorted by filename so they're in chronological order.
+        """
+        handoffs = sorted(folder.glob("handoff-*.md"))
+        parts = []
+        for h in handoffs:
+            if h.name == current_filename:
+                continue
+            try:
+                content = h.read_text().strip()
+                if content:
+                    parts.append(f"### {h.name}\n\n{content}")
+            except Exception:
+                continue
+        return "\n\n---\n\n".join(parts) if parts else ""
+
     def _read_context_files(self, role: str, mode: str) -> dict:
         """Read all context files for summarizer."""
         return {
@@ -83,6 +102,9 @@ class HandoffService:
         # Write template skeleton
         handoff_path.write_text(formatted)
 
+        # Read previous handoffs for cumulative context
+        previous_handoffs = self._read_previous_handoffs(chief_dir, handoff_path.name)
+
         # Read context files
         context = self._read_context_files(role="chief", mode="interactive")
 
@@ -93,6 +115,7 @@ class HandoffService:
             parent_session_id=session_id,
             conversation_id="chief",
             role="chief",
+            previous_handoffs=previous_handoffs if previous_handoffs else None,
             **context,
         )
 
@@ -144,6 +167,9 @@ class HandoffService:
         # Write template skeleton
         handoff_path.write_text(formatted)
 
+        # Read previous handoffs for cumulative context
+        previous_handoffs = self._read_previous_handoffs(folder, handoff_path.name)
+
         # Read context files
         context = self._read_context_files(role=role, mode=mode)
 
@@ -155,6 +181,7 @@ class HandoffService:
             conversation_id=conversation_id,
             role=role,
             spec_path=spec_path,
+            previous_handoffs=previous_handoffs if previous_handoffs else None,
             **context,
         )
 

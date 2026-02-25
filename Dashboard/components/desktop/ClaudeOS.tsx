@@ -4,6 +4,7 @@ import { useFileEvents } from '@/hooks/useFileEvents';
 import { fetchFileTree, finderMove, finderUpload, listTrash, moveToTrash } from '@/lib/api';
 import { CLAUDE_SYSTEM_FILES } from '@/lib/systemFiles';
 import { getFolderCategory } from '@/lib/folderCategories';
+import { initPaths, toDesktopRelative, isDesktopPath, isDirectChild, getDesktopRoot } from '@/lib/pathUtils';
 import { FileTreeNode } from '@/lib/types';
 import { useDesktopStore } from '@/store/desktopStore';
 import {
@@ -14,19 +15,10 @@ import {
 	useQuickLookPath,
 	useSelectedIcons,
 	useWindowActions,
+	useWindowStack,
 	useWindowStore,
 	useWindows,
 } from '@/store/windowStore';
-import {
-	DndContext,
-	DragEndEvent,
-	DragOverEvent,
-	DragOverlay,
-	DragStartEvent,
-	PointerSensor,
-	useSensor,
-	useSensors,
-} from '@dnd-kit/core';
 import { Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -41,15 +33,13 @@ import { ProjectsWindowContent } from './apps/projects/ProjectsWindowContent';
 
 import { ContextMenu } from './ContextMenu';
 import { DesktopIcon } from './DesktopIcon';
-import { DesktopIconPreview } from './DesktopIconPreview';
+import { DragGhost } from './DragGhost';
 import { DesktopWindow } from './DesktopWindow';
 import { DocumentRouter } from './editors/DocumentRouter';
 import { QuickLook } from './QuickLook';
-import { TrashIcon } from './TrashIcon';
-
-// Grid cell size (must match icon dimensions in DesktopIcon.tsx)
-const GRID_CELL_WIDTH = 96;
-const GRID_CELL_HEIGHT = 112;
+import { WindowErrorCard } from '@/components/errors/ErrorBoundaries';
+import { ErrorBoundary } from 'react-error-boundary';
+import { useDesktopSettings, ICON_SIZES } from '@/store/desktopSettingsStore';
 
 /**
  * Claude OS - Mac-style virtual desktop.
@@ -64,8 +54,10 @@ export function ClaudeOS() {
 	// File tree data
 	const [files, setFiles] = useState<FileTreeNode[]>([]);
 
-	// Drag state (dnd-kit for internal icons)
-	const [activeDragId, setActiveDragId] = useState<string | null>(null);
+	// Rubber band selection state
+	const [rubberBand, setRubberBand] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+	const rubberBandRef = useRef<{ startX: number; startY: number } | null>(null);
+	const desktopRef = useRef<HTMLDivElement>(null);
 
 	// Native drag-drop state (for files from OS Finder)
 	const [isNativeDragOver, setIsNativeDragOver] = useState(false);
@@ -73,24 +65,24 @@ export function ClaudeOS() {
 
 	// Window store - using selectors to avoid re-renders on unrelated state changes
 	const windows = useWindows();
+	const windowStack = useWindowStack();
 	const selectedIcons = useSelectedIcons();
 	const quickLookPath = useQuickLookPath();
 	const darkMode = useDarkMode();
+
+	// Desktop settings
+	const gridFlow = useDesktopSettings((s) => s.gridFlow);
+	const iconSize = useDesktopSettings((s) => s.iconSize);
+	const gridAlignment = useDesktopSettings((s) => s.gridAlignment);
+	const sortOrder = useDesktopSettings((s) => s.sortOrder);
+	const showExtensions = useDesktopSettings((s) => s.showExtensions);
+	const sizeConfig = ICON_SIZES[iconSize];
 
 	// Actions (stable references, won't cause re-renders)
 	const { openWindow, openAppWindow, closeFocusedWindow } = useWindowActions();
 	const { selectIcon, selectAll, clearSelection } = useIconActions();
 	const { toggleQuickLook, closeQuickLook } = useQuickLookActions();
 	const { openContextMenu, closeContextMenu } = useContextMenuActions();
-
-	// DnD sensors
-	const sensors = useSensors(
-		useSensor(PointerSensor, {
-			activationConstraint: {
-				distance: 8, // Prevent accidental drags
-			},
-		})
-	);
 
 	// Mount effect
 	useEffect(() => {
@@ -101,9 +93,15 @@ export function ClaudeOS() {
 	const loadTree = useCallback(async () => {
 		try {
 			setLoading(true);
-			const fullTree = await fetchFileTree();
-			const docsFolder = fullTree.find(
-				(n) => n.name === 'Desktop' && n.type === 'directory'
+			const response = await fetchFileTree();
+			// Initialize path roots for the entire app
+			if (response.repoRoot && response.desktopRoot) {
+				initPaths(response.repoRoot, response.desktopRoot);
+			}
+			const tree = response.tree || [];
+			const treeArray = Array.isArray(tree) ? tree : [];
+			const docsFolder = treeArray.find(
+				(n: FileTreeNode) => n.name === 'Desktop' && n.type === 'directory'
 			);
 
 			if (docsFolder?.children) {
@@ -171,66 +169,6 @@ export function ClaudeOS() {
 		return () => window.removeEventListener('close-file-window', handleCloseFileWindow);
 	}, []);
 
-	// Handle drag start
-	const handleDragStart = useCallback((event: DragStartEvent) => {
-		setActiveDragId(event.active.id as string);
-	}, []);
-
-	// Track if we're over the trash
-	const [overTrash, setOverTrash] = useState(false);
-
-	// Handle drag over
-	const handleDragOver = useCallback((event: DragOverEvent) => {
-		setOverTrash(event.over?.id === 'trash-drop-zone');
-	}, []);
-
-	// Handle drag end - reorder icons based on drop position
-	const handleDragEnd = useCallback(
-		async (event: DragEndEvent) => {
-			const { active, over } = event;
-			const draggedPath = active.id as string;
-
-			// Check if dropped on trash
-			if (over?.id === 'trash-drop-zone') {
-				try {
-					await moveToTrash(draggedPath);
-					// Notify TrashIcon to update count
-					window.dispatchEvent(new CustomEvent('trash-updated'));
-					// File system watcher will refresh the desktop
-				} catch (err) {
-					console.error('Failed to move to trash:', err);
-					toast.error(err instanceof Error ? err.message : 'Failed to move to trash');
-				}
-				setActiveDragId(null);
-				setOverTrash(false);
-				return;
-			}
-
-			// Check if dropped on another icon
-			if (over && over.id !== draggedPath) {
-				const targetPath = over.id as string;
-				const targetFile = files.find(f => f.path === targetPath);
-
-				if (targetFile?.type === 'directory') {
-					// Drop on folder → move file into it
-					try {
-						await finderMove(draggedPath, targetPath);
-						window.dispatchEvent(new CustomEvent('refresh-desktop'));
-						toast.success(`Moved to ${targetFile.name}`);
-					} catch (err) {
-						console.error('Failed to move:', err);
-						toast.error(err instanceof Error ? err.message : 'Failed to move');
-					}
-				}
-				// Drop on non-folder → no-op (no more swapping)
-			}
-
-			setActiveDragId(null);
-			setOverTrash(false);
-		},
-		[files]
-	);
-
 	// Handle icon selection
 	const handleSelectIcon = useCallback(
 		(path: string, e: React.MouseEvent) => {
@@ -247,9 +185,8 @@ export function ClaudeOS() {
 				openWindow(node.path, node.name);
 			} else {
 				// For directories, open a Finder window at that path
-				// Extract relative path from Desktop/ (e.g., "Desktop/career" -> "career")
-				const relativePath = node.path.replace(/^Desktop\//, '');
-				openAppWindow('finder', relativePath);
+				const dirName = toDesktopRelative(node.path);
+				openAppWindow('finder', dirName);
 			}
 		},
 		[openWindow, openAppWindow]
@@ -259,6 +196,72 @@ export function ClaudeOS() {
 	const handleDesktopClick = useCallback(() => {
 		clearSelection();
 	}, [clearSelection]);
+
+	// Rubber band selection
+	const handleDesktopMouseDown = useCallback((e: React.MouseEvent) => {
+		// Only start rubber band on left click on the desktop background itself
+		if (e.button !== 0) return;
+		const target = e.target as HTMLElement;
+		// Only trigger on the desktop container or icon grid (not on icons, windows, etc.)
+		if (!target.hasAttribute('data-testid') && !target.closest('[data-testid="desktop"]')) return;
+		// Don't start on icons or windows
+		if (target.closest('[data-icon-path]') || target.closest('[data-testid^="app-window"]')) return;
+
+		rubberBandRef.current = { startX: e.clientX, startY: e.clientY };
+	}, []);
+
+	useEffect(() => {
+		const handleMouseMove = (e: MouseEvent) => {
+			if (!rubberBandRef.current) return;
+			const dx = Math.abs(e.clientX - rubberBandRef.current.startX);
+			const dy = Math.abs(e.clientY - rubberBandRef.current.startY);
+			// Only start showing rubber band after 5px of movement (avoid accidental)
+			if (dx < 5 && dy < 5 && !rubberBand) return;
+
+			const band = {
+				startX: rubberBandRef.current.startX,
+				startY: rubberBandRef.current.startY,
+				currentX: e.clientX,
+				currentY: e.clientY,
+			};
+			setRubberBand(band);
+
+			// Calculate rubber band rect
+			const left = Math.min(band.startX, band.currentX);
+			const top = Math.min(band.startY, band.currentY);
+			const right = Math.max(band.startX, band.currentX);
+			const bottom = Math.max(band.startY, band.currentY);
+
+			// Find intersecting icons
+			const selected: string[] = [];
+			const iconEls = document.querySelectorAll('[data-icon-path]');
+			iconEls.forEach((el) => {
+				const rect = el.getBoundingClientRect();
+				// Check intersection
+				if (rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom) {
+					const path = el.getAttribute('data-icon-path');
+					if (path) selected.push(path);
+				}
+			});
+			if (selected.length > 0) {
+				selectAll(selected);
+			} else {
+				clearSelection();
+			}
+		};
+
+		const handleMouseUp = () => {
+			rubberBandRef.current = null;
+			setRubberBand(null);
+		};
+
+		document.addEventListener('mousemove', handleMouseMove);
+		document.addEventListener('mouseup', handleMouseUp);
+		return () => {
+			document.removeEventListener('mousemove', handleMouseMove);
+			document.removeEventListener('mouseup', handleMouseUp);
+		};
+	}, [rubberBand, selectAll, clearSelection]);
 
 	// Handle desktop right-click (context menu)
 	const handleDesktopContextMenu = useCallback(
@@ -335,15 +338,33 @@ export function ClaudeOS() {
 		return 3;
 	}, []);
 
-	// Sort: claude system → projects → custom apps → regular folders → regular files
+	// Sort based on setting
 	const orderedFiles = useMemo(() => {
 		return [...files].sort((a, b) => {
-			const aGroup = getSortGroup(a);
-			const bGroup = getSortGroup(b);
-			if (aGroup !== bGroup) return aGroup - bGroup;
-			return a.name.localeCompare(b.name);
+			switch (sortOrder) {
+				case 'category': {
+					const aGroup = getSortGroup(a);
+					const bGroup = getSortGroup(b);
+					if (aGroup !== bGroup) return aGroup - bGroup;
+					return a.name.localeCompare(b.name);
+				}
+				case 'name':
+					return a.name.localeCompare(b.name);
+				case 'kind': {
+					// Directories first, then by extension, then by name
+					if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+					if (a.type === 'file' && b.type === 'file') {
+						const aExt = a.name.split('.').pop() || '';
+						const bExt = b.name.split('.').pop() || '';
+						if (aExt !== bExt) return aExt.localeCompare(bExt);
+					}
+					return a.name.localeCompare(b.name);
+				}
+				default:
+					return a.name.localeCompare(b.name);
+			}
 		});
-	}, [files, getSortGroup]);
+	}, [files, getSortGroup, sortOrder]);
 
 	// Keyboard shortcuts
 	useEffect(() => {
@@ -394,7 +415,11 @@ export function ClaudeOS() {
 			if (e.key === ' ') {
 				e.preventDefault();
 				if (selectedIcons.length === 1) {
-					toggleQuickLook(selectedIcons[0]);
+					// Get the icon's bounding rect for animation origin
+					const iconEl = document.querySelector(`[data-icon-path="${CSS.escape(selectedIcons[0])}"]`);
+					const rect = iconEl?.getBoundingClientRect();
+					const origin = rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined;
+					toggleQuickLook(selectedIcons[0], origin);
 				} else if (quickLookPath) {
 					closeQuickLook();
 				}
@@ -404,15 +429,14 @@ export function ClaudeOS() {
 			// Enter: Open selected icons (files and folders)
 			if (e.key === 'Enter') {
 				e.preventDefault();
-				selectedIcons.forEach((path) => {
-					const file = files.find((f) => f.path === path);
+				selectedIcons.forEach((iconPath) => {
+					const file = files.find((f) => f.path === iconPath);
 					if (file) {
 						if (file.type === 'file') {
 							openWindow(file.path, file.name);
 						} else {
 							// Open folder in Finder
-							const relativePath = file.path.replace(/^Desktop\//, '');
-							openAppWindow('finder', relativePath);
+							openAppWindow('finder', toDesktopRelative(file.path));
 						}
 					}
 				});
@@ -501,19 +525,20 @@ export function ClaudeOS() {
 		loadTree,
 	]);
 
-	// Get active drag node for overlay
-	const activeDragNode = useMemo(() => {
-		if (!activeDragId) return null;
-		return files.find((f) => f.path === activeDragId);
-	}, [activeDragId, files]);
-
-	// Native drag-drop handlers (for files from macOS Finder or Finder windows)
+	// Native drag-drop handlers (for files from macOS Finder, Finder windows, and internal icon drags)
 	const handleNativeDragOver = useCallback((e: React.DragEvent) => {
-		// Accept macOS file uploads OR cross-view Claude file drags
-		if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/claude-file')) {
+		// Accept macOS file uploads, cross-view Claude file drags, and internal multi-file drags
+		if (
+			e.dataTransfer.types.includes('Files') ||
+			e.dataTransfer.types.includes('application/claude-file') ||
+			e.dataTransfer.types.includes('application/claude-files')
+		) {
 			e.preventDefault();
 			e.stopPropagation();
-			setIsNativeDragOver(true);
+			// Only show overlay for external macOS file imports
+			if (e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/claude-file')) {
+				setIsNativeDragOver(true);
+			}
 		}
 	}, []);
 
@@ -532,36 +557,57 @@ export function ClaudeOS() {
 		e.stopPropagation();
 		setIsNativeDragOver(false);
 
-		// Check for cross-view Claude file drag (from Finder window)
-		const claudeFile = e.dataTransfer.getData('application/claude-file');
-		if (claudeFile) {
-			// Move file to Desktop root
+		// Handle macOS file uploads first (has actual File objects)
+		const droppedFiles = Array.from(e.dataTransfer.files);
+		if (droppedFiles.length > 0 && !e.dataTransfer.types.includes('application/claude-file')) {
+			setIsUploading(true);
 			try {
-				await finderMove(claudeFile, '');
-				window.dispatchEvent(new CustomEvent('refresh-desktop'));
-				toast.success('Moved to Desktop');
+				for (const file of droppedFiles) {
+					await finderUpload(file);
+				}
 			} catch (err) {
-				console.error('Error moving file:', err);
+				console.error('Error uploading files:', err);
+				toast.error(err instanceof Error ? err.message : 'Failed to upload files');
+			} finally {
+				setIsUploading(false);
+			}
+			return;
+		}
+
+		// Handle multi-file internal moves to Desktop root
+		const multiPaths = e.dataTransfer.getData('application/claude-files');
+		if (multiPaths) {
+			try {
+				const paths: string[] = JSON.parse(multiPaths);
+				const desktopRoot = getDesktopRoot();
+				// Only move files that aren't already at Desktop root
+				const toMove = paths.filter(p => {
+					if (!isDesktopPath(p)) return false;
+					return !isDirectChild(p, desktopRoot || 'Desktop');
+				});
+				if (toMove.length === 0) return;
+				for (const p of toMove) {
+					await finderMove(p, desktopRoot || '');
+				}
+				window.dispatchEvent(new CustomEvent('refresh-desktop'));
+				toast.success(toMove.length === 1 ? 'Moved to Desktop' : `Moved ${toMove.length} items to Desktop`);
+			} catch (err) {
 				toast.error(err instanceof Error ? err.message : 'Failed to move');
 			}
 			return;
 		}
 
-		// Handle macOS file uploads
-		const droppedFiles = Array.from(e.dataTransfer.files);
-		if (droppedFiles.length === 0) return;
-
-		setIsUploading(true);
-		try {
-			for (const file of droppedFiles) {
-				await finderUpload(file);
+		// Handle single cross-view Claude file drag (from Finder window)
+		const claudeFile = e.dataTransfer.getData('application/claude-file');
+		if (claudeFile) {
+			try {
+				await finderMove(claudeFile, getDesktopRoot() || '');
+				window.dispatchEvent(new CustomEvent('refresh-desktop'));
+				toast.success('Moved to Desktop');
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to move');
 			}
-			// File watcher will refresh the tree
-		} catch (err) {
-			console.error('Error uploading files:', err);
-			toast.error(err instanceof Error ? err.message : 'Failed to upload files');
-		} finally {
-			setIsUploading(false);
+			return;
 		}
 	}, []);
 
@@ -595,12 +641,14 @@ export function ClaudeOS() {
 
 	return (
 		<div
+			ref={desktopRef}
 			data-testid="desktop"
 			className={`relative flex-1 overflow-hidden ${darkMode ? 'dark' : ''}`}
 			style={{
 				backgroundColor: '#ffffff',
 			}}
 			onClick={handleDesktopClick}
+			onMouseDown={handleDesktopMouseDown}
 			onContextMenu={handleDesktopContextMenu}
 			onDragOver={handleNativeDragOver}
 			onDragLeave={handleNativeDragLeave}
@@ -608,17 +656,17 @@ export function ClaudeOS() {
 		>
 			{/* Native drag-over indicator */}
 			{isNativeDragOver && (
-				<div className="absolute inset-4 border-2 border-dashed border-[#DA7756] rounded-xl bg-[#DA7756]/10 z-50 pointer-events-none flex items-center justify-center">
+				<div className="absolute inset-4 border-2 border-dashed border-[var(--color-claude)] rounded-xl bg-[var(--color-claude)]/10 z-50 pointer-events-none flex items-center justify-center">
 					<div className="text-center">
-						<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#DA7756]/20 flex items-center justify-center">
-							<svg className="w-8 h-8 text-[#DA7756]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+						<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-claude)]/20 flex items-center justify-center">
+							<svg className="w-8 h-8 text-[var(--color-claude)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
 								<polyline points="17 8 12 3 7 8" />
 								<line x1="12" y1="3" x2="12" y2="15" />
 							</svg>
 						</div>
-						<p className="text-lg font-medium text-[#DA7756]">Drop files to import</p>
-						<p className="text-sm text-[#DA7756]/70 mt-1">Files will be added to your Desktop</p>
+						<p className="text-lg font-medium text-[var(--color-claude)]">Drop files to import</p>
+						<p className="text-sm text-[var(--color-claude)]/70 mt-1">Files will be added to your Desktop</p>
 					</div>
 				</div>
 			)}
@@ -627,73 +675,98 @@ export function ClaudeOS() {
 			{isUploading && (
 				<div className="absolute inset-0 bg-black/30 z-50 flex items-center justify-center">
 					<div className="bg-white dark:bg-[#2a2a2a] rounded-xl p-6 shadow-2xl flex items-center gap-4">
-						<Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+						<Loader2 className="w-6 h-6 animate-spin text-[var(--color-claude)]" />
 						<span className="text-gray-900 dark:text-white font-medium">Importing files...</span>
 					</div>
 				</div>
 			)}
 
-			{/* Desktop Surface - Menubar and Dock provided by AppShell */}
-			<DndContext
-				sensors={sensors}
-				onDragStart={handleDragStart}
-				onDragOver={handleDragOver}
-				onDragEnd={handleDragEnd}
+			{/* Icons Grid - CSS Grid handles responsiveness natively */}
+			<div
+				className="absolute inset-0 p-4 pb-24 overflow-hidden"
+				style={{
+					display: 'grid',
+					gridTemplateColumns: gridFlow === 'row'
+						? `repeat(auto-fill, ${sizeConfig.cellWidth}px)`
+						: undefined,
+					gridTemplateRows: gridFlow === 'column'
+						? `repeat(auto-fill, ${sizeConfig.cellHeight}px)`
+						: `repeat(auto-fill, ${sizeConfig.cellHeight}px)`,
+					...(gridFlow === 'column' ? {
+						gridAutoFlow: 'column',
+						gridAutoColumns: `${sizeConfig.cellWidth}px`,
+					} : {
+						gridAutoFlow: 'row',
+					}),
+					gap: '4px',
+					alignContent: 'start',
+					justifyContent: gridAlignment === 'right' ? 'end' : 'start',
+				}}
 			>
-				{/* Icons Grid - CSS Grid handles responsiveness natively */}
-				<div
-					className="absolute inset-0 p-4 pb-24 overflow-hidden"
-					style={{
-						display: 'grid',
-						gridTemplateColumns: `repeat(auto-fill, ${GRID_CELL_WIDTH}px)`,
-						gridTemplateRows: `repeat(auto-fill, ${GRID_CELL_HEIGHT}px)`,
-						gridAutoFlow: 'row', // Left-to-right, groups form horizontal bands
-						gap: '4px',
-						alignContent: 'start',
-					}}
-				>
-					{orderedFiles.map((file) => (
-						<DesktopIcon
-							key={file.path}
-							node={file}
-							isSelected={selectedIcons.includes(file.path)}
-							onSelect={(e) => handleSelectIcon(file.path, e)}
-							onOpen={() => handleOpenIcon(file)}
-							onContextMenu={(e) => handleIconContextMenu(file.path, e)}
-						/>
-					))}
-				</div>
+				{orderedFiles.map((file) => (
+					<DesktopIcon
+						key={file.path}
+						node={file}
+						isSelected={selectedIcons.includes(file.path)}
+						onSelect={(e) => handleSelectIcon(file.path, e)}
+						onOpen={() => handleOpenIcon(file)}
+						onContextMenu={(e) => handleIconContextMenu(file.path, e)}
+					/>
+				))}
+			</div>
 
-				{/* Drag Overlay - lightweight preview for performance */}
-				<DragOverlay>
-					{activeDragNode && (
-						<DesktopIconPreview node={activeDragNode} />
-					)}
-				</DragOverlay>
-			</DndContext>
+			{/* Hidden drag ghost for setDragImage() */}
+			<DragGhost files={files} />
 
 			{/* Floating Windows */}
 			{windows.map((win) => (
-				<DesktopWindow key={win.id} window={win}>
-					{/* Core App windows */}
-					{win.appType === 'calendar' && <CalendarWindowContent />}
-					{win.appType === 'finder' && <FinderWindowContent windowId={win.id} initialPath={win.initialPath} />}
-					{win.appType === 'settings' && <SettingsWindowContent />}
-					{win.appType === 'contacts' && <ContactsWindowContent />}
-		{win.appType === 'email' && <EmailWindowContent />}
-			{win.appType === 'messages' && <MessagesWindowContent />}
-					{win.appType === 'analytics' && <ObservatoryWindowContent />}
-					{win.appType === 'projects' && <ProjectsWindowContent />}
-					{/* File viewer windows - routes to appropriate editor */}
-					{!win.appType && <DocumentRouter filePath={win.filePath} />}
+				<DesktopWindow key={win.id} window={win} isFocused={windowStack[0] === win.id}>
+					<ErrorBoundary
+						FallbackComponent={(props) => (
+							<WindowErrorCard
+								{...props}
+								windowTitle={win.title}
+								onClose={() => useWindowStore.getState().closeWindow(win.id)}
+							/>
+						)}
+						onError={(e) => console.error(`[Window:${win.title}]`, e)}
+						resetKeys={[win.filePath]}
+					>
+						{/* Core App windows */}
+						{win.appType === 'calendar' && <CalendarWindowContent />}
+						{win.appType === 'finder' && <FinderWindowContent windowId={win.id} initialPath={win.initialPath} />}
+						{win.appType === 'settings' && <SettingsWindowContent />}
+						{win.appType === 'contacts' && <ContactsWindowContent initialContactName={win.initialPath} />}
+						{win.appType === 'email' && <EmailWindowContent />}
+						{win.appType === 'messages' && <MessagesWindowContent />}
+						{win.appType === 'analytics' && <ObservatoryWindowContent />}
+						{win.appType === 'projects' && <ProjectsWindowContent />}
+						{/* File viewer windows - routes to appropriate editor */}
+						{!win.appType && <DocumentRouter filePath={win.filePath} />}
+					</ErrorBoundary>
 				</DesktopWindow>
 			))}
 
-			{/* Trash Icon (hidden per user preference - trash still works via Delete/Backspace keys) */}
-			{/* <TrashIcon onContextMenu={handleTrashContextMenu} /> */}
+			{/* Trash works via Delete/Backspace keys and context menu */}
 
 			{/* Quick Look Modal */}
 			<QuickLook />
+
+			{/* Rubber Band Selection */}
+			{rubberBand && (
+				<div
+					className="fixed pointer-events-none z-[800]"
+					style={{
+						left: Math.min(rubberBand.startX, rubberBand.currentX),
+						top: Math.min(rubberBand.startY, rubberBand.currentY),
+						width: Math.abs(rubberBand.currentX - rubberBand.startX),
+						height: Math.abs(rubberBand.currentY - rubberBand.startY),
+						border: '1px solid var(--color-claude)',
+						background: 'var(--color-claude-dim)',
+						borderRadius: '2px',
+					}}
+				/>
+			)}
 
 			{/* Context Menu */}
 			<ContextMenu />

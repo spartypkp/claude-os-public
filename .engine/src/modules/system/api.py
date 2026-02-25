@@ -650,7 +650,7 @@ async def get_about():
         "version": "4.0.0",
         "description": "Your life, rendered as a desktop you can touch.",
         "repository": "life-specifications",
-        "author": "Claude OS",
+        "author": "Claude OS Contributors",
         "ai_partner": "Claude (Anthropic)",
         "built_with": [
             "Next.js 15",

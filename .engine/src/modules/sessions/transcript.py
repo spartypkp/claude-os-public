@@ -19,6 +19,7 @@ Schema: Each line is a JSON object with:
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +52,8 @@ class TranscriptEvent:
     # Metadata
     model: Optional[str] = None
     usage: Optional[Dict[str, int]] = None
+    agent_id: Optional[str] = None  # For tool_result events from Task tool
+    queued: bool = False  # True if this event originated from a queue-operation enqueue
 
 
 def parse_transcript_line(line: str) -> List[TranscriptEvent]:
@@ -68,9 +71,27 @@ def parse_transcript_line(line: str) -> List[TranscriptEvent]:
     uuid = data.get("uuid", "")
     parent_uuid = data.get("parentUuid")
 
-    # Skip internal events
-    if raw_type in ("queue-operation", "file-history-snapshot"):
+    # Skip non-content events
+    if raw_type == "file-history-snapshot":
         return []
+
+    # Queue operations: messages sent while Claude is mid-turn get enqueued
+    # Parse enqueue as a user message so they appear in the Dashboard transcript
+    # Skip task-notification XML (internal plumbing, already rendered via tool_result)
+    if raw_type == "queue-operation":
+        operation = data.get("operation")
+        content = data.get("content", "")
+        if operation == "enqueue" and content and not content.strip().startswith("<task-notification"):
+            return [TranscriptEvent(
+                raw_type="user",
+                event_type="user_message",
+                timestamp=timestamp,
+                uuid=uuid or f"queue-{timestamp}",
+                parent_uuid=parent_uuid,
+                content=content[:2000],
+                queued=True,
+            )]
+        return []  # dequeue/remove/task-notifications have no visible content
 
     if raw_type == "user":
         msg = data.get("message", {})
@@ -80,6 +101,23 @@ def parse_transcript_line(line: str) -> List[TranscriptEvent]:
         if isinstance(content, list):
             for item in content:
                 if item.get("type") == "tool_result":
+                    # Content can be a string OR a list of content blocks
+                    # Claude Code writes: [{"type":"text","text":"agentId: abc..."}]
+                    raw_content = item.get("content", "")
+                    if isinstance(raw_content, list):
+                        result_content = ' '.join(
+                            block.get('text', '')
+                            for block in raw_content
+                            if isinstance(block, dict) and block.get('type') == 'text'
+                        )
+                    else:
+                        result_content = str(raw_content)
+                    # Extract agentId from Task tool results
+                    # Format: "agentId: a13c682 (internal ID - ...)"
+                    agent_id = None
+                    match = re.search(r'agentId:\s*([a-f0-9]+)', result_content)
+                    if match:
+                        agent_id = match.group(1)
                     return [TranscriptEvent(
                         raw_type=raw_type,
                         event_type="tool_result",
@@ -87,8 +125,17 @@ def parse_transcript_line(line: str) -> List[TranscriptEvent]:
                         uuid=uuid,
                         parent_uuid=parent_uuid,
                         tool_use_id=item.get("tool_use_id"),
-                        tool_result=str(item.get("content", ""))[:500],  # Truncate
+                        tool_result=result_content[:500],  # Truncate
+                        agent_id=agent_id,
                     )]
+
+        # Extract text from content block lists (skill invocations, programmatic messages)
+        if isinstance(content, list):
+            content = '\n'.join(
+                block.get('text', '')
+                for block in content
+                if isinstance(block, dict) and block.get('type') == 'text'
+            )
 
         # Regular user message
         return [TranscriptEvent(
@@ -97,7 +144,7 @@ def parse_transcript_line(line: str) -> List[TranscriptEvent]:
             timestamp=timestamp,
             uuid=uuid,
             parent_uuid=parent_uuid,
-            content=content if isinstance(content, str) else str(content)[:500],
+            content=content[:2000] if isinstance(content, str) else str(content)[:500],
         )]
 
     elif raw_type == "assistant":
@@ -182,6 +229,8 @@ def format_event_for_sse(event: TranscriptEvent, include_thinking: bool = True) 
 
     if event.event_type == "user_message":
         result["content"] = event.content
+        if event.queued:
+            result["queued"] = True
 
     elif event.event_type == "thinking":
         result["thinking"] = event.thinking
@@ -197,9 +246,12 @@ def format_event_for_sse(event: TranscriptEvent, include_thinking: bool = True) 
         result["toolName"] = event.tool_name
         result["toolUseId"] = event.tool_use_id
         # Truncate large inputs for SSE — but preserve small metadata fields
+        # Interactive tools need full input for rendering (questions, options, etc.)
+        # Task needs full input so the prompt field is available for subagent discovery
+        INTERACTIVE_TOOLS = {"AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "Task"}
         if event.tool_input:
             input_str = json.dumps(event.tool_input)
-            if len(input_str) > 500:
+            if len(input_str) > 500 and event.tool_name not in INTERACTIVE_TOOLS:
                 # Keep all small fields (<200 chars), drop large ones (like prompt)
                 preserved = {}
                 for k, v in event.tool_input.items():
@@ -219,6 +271,9 @@ def format_event_for_sse(event: TranscriptEvent, include_thinking: bool = True) 
             result["content"] = event.tool_result[:500] + "..."
         else:
             result["content"] = event.tool_result
+        # Pass through agentId for Task tool results
+        if event.agent_id:
+            result["agentId"] = event.agent_id
 
     elif event.event_type == "system":
         result["content"] = event.content
@@ -233,6 +288,7 @@ class TranscriptWatcher:
         self.path = transcript_path
         self.position = 0
         self._stop = False
+        self._last_enqueued: Optional[Dict[str, Any]] = None  # Track last enqueued event for dequeue handling
 
     async def watch(
         self,
@@ -321,8 +377,35 @@ class TranscriptWatcher:
                         if not line.strip():
                             continue
 
+                        # Check for dequeue/remove before parsing (parser skips these)
+                        try:
+                            raw = json.loads(line)
+                            if raw.get("type") == "queue-operation" and raw.get("operation") in ("dequeue", "remove"):
+                                if self._last_enqueued:
+                                    # Re-emit with queued=false so frontend updates the message
+                                    unqueued = {**self._last_enqueued}
+                                    unqueued.pop("queued", None)
+                                    unqueued["replaces_queued"] = True
+                                    self._last_enqueued = None
+                                    yield unqueued
+                                continue
+                        except json.JSONDecodeError:
+                            pass
+
                         events = parse_transcript_line(line)
                         for event in events:
+                            # Track enqueued messages for dequeue handling
+                            if event.queued:
+                                formatted = format_event_for_sse(event, include_thinking)
+                                if formatted:
+                                    self._last_enqueued = formatted
+                                    yield formatted
+                                continue
+
+                            # Real user_message matching a queued one - clear tracking
+                            if event.event_type == "user_message" and self._last_enqueued and event.content == self._last_enqueued.get("content"):
+                                self._last_enqueued = None
+
                             formatted = format_event_for_sse(event, include_thinking)
                             if formatted:
                                 logger.debug(f"[TRANSCRIPT] Yielding {formatted['type']} event uuid={formatted.get('uuid', 'none')[:8]}")
@@ -381,17 +464,50 @@ def get_all_events(
 
     events = []
     try:
+        # Two-pass dedup for queue-operations:
+        # Pass 1: collect all user_message content strings
+        # Pass 2: only include enqueue events whose content has no matching user_message
+        lines = []
+        user_message_content: set[str] = set()
+        dequeue_count = 0  # Track if enqueued messages have been processed
+
         with open(transcript_path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
+                lines.append(line)
+                try:
+                    data = json.loads(line)
+                    # Collect user message content for dedup
+                    if data.get("type") == "user":
+                        msg = data.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, str):
+                            user_message_content.add(content[:2000])
+                    # Count dequeue/remove operations
+                    elif data.get("type") == "queue-operation" and data.get("operation") in ("dequeue", "remove"):
+                        dequeue_count += 1
+                except json.JSONDecodeError:
+                    pass
 
-                parsed_events = parse_transcript_line(line)
-                for event in parsed_events:
-                    formatted = format_event_for_sse(event, include_thinking)
-                    if formatted:
-                        events.append(formatted)
+        # Pass 2: parse and filter
+        enqueue_seen = 0
+        for line in lines:
+            parsed_events = parse_transcript_line(line)
+            for event in parsed_events:
+                if event.queued:
+                    enqueue_seen += 1
+                    if event.content in user_message_content:
+                        # Real user_message exists - skip the enqueue entirely
+                        continue
+                    # No matching user_message but was dequeued/removed - show as normal (not queued)
+                    if enqueue_seen <= dequeue_count:
+                        event.queued = False
+
+                formatted = format_event_for_sse(event, include_thinking)
+                if formatted:
+                    events.append(formatted)
     except Exception as e:
         logger.error(f"Error reading transcript: {e}")
 
@@ -449,3 +565,66 @@ def get_transcript_path_for_session(
     except Exception as e:
         logger.error(f"Error looking up transcript path: {e}")
         return None
+
+
+INTERACTIVE_TOOLS = {"AskUserQuestion", "EnterPlanMode", "ExitPlanMode"}
+
+
+def has_pending_question(transcript_path: Path) -> bool:
+    """Check if a transcript has an unanswered interactive tool.
+
+    Reads the JSONL file from the end, looking for the last AskUserQuestion,
+    EnterPlanMode, or ExitPlanMode tool_use that doesn't have a matching tool_result.
+
+    Returns True if there's a pending interactive tool, False otherwise.
+    """
+    if not transcript_path or not transcript_path.exists():
+        return False
+
+    try:
+        # Read from end of file — we only need the last ~50 lines
+        with open(transcript_path, 'r') as f:
+            lines = f.readlines()
+
+        # Check last 100 lines max for efficiency
+        recent_lines = lines[-100:] if len(lines) > 100 else lines
+
+        interactive_tool_use_ids: set[str] = set()
+        answered_ids: set[str] = set()
+
+        for line in recent_lines:
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            raw_type = data.get("type")
+            msg = data.get("message", {})
+
+            # Assistant tool_use: check for interactive tools
+            if raw_type == "assistant":
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    for item in content:
+                        if (isinstance(item, dict)
+                            and item.get("type") == "tool_use"
+                            and item.get("name") in INTERACTIVE_TOOLS):
+                            tool_use_id = item.get("id", "")
+                            if tool_use_id:
+                                interactive_tool_use_ids.add(tool_use_id)
+
+            # User tool_result: check for matching result
+            if raw_type == "user":
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "tool_result":
+                            tool_use_id = item.get("tool_use_id", "")
+                            if tool_use_id and tool_use_id in interactive_tool_use_ids:
+                                answered_ids.add(tool_use_id)
+
+        return len(interactive_tool_use_ids - answered_ids) > 0
+
+    except Exception as e:
+        logger.error(f"Error checking pending question: {e}")
+        return False

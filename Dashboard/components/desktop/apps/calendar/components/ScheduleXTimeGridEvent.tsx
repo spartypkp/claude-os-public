@@ -11,7 +11,7 @@ import { MapPin } from 'lucide-react';
 function ScheduleXTimeGridEventInner({ calendarEvent }: { calendarEvent: any }) {
   const title = calendarEvent.title || calendarEvent.summary || 'Untitled';
   const location = calendarEvent.location;
-  const calendarColor = calendarEvent._calendarColor || '#da7756';
+  const calendarColor = calendarEvent._calendarColor || 'var(--color-claude)';
 
   // Schedule-X provides the height in the DOM — we render content adaptively
   // based on available space via CSS overflow

@@ -9,7 +9,7 @@ Event Types:
 - priority: created, completed, deleted
 - calendar: created, modified, deleted
 - worker: spawned, completed, acked, failed
-- marker: manual markers from Will or Claude
+- marker: manual markers from the user or Claude
 
 Usage:
     from core.event_log import emit_event

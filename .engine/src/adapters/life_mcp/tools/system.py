@@ -83,39 +83,41 @@ def team(
     project_path: Optional[str] = None,
     lines: int = 50,
     message: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Team orchestration (spawn, monitor, close team members). **Chief only.**
+    """Team orchestration -- spawn, monitor, communicate with, and close specialists.
+
+    Operations:
+        spawn: Start a new specialist session (Chief only). Requires role + spec_path.
+        list: Show all active specialist sessions.
+        peek: View recent output from a session's tmux pane.
+        close: Kill a specialist session (Chief only).
+        message: Send a message to any session via tmux injection. Any role can use this.
+            The message is injected into the target's tmux pane with the sender's
+            conversation_id so the recipient can reply back easily.
 
     Args:
-        operation: Operation - 'spawn', 'list', 'peek', 'close', 'message', 'subscribe', 'reply'
-        id: Team member ID (required for peek, close, message, subscribe)
-            Accepts either conversation_id (e.g., "0212-1607-builder-83d0349e")
-            or session_id prefix (e.g., "7f0a578c") — resolves to active session automatically.
-        role: Session role for spawn - use the slug (folder name under .claude/roles/).
-            Base roles: 'builder', 'writer', 'researcher', 'curator', 'project', 'idea'
-            Custom roles: any role slug defined under .claude/roles/
-            IMPORTANT: Use hyphens not spaces (e.g. 'my-role' not 'my role')
-        spec_path: Path to spec file (REQUIRED for spawn) - Specialist flow starts at preparation
-        max_iterations: Max specialist iterations before giving up (default 10)
-        description: Status text for dashboard
-        project_path: For 'project' role - path to target project
-        lines: Number of lines to capture for peek (default 50)
-        message: Message text (required for message and reply operations)
-
-    Returns:
-        Object with success status and operation-specific data
+        operation: One of 'spawn', 'list', 'peek', 'close', 'message'
+        id: Target session ID (required for peek, close, message).
+            Accepts conversation_id (e.g., "0212-1607-builder-83d0349e")
+            or session_id prefix (e.g., "7f0a578c").
+        role: Role slug for spawn (e.g., 'builder', 'researcher', 'writer').
+        spec_path: Path to spec file (required for spawn).
+        max_iterations: Max iterations for autonomous spawn (default 10).
+        description: Status text for dashboard.
+        project_path: For 'project' role -- path to target project.
+        lines: Lines to capture for peek (default 50).
+        message: Message text (required for message).
+        mode: Spawn mode -- 'autonomous' (default, 3-phase loop) or 'interactive' (direct conversation).
 
     Examples:
         team("spawn", role="builder", spec_path="Desktop/conversations/api-bug-spec.md")
-        team("spawn", role="researcher", spec_path="Desktop/conversations/research-spec.md", max_iterations=5)
+        team("spawn", role="builder", spec_path="spec.md", mode="interactive")
         team("list")
-        team("peek", id="abc12345")
         team("peek", id="0212-1607-builder-83d0349e")
         team("close", id="abc12345")
-        team("message", id="abc12345", message="How's progress?")
+        team("message", id="chief", message="Found a blocker, need guidance")
         team("message", id="0212-1607-builder-83d0349e", message="Check the auth middleware too")
-        team("subscribe", id="abc12345")
-        team("reply", message="Making progress, 60% done")
     """
     # Per-operation access control
     caller_role = get_current_session_role()
@@ -125,6 +127,9 @@ def team(
             if caller_role != "chief":
                 # Non-Chief: route as request to Chief
                 return _team_spawn_request(caller_role or "unknown", role, spec_path)
+            spawn_mode = mode or "autonomous"
+            if spawn_mode == "interactive":
+                return _team_spawn_interactive(role, spec_path, description, project_path)
             return _team_spawn(role, spec_path, max_iterations, description, project_path)
         elif operation == "close":
             if caller_role != "chief":
@@ -136,12 +141,8 @@ def team(
             return _team_peek(id, lines)
         elif operation == "message":
             return _team_message(id, message, caller_role)
-        elif operation == "subscribe":
-            return _team_subscribe(id)
-        elif operation == "reply":
-            return _team_reply(message)
         else:
-            return {"success": False, "error": f"Unknown operation: {operation}. Use spawn, list, peek, close, message, subscribe, or reply."}
+            return {"success": False, "error": f"Unknown operation: {operation}. Use spawn, list, peek, close, or message."}
 
     except subprocess.TimeoutExpired:
         return {"success": False, "error": "Timeout during operation"}
@@ -210,6 +211,74 @@ def _team_spawn_request(caller_role: str, requested_role: Optional[str], spec_pa
         "request_sent": True,
         "requested_role": requested_role,
         "message": f"Spawn request sent to Chief. They'll decide whether to spawn a {requested_role}.",
+    }
+
+
+def _team_spawn_interactive(role: Optional[str], spec_path: Optional[str], description: Optional[str], project_path: Optional[str]) -> Dict[str, Any]:
+    """Spawn an interactive specialist session for the user to open and talk to.
+
+    Unlike autonomous spawns, interactive sessions:
+    - Use mode="interactive" (no 3-phase loop)
+    - Don't create progress.md scaffolding
+    - Spec is injected as context, not as a task to execute
+    - The user opens the session from the Dashboard and drives the conversation
+    """
+    if not role:
+        return {"success": False, "error": "role required for spawn"}
+    if not spec_path:
+        return {"success": False, "error": "spec_path required for interactive spawn (provides context)"}
+
+    # Validate spec exists
+    full_spec_path = REPO_ROOT / spec_path
+    if not full_spec_path.exists():
+        return {"success": False, "error": f"Spec not found: {spec_path}"}
+
+    # Generate conversation_id
+    ts = datetime.now(PACIFIC).strftime("%m%d-%H%M")
+    conversation_id = f"{ts}-{role}-{uuid.uuid4().hex[:8]}"
+    workspace = REPO_ROOT / "Desktop/conversations" / conversation_id
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    # No progress.md — interactive sessions don't need scaffolding
+
+    def _background_spawn():
+        try:
+            sys.path.insert(0, str(REPO_ROOT / ".engine" / "src"))
+            from modules.sessions import SessionManager
+
+            manager = SessionManager(repo_root=REPO_ROOT)
+            result = manager.spawn(
+                role=role,
+                mode="interactive",
+                conversation_id=conversation_id,
+                description=description or f"Interactive {role.title()}",
+                project_path=project_path,
+                spec_path=str(full_spec_path),
+            )
+
+            if result.success:
+                _notify_backend_event("session.started", result.session_id, {
+                    "role": role,
+                    "mode": "interactive",
+                    "conversation_id": conversation_id,
+                    "window": result.window_name,
+                    "description": description,
+                    "specialist_mode": False,
+                })
+                logger.info(f"Interactive spawn succeeded: {role}/{conversation_id} (session={result.session_id[:8]})")
+            else:
+                logger.error(f"Interactive spawn failed: {result.error}")
+        except Exception as e:
+            logger.error(f"Interactive spawn error for {conversation_id}: {e}")
+
+    thread = threading.Thread(target=_background_spawn, daemon=True, name=f"spawn-{conversation_id}")
+    thread.start()
+
+    return {
+        "success": True,
+        "conversation_id": conversation_id,
+        "workspace": f"Desktop/conversations/{conversation_id}/",
+        "reminder": f"Interactive {role.title()} spawning. Open it from the Dashboard in ~10-30s."
     }
 
 
@@ -423,8 +492,8 @@ def _team_close(id: Optional[str]) -> Dict[str, Any]:
 def _team_message(id: Optional[str], message: Optional[str], caller_role: Optional[str] = None) -> Dict[str, Any]:
     """Send a message to a session. Accepts conversation_id or session_id prefix.
 
-    Messages are formatted as [TEAM → TargetRole] from CallerRole: message
-    for visibility in the transcript.
+    Messages include the sender's conversation_id so the recipient can reply back
+    without needing to call team("list") first.
     """
     if not id:
         return {"success": False, "error": "id required for message"}
@@ -442,11 +511,27 @@ def _team_message(id: Optional[str], message: Optional[str], caller_role: Option
     if not tmux_pane:
         return {"success": False, "error": f"Session {id} has no tmux pane"}
 
-    # Format message with team direction header (include conversation_id for disambiguation)
+    # Look up sender's conversation_id so recipient can reply
     source = (caller_role or "unknown").title()
     target = r.title()
-    conv_id = resolved.get("conversation_id", "")
-    formatted_msg = f"[SYSTEM:TEAM] from {source} ({conv_id}) \u2192 {target}: {message}"
+
+    sender_conv_id = None
+    sender_session_id = get_current_session_id()
+    if sender_session_id:
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT conversation_id FROM sessions WHERE session_id = ?",
+                (sender_session_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                sender_conv_id = row["conversation_id"]
+
+    # Format: include sender's conv_id so recipient can team("message", id="...", message="...")
+    if sender_conv_id:
+        formatted_msg = f"[SYSTEM:TEAM] from {source} ({sender_conv_id}) -> {target}: {message}"
+    else:
+        formatted_msg = f"[SYSTEM:TEAM] from {source} -> {target}: {message}"
 
     success = inject_message(tmux_pane, formatted_msg, submit=True)
 
@@ -459,101 +544,6 @@ def _team_message(id: Optional[str], message: Optional[str], caller_role: Option
         "conversation_id": resolved.get("conversation_id"),
         "role": r,
         "message_sent": message
-    }
-
-
-def _team_subscribe(id: Optional[str]) -> Dict[str, Any]:
-    """Subscribe to auto-receive replies from a session. Accepts conversation_id or session_id prefix."""
-    if not id:
-        return {"success": False, "error": "id required for subscribe"}
-
-    subscriber_session_id = get_current_session_id()
-    if not subscriber_session_id:
-        return {"success": False, "error": "Could not determine your session_id"}
-
-    resolved = _resolve_team_id(id)
-    if not resolved:
-        return {"success": False, "error": f"Session {id} not found"}
-
-    full_id = resolved["session_id"]
-    r = resolved.get("role") or "unknown"
-
-    # Validate that the subscribing session has a tmux_pane set
-    # (required for watcher to deliver replies)
-    with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT tmux_pane FROM sessions WHERE session_id = ?",
-            (subscriber_session_id,)
-        )
-        subscriber_row = cursor.fetchone()
-        if not subscriber_row or not subscriber_row["tmux_pane"]:
-            return {
-                "success": False,
-                "error": "Your session has no tmux_pane set — reply delivery requires a tmux pane. "
-                         "This usually means the session wasn't started through the normal flow."
-            }
-
-        conn.execute(
-            "UPDATE sessions SET subscribed_by = ? WHERE session_id = ?",
-            (subscriber_session_id, full_id)
-        )
-        conn.commit()
-
-    return {
-        "success": True,
-        "session_id": full_id[:8],
-        "conversation_id": resolved.get("conversation_id"),
-        "role": r,
-        "subscribed_by": subscriber_session_id[:8],
-        "reminder": f"Subscribed. When {r} calls team(\"reply\"), you'll receive messages automatically."
-    }
-
-
-def _team_reply(message: Optional[str]) -> Dict[str, Any]:
-    """Reply to Chief from any session. Appends timestamped message to reply.txt in specialist workspace.
-    If Chief is subscribed, the watcher auto-injects the reply to Chief's pane.
-    """
-    if not message:
-        return {"success": False, "error": "message required for reply"}
-
-    session_id = get_current_session_id()
-    if not session_id:
-        return {"success": False, "error": "Could not determine current session"}
-
-    with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT conversation_id FROM sessions WHERE session_id = ?",
-            (session_id,)
-        )
-        row = cursor.fetchone()
-
-        if not row:
-            return {"success": False, "error": "Session not found in database"}
-
-        conversation_id = row["conversation_id"]
-        if not conversation_id:
-            return {"success": False, "error": "Not in specialist mode (no conversation_id)"}
-
-    # Build workspace path
-    workspace = REPO_ROOT / "Desktop/conversations" / conversation_id
-    reply_file = workspace / "reply.txt"
-
-    # Append timestamped message
-    timestamp = datetime.now(PACIFIC).strftime("%H:%M:%S")
-    entry = f"[{timestamp}] {message}\n\n"
-
-    try:
-        reply_file.parent.mkdir(parents=True, exist_ok=True)
-        with reply_file.open("a") as f:
-            f.write(entry)
-    except Exception as e:
-        return {"success": False, "error": f"Failed to write reply: {e}"}
-
-    return {
-        "success": True,
-        "file_path": str(reply_file.relative_to(REPO_ROOT)),
-        "message": message,
-        "reminder": "Reply saved to reply.txt. If Chief subscribed, message will auto-inject within 2 seconds."
     }
 
 
@@ -589,7 +579,7 @@ def schedule(
         schedule("add", expression="*/15 * * * *", action="inject chief", payload="[WAKE]")
         schedule("add", expression="0 6 * * *", action="inject chief", payload="/morning-reset")
         schedule("add", expression="2026-02-13T16:00", action="inject chief",
-                 payload="Remind Will to review docs")
+                 payload="Remind the user to review docs")
         schedule("add", expression="0 18 * * *", action="spawn researcher",
                  payload="Desktop/scheduled/news-brief-spec.md")
         schedule("add", expression="0 3 * * *", action="exec", payload="vacuum_database")

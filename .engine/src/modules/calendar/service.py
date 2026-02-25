@@ -62,18 +62,18 @@ class CalendarService:
         if not preferred:
             # Fallback to hardcoded defaults if no config found
             logger.warning("No calendar config in accounts, using fallback defaults")
-            self._preferred_calendars = ["Willdiamond3", "Calendar", "Contoural", "Home"]
+            self._preferred_calendars = ["Personal", "Calendar", "Work", "Home"]
             self._aliases = {
                 "exchange": "Calendar",
                 "personal": "Calendar",
-                "gmail": "Willdiamond3",
-                "work": "Contoural",
+                "gmail": "Personal",
+                "work": "Work",
             }
             self._defaults = {
-                "meeting": "Willdiamond3",
+                "meeting": "Personal",
                 "personal": "Calendar",
-                "work": "Contoural",
-                "fallback": "Willdiamond3",
+                "work": "Work",
+                "fallback": "Personal",
             }
         else:
             self._preferred_calendars = preferred

@@ -166,7 +166,7 @@ export function ExplanationTooltip({
             className="
               w-full flex items-center justify-center gap-2
               px-3 py-2 rounded-lg
-              bg-[#DA7756] hover:bg-[#C15F3C]
+              bg-[var(--color-claude)] hover:bg-[var(--color-primary-hover)]
               text-white text-sm font-medium
               transition-colors
             "

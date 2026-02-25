@@ -1,4 +1,13 @@
-"""Finder service - File operations for Desktop/."""
+"""Finder service - File operations with absolute path support.
+
+All paths in the system are absolute. The Desktop/ folder is the primary
+browsing root, but any readable path on the machine can be opened.
+
+Security model:
+  - Read: any valid path
+  - Write/Edit: only within the Claude OS repo root
+  - Create/Delete/Move/Rename: only within Desktop/
+"""
 
 from __future__ import annotations
 
@@ -12,7 +21,7 @@ from core.config import settings
 
 
 class FinderService:
-    """File operations for Desktop/ folder."""
+    """File operations with absolute path support."""
 
     # File type icons (lucide icon names)
     FILE_ICONS = {
@@ -41,25 +50,52 @@ class FinderService:
         """Initialize with optional database connection."""
         self.db = db
         self.desktop_root = settings.repo_root / "Desktop"
+        self.repo_root = settings.repo_root
 
-    def _resolve_path(self, rel_path: str) -> Path:
-        """Resolve path relative to Desktop/, ensuring security."""
-        if rel_path.startswith("/"):
-            rel_path = rel_path[1:]
+    def _resolve_path(self, path_str: str) -> Path:
+        """Resolve a path to an absolute Path.
 
-        # Build full path
-        full_path = (self.desktop_root / rel_path).resolve()
+        Accepts:
+          - Absolute paths: $HOME/claude-os/Desktop/foo.md
+          - Desktop-relative paths: foo.md, conversations/chief/
+          - Repo-relative paths: Desktop/foo.md
+        """
+        if path_str.startswith("/"):
+            # Already absolute
+            return Path(path_str).resolve()
 
-        # Security: ensure path doesn't escape Desktop/
-        if not str(full_path).startswith(str(self.desktop_root.resolve())):
-            raise ValueError("Invalid path: cannot escape Desktop/")
+        # Check if it starts with Desktop/ (repo-relative)
+        if path_str.startswith("Desktop/") or path_str == "Desktop":
+            return (self.repo_root / path_str).resolve()
 
-        return full_path
+        # Default: resolve relative to Desktop/
+        return (self.desktop_root / path_str).resolve()
+
+    def _is_within_repo(self, path: Path) -> bool:
+        """Check if a path is within the Claude OS repo."""
+        try:
+            resolved = path.resolve()
+            return str(resolved).startswith(str(self.repo_root.resolve()))
+        except (OSError, ValueError):
+            return False
+
+    def _is_within_desktop(self, path: Path) -> bool:
+        """Check if a path is within Desktop/."""
+        try:
+            resolved = path.resolve()
+            return str(resolved).startswith(str(self.desktop_root.resolve()))
+        except (OSError, ValueError):
+            return False
+
+    def _require_desktop(self, path: Path, operation: str) -> None:
+        """Raise if path is not within Desktop/."""
+        if not self._is_within_desktop(path):
+            raise ValueError(f"Cannot {operation}: path must be within Desktop/")
 
     def _get_file_info(self, path: Path) -> Dict[str, Any]:
-        """Get file/folder info dictionary."""
+        """Get file/folder info dictionary. Returns absolute paths."""
         stat = path.stat()
-        rel_path = str(path.relative_to(self.desktop_root))
+        abs_path = str(path.resolve())
 
         # Determine type and icon
         is_dir = path.is_dir()
@@ -85,7 +121,7 @@ class FinderService:
 
         return {
             "name": path.name,
-            "path": rel_path,
+            "path": abs_path,
             "type": file_type,
             "icon": icon,
             "size": stat.st_size if not is_dir else None,
@@ -121,7 +157,7 @@ class FinderService:
         items.sort(key=lambda x: (x["type"] not in ("folder", "domain", "app"), x["name"].lower()))
 
         return {
-            "path": rel_path or "/",
+            "path": str(full_path),
             "items": items,
             "count": len(items),
         }
@@ -192,12 +228,13 @@ class FinderService:
             "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         }
 
-    def create_file(self, rel_path: str, content: str = "") -> Dict[str, Any]:
-        """Create a new file."""
-        full_path = self._resolve_path(rel_path)
+    def create_file(self, path_str: str, content: str = "") -> Dict[str, Any]:
+        """Create a new file. Must be within Desktop/."""
+        full_path = self._resolve_path(path_str)
+        self._require_desktop(full_path, "create file")
 
         if full_path.exists():
-            raise FileExistsError(f"Already exists: {rel_path}")
+            raise FileExistsError(f"Already exists: {path_str}")
 
         # Ensure parent directory exists
         full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,23 +244,25 @@ class FinderService:
 
         return self._get_file_info(full_path)
 
-    def create_folder(self, rel_path: str) -> Dict[str, Any]:
-        """Create a new folder."""
-        full_path = self._resolve_path(rel_path)
+    def create_folder(self, path_str: str) -> Dict[str, Any]:
+        """Create a new folder. Must be within Desktop/."""
+        full_path = self._resolve_path(path_str)
+        self._require_desktop(full_path, "create folder")
 
         if full_path.exists():
-            raise FileExistsError(f"Already exists: {rel_path}")
+            raise FileExistsError(f"Already exists: {path_str}")
 
         full_path.mkdir(parents=True, exist_ok=True)
 
         return self._get_file_info(full_path)
 
-    def rename(self, rel_path: str, new_name: str) -> Dict[str, Any]:
-        """Rename a file or folder."""
-        full_path = self._resolve_path(rel_path)
+    def rename(self, path_str: str, new_name: str) -> Dict[str, Any]:
+        """Rename a file or folder. Must be within Desktop/."""
+        full_path = self._resolve_path(path_str)
+        self._require_desktop(full_path, "rename")
 
         if not full_path.exists():
-            raise FileNotFoundError(f"Not found: {rel_path}")
+            raise FileNotFoundError(f"Not found: {path_str}")
 
         # Validate new name
         if "/" in new_name or "\\" in new_name:
@@ -238,13 +277,15 @@ class FinderService:
 
         return self._get_file_info(new_path)
 
-    def move(self, rel_path: str, dest_path: str) -> Dict[str, Any]:
-        """Move a file or folder to a new location."""
-        source = self._resolve_path(rel_path)
+    def move(self, path_str: str, dest_path: str) -> Dict[str, Any]:
+        """Move a file or folder. Both paths must be within Desktop/."""
+        source = self._resolve_path(path_str)
         dest = self._resolve_path(dest_path)
+        self._require_desktop(source, "move source")
+        self._require_desktop(dest, "move destination")
 
         if not source.exists():
-            raise FileNotFoundError(f"Not found: {rel_path}")
+            raise FileNotFoundError(f"Not found: {path_str}")
 
         # If dest is a directory, move inside it
         if dest.is_dir():
@@ -257,26 +298,27 @@ class FinderService:
 
         return self._get_file_info(dest)
 
-    def delete(self, rel_path: str, recursive: bool = False) -> Dict[str, Any]:
-        """Delete a file or folder."""
-        full_path = self._resolve_path(rel_path)
+    def delete(self, path_str: str, recursive: bool = False) -> Dict[str, Any]:
+        """Delete a file or folder. Must be within Desktop/."""
+        full_path = self._resolve_path(path_str)
+        self._require_desktop(full_path, "delete")
 
         if not full_path.exists():
-            raise FileNotFoundError(f"Not found: {rel_path}")
+            raise FileNotFoundError(f"Not found: {path_str}")
 
         if full_path.is_dir():
             if not recursive:
                 # Check if empty
                 children = list(full_path.iterdir())
                 if children:
-                    raise ValueError(f"Directory not empty: {rel_path}. Use recursive=True to delete.")
+                    raise ValueError(f"Directory not empty: {path_str}. Use recursive=True to delete.")
                 full_path.rmdir()
             else:
                 shutil.rmtree(str(full_path))
         else:
             full_path.unlink()
 
-        return {"deleted": rel_path}
+        return {"deleted": str(full_path)}
 
     def search(self, query: str, path: str = "") -> List[Dict[str, Any]]:
         """Search for files matching query."""
@@ -314,20 +356,21 @@ class FinderService:
 
         return results[:50]  # Limit results
 
-    def upload_file(self, rel_path: str, content: bytes) -> Dict[str, Any]:
-        """Upload a file (supports binary content like images).
+    def upload_file(self, path_str: str, content: bytes) -> Dict[str, Any]:
+        """Upload a file (supports binary content like images). Must be within Desktop/.
 
         Args:
-            rel_path: Destination path relative to Desktop/
+            path_str: Destination path (absolute or Desktop-relative)
             content: File content as bytes
 
         Returns:
             File info dict for the created file
         """
-        full_path = self._resolve_path(rel_path)
+        full_path = self._resolve_path(path_str)
+        self._require_desktop(full_path, "upload")
 
         if full_path.exists():
-            raise FileExistsError(f"Already exists: {rel_path}")
+            raise FileExistsError(f"Already exists: {path_str}")
 
         # Ensure parent directory exists
         full_path.parent.mkdir(parents=True, exist_ok=True)

@@ -191,7 +191,8 @@ def _build_email_intel() -> str:
 
         rows = conn.execute("""
             SELECT category, summary, display_name, sender, subject,
-                   suggested_actions, received_at, classified_at
+                   suggested_actions, received_at, classified_at,
+                   email_message_id, account_id
             FROM email_classifications
             WHERE handled = 0
             ORDER BY
@@ -220,6 +221,8 @@ def _build_email_intel() -> str:
                     "name": name,
                     "summary": row["summary"] or row["subject"] or "No summary",
                     "actions": row["suggested_actions"].split("\n") if row["suggested_actions"] else [],
+                    "message_id": row["email_message_id"],
+                    "account": row["account_id"],
                 })
 
         lines = [
@@ -233,6 +236,8 @@ def _build_email_intel() -> str:
         if by_cat["action_needed"]:
             for item in by_cat["action_needed"]:
                 lines.append(f"- **{item['name']}** — {item['summary']}")
+                if item.get("message_id") and item.get("account"):
+                    lines.append(f"  - `ref: message_id={item['message_id']} account={item['account']}`")
                 for action in item["actions"]:
                     if action.strip():
                         lines.append(f"  - {action.strip()}")
@@ -243,6 +248,8 @@ def _build_email_intel() -> str:
         if by_cat["heads_up"]:
             for item in by_cat["heads_up"]:
                 lines.append(f"- **{item['name']}** — {item['summary']}")
+                if item.get("message_id") and item.get("account"):
+                    lines.append(f"  - `ref: message_id={item['message_id']} account={item['account']}`")
                 for action in item["actions"]:
                     if action.strip():
                         lines.append(f"  - {action.strip()}")
@@ -253,6 +260,8 @@ def _build_email_intel() -> str:
         if by_cat["fyi"]:
             for item in by_cat["fyi"]:
                 lines.append(f"- **{item['name']}** — {item['summary']}")
+                if item.get("message_id") and item.get("account"):
+                    lines.append(f"  - `ref: message_id={item['message_id']} account={item['account']}`")
 
         return "\n".join(lines)
 

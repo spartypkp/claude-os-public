@@ -21,6 +21,7 @@ Consolidated from: session_tool_tracker.py, pre_tool_validator.py
 import json
 import os
 import re
+import subprocess
 import sys
 import sqlite3
 import hashlib
@@ -164,8 +165,16 @@ def main():
 def handle_validation(tool_name: str, tool_input: dict) -> bool:
     """Validate tool call. Returns True if blocked."""
 
+    # Check Read operations — block oversized images that would bomb the context
+    if tool_name == "Read":
+        file_path = tool_input.get("file_path", "")
+        is_blocked, reason = check_image_dimensions(file_path)
+        if is_blocked:
+            print_deny_response(reason)
+            return True
+
     # Check Bash commands
-    if tool_name == "Bash":
+    elif tool_name == "Bash":
         command = tool_input.get("command", "")
         is_dangerous, reason = check_bash_command(command)
         if is_dangerous:
@@ -196,6 +205,54 @@ def handle_validation(tool_name: str, tool_input: dict) -> bool:
             return True
 
     return False
+
+
+# Image file extensions that Claude renders visually
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.bmp', '.tiff', '.tif', '.svg'}
+MAX_IMAGE_DIMENSION = 1800  # Leave headroom below Claude's 2000px multi-image limit
+
+
+def check_image_dimensions(file_path: str) -> tuple[bool, str]:
+    """Check if a Read target is an oversized image that would bomb the context.
+
+    Uses macOS `sips` (fast, no dependencies) to check pixel dimensions.
+    Blocks images where either dimension exceeds MAX_IMAGE_DIMENSION.
+    """
+    if not file_path:
+        return False, ""
+
+    ext = Path(file_path).suffix.lower()
+    if ext not in IMAGE_EXTENSIONS:
+        return False, ""
+
+    # Don't block if file doesn't exist (let Read handle that error)
+    if not Path(file_path).exists():
+        return False, ""
+
+    try:
+        result = subprocess.run(
+            ["sips", "-g", "pixelWidth", "-g", "pixelHeight", file_path],
+            capture_output=True, text=True, timeout=3
+        )
+        if result.returncode != 0:
+            return False, ""  # Can't check, allow the read
+
+        width = height = 0
+        for line in result.stdout.splitlines():
+            if "pixelWidth" in line:
+                width = int(line.split(":")[-1].strip())
+            elif "pixelHeight" in line:
+                height = int(line.split(":")[-1].strip())
+
+        if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+            return True, (
+                f"Image too large ({width}x{height}px, limit {MAX_IMAGE_DIMENSION}px). "
+                f"Resize first: sips --resampleHeightWidthMax {MAX_IMAGE_DIMENSION} \"{file_path}\""
+            )
+    except Exception:
+        pass  # Can't check, allow the read
+
+    return False, ""
 
 
 def check_bash_command(command: str) -> tuple[bool, str]:
@@ -351,14 +408,14 @@ def check_comms_permission(tool_name: str, tool_input: dict) -> tuple[bool, str]
         # Whitelisted recipients (claude_direct) can be messaged freely
         recipient = tool_input.get('recipient', '') or tool_input.get('phone_number', '') or tool_input.get('email', '')
         CLAUDE_DIRECT_WHITELIST = [
-            'bot@example.com',       # Example: approved AI bot
-            '+15555555555',           # Example: approved AI service
+            # Add trusted bot/service email addresses here
+            # 'bot@example.com',
         ]
 
         if operation in ('send', 'schedule'):
             if recipient.lower() in [w.lower() for w in CLAUDE_DIRECT_WHITELIST]:
                 return True, ""
-            return False, "Message sending/scheduling is disabled. Draft the message for Will to send manually."
+            return False, "Message sending/scheduling is disabled. Draft the message for the user to send manually."
 
         # Reading still requires consent via claude_direct tag or whitelist
         if operation in ('read', 'unread') and recipient:

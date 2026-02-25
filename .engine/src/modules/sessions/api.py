@@ -33,6 +33,12 @@ from .transcript import (
     get_transcript_path_for_session,
     get_all_events,
     stream_transcript,
+    has_pending_question,
+)
+from .subagent import (
+    list_subagents,
+    find_subagent_by_prompt,
+    get_subagent_transcript_path,
 )
 
 router = APIRouter(tags=["sessions"])
@@ -49,6 +55,12 @@ HANDOFF_FILE = settings.desktop_dir / "handoffs" / "chief.md"
 class SessionMessageRequest(BaseModel):
     """Request body for sending a message to a session."""
     message: str
+    submit: bool = True  # Whether to press Enter after text
+
+
+class SendKeysRequest(BaseModel):
+    """Request body for sending raw key sequences to a session."""
+    keys: list[str]  # e.g., ["Down", "Down", "Enter"]
 
 
 class SpawnSessionRequest(BaseModel):
@@ -85,12 +97,12 @@ def get_repository() -> SessionRepository:
     return SessionRepository(settings.db_path)
 
 
-def sanitize_message(message: str, max_length: int = 10_000) -> str:
+def sanitize_message(message: str, max_length: int = 100_000) -> str:
     """Sanitize user message for safe tmux injection.
 
     Args:
         message: Raw user input
-        max_length: Maximum allowed message length (default 10KB)
+        max_length: Maximum allowed message length (default 100KB)
 
     Returns:
         Sanitized message safe for tmux injection
@@ -102,7 +114,7 @@ def sanitize_message(message: str, max_length: int = 10_000) -> str:
         raise ValueError("Message cannot be empty")
 
     if len(message) > max_length:
-        raise ValueError(f"Message too long (max {max_length} chars)")
+        raise ValueError(f"Message too long (max {max_length:,} chars)")
 
     # Strip ANSI escape sequences (e.g., color codes)
     message = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', message)
@@ -230,6 +242,13 @@ async def get_claude_activity():
         sessions = await _run_blocking(repo.get_sessions_for_activity)
 
         for session in sessions:
+            # Check for pending AskUserQuestion on active sessions
+            waiting = False
+            if not session["ended_at"]:
+                transcript_path = get_transcript_path_for_session(session["session_id"], DB_PATH)
+                if transcript_path:
+                    waiting = has_pending_question(transcript_path)
+
             result["sessions"].append({
                 "session_id": session["session_id"],
                 "role": session["role"] or "chief",
@@ -248,6 +267,7 @@ async def get_claude_activity():
                 "tmux_pane": session["tmux_pane"],
                 "description": session["description"],
                 "status_text": session["status_text"],
+                "waiting_for_input": waiting,
             })
 
     except Exception as e:
@@ -599,6 +619,117 @@ async def get_conversation_status(conversation_id: str):
 
 
 # ============================================
+# Subagent transcript routes
+# MUST come before /{session_id} routes to avoid route collision
+# ============================================
+
+@router.get("/subagents/discover")
+async def discover_subagents(
+    session_id: str,
+    prompt: Optional[str] = None,
+):
+    """Discover subagents for a session, optionally matching by prompt.
+
+    Args:
+        session_id: Parent session ID
+        prompt: Optional prompt text to match against subagent first messages
+
+    Returns:
+        subagents: List of discovered subagents
+        matched: The matched subagent (if prompt provided and found)
+    """
+    try:
+        transcript_path = await _run_blocking(get_transcript_path_for_session, session_id, DB_PATH)
+        if not transcript_path:
+            return {"subagents": [], "matched": None}
+
+        subagents = await _run_blocking(list_subagents, transcript_path)
+
+        matched = None
+        if prompt and subagents:
+            match = await _run_blocking(find_subagent_by_prompt, transcript_path, prompt)
+            if match:
+                matched = match.get("agent_id")
+
+        return {
+            "subagents": subagents,
+            "matched": matched,
+        }
+    except Exception as e:
+        return {"subagents": [], "matched": None, "error": str(e)}
+
+
+@router.get("/subagents/{agent_id}/history")
+async def get_subagent_history(
+    agent_id: str,
+    session_id: str,
+    include_thinking: bool = False,
+):
+    """Get full transcript history for a subagent.
+
+    Args:
+        agent_id: The subagent's ID (from agentId in tool_result)
+        session_id: Parent session ID
+        include_thinking: Whether to include thinking blocks
+    """
+    try:
+        agent_path = await _run_blocking(get_subagent_transcript_path, session_id, agent_id, DB_PATH)
+        if not agent_path:
+            raise HTTPException(status_code=404, detail=f"Subagent transcript not found: {agent_id}")
+
+        events = await _run_blocking(get_all_events, agent_path, include_thinking=include_thinking)
+
+        return {
+            "events": events,
+            "agent_id": agent_id,
+            "event_count": len(events),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/subagents/{agent_id}/stream")
+async def stream_subagent_transcript(
+    agent_id: str,
+    session_id: str,
+    include_thinking: bool = False,
+):
+    """Stream subagent transcript via SSE.
+
+    Starts from beginning (subagent transcripts are typically small).
+    Polls for new content while the agent is running.
+    """
+    from fastapi.responses import StreamingResponse
+
+    agent_path = await _run_blocking(get_subagent_transcript_path, session_id, agent_id, DB_PATH)
+    if not agent_path:
+        raise HTTPException(status_code=404, detail=f"Subagent transcript not found: {agent_id}")
+
+    async def event_generator():
+        try:
+            async for event in stream_transcript(
+                agent_path,
+                include_thinking=include_thinking,
+                from_beginning=True,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ============================================
 # Session-specific routes (parameterized)
 # ============================================
 
@@ -935,8 +1066,10 @@ async def send_keystroke(session_id: str, req: SessionMessageRequest):
     try:
         manager = get_manager()
 
+        submit = req.submit
+
         def do_send():
-            return manager.send_keystroke(session_id, text)
+            return manager.send_keystroke(session_id, text, submit=submit)
 
         loop = asyncio.get_event_loop()
         success = await loop.run_in_executor(None, do_send)
@@ -958,6 +1091,88 @@ async def send_keystroke(session_id: str, req: SessionMessageRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/send-keys")
+async def send_keys_to_session(session_id: str, req: SendKeysRequest):
+    """Send raw key sequences to a session.
+
+    Used for TUI menus (like plan mode) that need arrow key navigation
+    rather than literal text input.
+    """
+    import asyncio
+
+    if not req.keys:
+        raise HTTPException(status_code=400, detail="Empty keys list")
+
+    # Whitelist safe key names
+    allowed_keys = {"Enter", "Up", "Down", "Left", "Right", "Escape", "Tab", "Space", "BSpace"}
+    for key in req.keys:
+        if key not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"Key not allowed: {key}")
+
+    try:
+        manager = get_manager()
+
+        def do_send():
+            return manager.send_keys_to_session(session_id, req.keys)
+
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(None, do_send)
+
+        if success:
+            return {"success": True, "session_id": session_id}
+        else:
+            session = await _run_blocking(manager.get_session, session_id)
+            if session is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+            elif session.ended_at is not None:
+                raise HTTPException(status_code=400, detail="Session has ended")
+            elif session.tmux_pane is None:
+                raise HTTPException(status_code=400, detail="Session has no tmux pane")
+            else:
+                raise HTTPException(status_code=500, detail="Failed to send keys")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{session_id}/plan-file")
+async def get_plan_file(session_id: str):
+    """Read the most recently modified plan file from ~/.claude/plans/.
+
+    Plan mode writes plans to ~/.claude/plans/ with random names.
+    Returns the most recent one (by mtime).
+    """
+    plans_dir = Path.home() / ".claude" / "plans"
+
+    if not plans_dir.exists():
+        raise HTTPException(status_code=404, detail="Plans directory not found")
+
+    plan_files = sorted(
+        plans_dir.glob("*.md"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not plan_files:
+        raise HTTPException(status_code=404, detail="No plan files found")
+
+    latest = plan_files[0]
+    try:
+        content = latest.read_text(encoding="utf-8")
+        return {
+            "path": str(latest),
+            "name": latest.name,
+            "content": content,
+            "modified": datetime.fromtimestamp(
+                latest.stat().st_mtime, tz=timezone.utc
+            ).isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read plan: {e}")
 
 
 @router.get("/{session_id}/transcript")

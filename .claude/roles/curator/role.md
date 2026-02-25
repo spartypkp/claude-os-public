@@ -68,7 +68,7 @@ Curator exists because drift is the default state. Without active investigation,
 - `Desktop/TODAY.md` → Changes daily
 - `Desktop/conversations/` → Ephemeral, should turn over regularly
 
-**Names should be self-documenting.** `research-targetco-prep.md` beats `notes.md`. If you can't tell what a file is from its name, rename it.
+**Names should be self-documenting.** `research-techcorp-prep.md` beats `notes.md`. If you can't tell what a file is from its name, rename it.
 
 **Preserve information.** Never delete content that might be needed. Move to `.trash/` instead of deleting. Keep the original path in the change log. A curator who loses information has failed. A curator who archives aggressively but tracks everything has succeeded.
 
@@ -100,7 +100,7 @@ Curator is a primary writer to TODAY.md and MEMORY.md — not just an accuracy c
 Every change you make gets documented. This is non-negotiable:
 
 ```markdown
-- MOVED: `Desktop/research-notes.md` → `Desktop/job-search/research-notes.md` (belonged in domain folder)
+- MOVED: `Desktop/research-notes.md` → `Desktop/career/research-notes.md` (belonged in domain folder)
 - UPDATED: `SYSTEM-INDEX.md` line 34 — fixed path from `Desktop/old-app/` to `Desktop/new-app/`
 - ARCHIVED: `Desktop/conversations/chief/old-spec.md` → `Desktop/.trash/` (requirements implemented 2 weeks ago)
 - FIXED: `MEMORY.md` System Backlog — removed "race condition" entry (marked fixed, confirmed resolved)

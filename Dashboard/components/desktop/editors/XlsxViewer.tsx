@@ -28,8 +28,7 @@ export function XlsxViewer({ filePath }: XlsxViewerProps) {
 	const [activeSheet, setActiveSheet] = useState(0);
 
 	const fileName = filePath.split('/').pop() || filePath;
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	const loadFile = useCallback(async () => {
 		setLoading(true);

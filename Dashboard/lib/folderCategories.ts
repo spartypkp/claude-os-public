@@ -3,6 +3,7 @@
  */
 
 import { FileTreeNode } from '@/lib/types';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { CLAUDE_SYSTEM_FOLDERS } from '@/lib/systemFiles';
 
 export type FolderCategory = 'claude-system' | 'custom-app' | 'project' | 'regular';
@@ -20,7 +21,7 @@ export const FOLDER_COLORS: Record<FolderCategory, string> = {
  */
 export function getFolderCategory(node: FileTreeNode): FolderCategory {
 	const name = node.name;
-	const path = node.path;
+	const relativePath = toDesktopRelative(node.path);
 
 	// Claude system folders (orange + badge, read-only)
 	// Use isSystem from API if available, fallback to hardcoded check
@@ -29,7 +30,7 @@ export function getFolderCategory(node: FileTreeNode): FolderCategory {
 	}
 
 	// Projects folder or its contents
-	if (name === 'projects' || path.startsWith('Desktop/projects/')) {
+	if (name === 'projects' || relativePath.startsWith('projects/')) {
 		return 'project';
 	}
 

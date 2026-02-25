@@ -22,31 +22,54 @@ Builder works on Claude OS infrastructure — the system itself. You work on eve
 
 ## The Projects Filesystem
 
-External codebases live in `Desktop/projects/`. Each project is a wrapper directory containing:
+External codebases live in `Desktop/projects/`. The structure has three layers:
 
 ```
 Desktop/projects/
-  texas-holdem-llm-suite/
+
+  # Layer 1: Single-repo project (wrapper = project = repo)
+  texas-hold-llm/
     PROJECT.md          <- Identity + current state (Claude OS owns this)
     HISTORY.md          <- Append-only log (Claude OS owns this)
-    src -> /external/repo   <- Symlink to actual code (single-repo)
+    src -> /external/repo   <- Symlink to actual code
 
-  Acme/
-    PROJECT.md
+  # Layer 2: Multi-repo product (one PROJECT.md covers all repos)
+  # Repos are "parts of one product" — no independent identity
+  client/acme-corp/
+    PROJECT.md          <- Covers the whole product (story, architecture, impact)
     HISTORY.md
-    citations -> /external/Acme/citations    <- Named symlinks (multi-repo)
-    batches -> /external/Acme/batches
+    api.md              <- Optional repo-specific context (matches symlink name)
+    api -> /external/acme-corp-api
+    citations.md        <- Optional repo-specific context
+    citations -> /external/acme-corp-citations
 
-  Hackathons/             <- No PROJECT.md = just a folder
+  # Layer 3: Group with semi-independent sub-projects
+  # Sub-projects have their own identity (own GitHub, own story, own life)
+  recodify/
+    PROJECT.md          <- Umbrella/startup story
+    HISTORY.md
+    open-source-legislation/
+      PROJECT.md        <- Sub-project with independent identity
+      HISTORY.md
+      src -> /external/open-source-legislation
+    renderAPI/
+      PROJECT.md
+      src -> /external/renderAPI
+
+  # Organizational folders (no PROJECT.md)
+  hackathons/
     drone-control-ui/
       PROJECT.md
-      HISTORY.md
       src -> /external/repo
 ```
 
-**`PROJECT.md` defines a project.** If a directory has it, it's a project. If it doesn't, it's just an organizational folder.
+**The key rules:**
 
-**Symlinks are sacred.** Never write into the symlinked code directories from Claude OS. Work on the code through the symlinks, but the wrapper directory and its metadata files belong to Claude OS.
+- **`PROJECT.md` defines a project.** A directory has it → it's a project. Doesn't have it → just a folder.
+- **Single-repo = simplest case.** The wrapper IS the project IS the repo. One PROJECT.md covers everything.
+- **Multi-repo product = named symlinks + optional `REPONAME.md` context files.** No extra subfolder abstraction. The repos are aspects of one thing, not independent projects.
+- **Independent sub-projects = own wrapper subfolder** with PROJECT.md + HISTORY.md. Use when the sub-project has its own GitHub, its own story, its own life outside the umbrella.
+- **Symlinks are sacred.** Never write into the symlinked code directories from Claude OS. Work on the code through the symlinks, but the wrapper directory and its metadata files belong to Claude OS.
 
 ## The Entry/Exit Protocol
 
@@ -105,6 +128,25 @@ Every project has its own context. The time spent understanding saves time rewor
 - Check if it's your change or pre-existing
 - Don't make existing problems worse
 - If stuck, document what you tried
+
+## Subagents for Project Work
+
+**`entity-search` before starting client work.** If this is work for a real person or company (not a personal side project), run `entity-search` first. You'll find relationship context, recent interactions, and any prior work history that shapes how to approach the engagement.
+
+**`best-practices` for idiomatic patterns.** When working in an unfamiliar framework or language, run `best-practices` to get the officially recommended approach before inventing your own. The spec asks you to match their patterns — knowing what the mainstream pattern IS helps you recognize whether their code follows it or deviates from it intentionally.
+
+**`practitioner` for production reality.** When you're unsure whether an approach holds up in production (not just in tutorials), `practitioner` finds what experienced engineers actually say — HN threads, post-mortems, war stories. Especially useful for infrastructure and deployment decisions.
+
+```
+# Before client work
+Use entity-search subagent: "Company Name" or "Client Name"
+
+# When unsure about the right pattern in their framework
+Use best-practices subagent: "Next.js app router data fetching patterns"
+
+# Before making an infrastructure decision
+Use practitioner subagent: "Postgres vs SQLite for small-team production apps"
+```
 
 ## Handoff Pattern
 

@@ -1,14 +1,20 @@
 'use client';
 
+import Editor, { type OnMount } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import { useFileEvents } from '@/hooks/useFileEvents';
+import { useTheme } from '@/hooks/useTheme';
 import { fetchFileContent, updateFileContent } from '@/lib/api';
 import { isLargeContent } from '@/lib/editorLimits';
+import { toDesktopRelative } from '@/lib/pathUtils';
 import { isProtectedFile as isProtectedFileName } from '@/lib/systemFiles';
-import { AlertCircle, AlertTriangle, Edit3, Eye, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
+import { defineClaudeThemes } from './monacoThemes';
+import { useEditorContext } from './EditorContext';
 
 
 interface MarkdownEditorProps {
@@ -22,8 +28,9 @@ function isProtectedFile(path: string): boolean {
 }
 
 /**
- * Markdown editor with view/edit toggle, auto-save, and real-time sync.
- * Uses CSS custom properties for theming (see globals.css).
+ * Markdown editor with rendered view mode and Monaco edit mode.
+ * Reading mode uses .claude-markdown CSS (Apple Notes-style typography).
+ * Edit mode uses Monaco with markdown language support.
  * Claude System Files are read-only.
  */
 export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
@@ -32,20 +39,80 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [content, setContent] = useState('');
 	const [mtime, setMtime] = useState<string>('');
-	const [isEditing, setIsEditing] = useState(false);
-	const [hasChanges, setHasChanges] = useState(false);
-	const [isSaving, setIsSaving] = useState(false);
-	const [hasConflict, setHasConflict] = useState(false);
+	const [isEditingLocal, setIsEditingLocal] = useState(false);
+	const [hasChangesLocal, setHasChangesLocal] = useState(false);
+	const [isSavingLocal, setIsSavingLocal] = useState(false);
+	const [hasConflictLocal, setHasConflictLocal] = useState(false);
 	const [isLargeFile, setIsLargeFile] = useState(false);
+	const { resolvedTheme } = useTheme();
+	const editorCtx = useEditorContext();
+
+	// Sync local state to EditorContext for PathBar
+	const isEditing = editorCtx?.isEditing ?? isEditingLocal;
+	const setIsEditing = useCallback((v: boolean) => {
+		setIsEditingLocal(v);
+		editorCtx?.setIsEditing(v);
+	}, [editorCtx]);
+	const hasChanges = hasChangesLocal;
+	const setHasChanges = useCallback((v: boolean) => {
+		setHasChangesLocal(v);
+		editorCtx?.setHasChanges(v);
+	}, [editorCtx]);
+	const isSaving = isSavingLocal;
+	const setIsSaving = useCallback((v: boolean) => {
+		setIsSavingLocal(v);
+		editorCtx?.setIsSaving(v);
+	}, [editorCtx]);
+	const hasConflict = hasConflictLocal;
+	const setHasConflict = useCallback((v: boolean) => {
+		setHasConflictLocal(v);
+		editorCtx?.setHasConflict(v);
+	}, [editorCtx]);
+
+	// Push static state to context on mount
+	useEffect(() => {
+		editorCtx?.setEditorType('markdown');
+		editorCtx?.setIsReadOnly(isReadOnly);
+		return () => editorCtx?.resetState();
+	}, [isReadOnly, editorCtx]);
+
+	useEffect(() => {
+		editorCtx?.setIsLargeFile(isLargeFile);
+	}, [isLargeFile, editorCtx]);
+	const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+	const monacoRef = useRef<typeof Monaco | null>(null);
 	const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const filePathRef = useRef(filePath);
 	filePathRef.current = filePath;
+
+	// Scroll position memory per file
+	const scrollPositions = useRef<Map<string, number>>(new Map());
+	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
 	// Track state in refs for SSE callback (avoid stale closures)
 	const hasChangesRef = useRef(hasChanges);
 	const isSavingRef = useRef(isSaving);
 	hasChangesRef.current = hasChanges;
 	isSavingRef.current = isSaving;
+
+	const themeName = resolvedTheme === 'dark' ? 'claude-dark' : 'claude-light';
+
+	const handleBeforeMount = useCallback(defineClaudeThemes, []);
+
+	const handleEditorMount: OnMount = useCallback(
+		(editor, monaco) => {
+			editorRef.current = editor;
+			monacoRef.current = monaco;
+			monaco.editor.setTheme(themeName);
+		},
+		[themeName]
+	);
+
+	useEffect(() => {
+		if (monacoRef.current) {
+			monacoRef.current.editor.setTheme(themeName);
+		}
+	}, [themeName]);
 
 	// Load file content
 	const loadContent = useCallback(async () => {
@@ -66,9 +133,8 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 	}, [filePath]);
 
 	// Listen for external file changes via SSE
-	// Handle both 'modified' and 'created' — atomic writes (Edit tool) emit 'created'
 	const handleExternalChange = useCallback((event: { path: string }) => {
-		const normalizeFilePath = (path: string) => path.replace(/^Desktop\//, '');
+		const normalizeFilePath = (path: string) => toDesktopRelative(path);
 		const eventPath = normalizeFilePath(event.path);
 		const currentPath = normalizeFilePath(filePathRef.current);
 
@@ -98,13 +164,34 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 		}
 	}, [isLargeFile]);
 
+	// Restore scroll position when switching back to reading mode or changing files
+	useEffect(() => {
+		if (!isEditing && scrollContainerRef.current) {
+			const saved = scrollPositions.current.get(filePath);
+			if (saved !== undefined) {
+				// Wait for content to render before restoring scroll
+				requestAnimationFrame(() => {
+					if (scrollContainerRef.current) {
+						scrollContainerRef.current.scrollTop = saved;
+					}
+				});
+			}
+		}
+	}, [isEditing, filePath]);
+
+	// Save scroll position on scroll
+	const handleScroll = useCallback(() => {
+		if (scrollContainerRef.current) {
+			scrollPositions.current.set(filePath, scrollContainerRef.current.scrollTop);
+		}
+	}, [filePath]);
+
 	// Auto-save on content change
 	const handleContentChange = useCallback(
 		(newContent: string) => {
 			setContent(newContent);
 			setHasChanges(true);
 
-			// Debounce save
 			if (saveTimeoutRef.current) {
 				clearTimeout(saveTimeoutRef.current);
 			}
@@ -120,7 +207,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 							setMtime(result.mtime);
 						}
 					} else if (result.error === 'conflict') {
-						// File changed externally - show conflict UI
 						setHasConflict(true);
 						toast.error('File was modified externally');
 					} else {
@@ -140,7 +226,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 	const forceSave = useCallback(async () => {
 		setIsSaving(true);
 		try {
-			// Save without mtime check to force overwrite
 			const result = await updateFileContent(filePath, content);
 			if (result.success) {
 				setHasChanges(false);
@@ -164,7 +249,6 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 		loadContent();
 	}, [loadContent]);
 
-
 	// Cleanup on unmount
 	useEffect(() => {
 		return () => {
@@ -182,7 +266,7 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 
 	if (loading) {
 		return (
-			<div 
+			<div
 				className="flex items-center justify-center h-full"
 				style={{ background: 'var(--surface-raised)' }}
 			>
@@ -193,7 +277,7 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 
 	if (error) {
 		return (
-			<div 
+			<div
 				className="flex flex-col items-center justify-center h-full gap-3 p-4"
 				style={{ background: 'var(--surface-raised)' }}
 			>
@@ -203,25 +287,26 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 		);
 	}
 
-		const canEdit = !isReadOnly && !isLargeFile;
+	const canEdit = !isReadOnly && !isLargeFile;
 
-		return (
-			<div className="flex flex-col h-full" style={{ background: 'var(--surface-raised)' }}>
-				{isLargeFile && (
-					<div
-						className="px-3 py-2 text-xs"
-						style={{ background: 'var(--surface-base)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)' }}
-					>
-						Large file detected. Editing is disabled for performance.
-					</div>
-				)}
-				{/* Conflict Banner */}
-				{hasConflict && (
-				<div 
+	return (
+		<div className="flex flex-col h-full" style={{ background: 'var(--surface-raised)' }}>
+			{isLargeFile && (
+				<div
+					className="px-3 py-2 text-xs"
+					style={{ background: 'var(--surface-base)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)' }}
+				>
+					Large file detected. Editing is disabled for performance.
+				</div>
+			)}
+
+			{/* Conflict Banner */}
+			{hasConflict && (
+				<div
 					className="flex items-center justify-between px-3 py-2"
-					style={{ 
-						background: 'var(--color-warning-dim)', 
-						borderBottom: '1px solid var(--border-default)' 
+					style={{
+						background: 'var(--color-warning-dim)',
+						borderBottom: '1px solid var(--border-default)',
 					}}
 				>
 					<div className="flex items-center gap-2" style={{ color: 'var(--color-warning)' }}>
@@ -232,10 +317,10 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 						<button
 							onClick={discardChanges}
 							className="px-2 py-1 text-xs rounded transition-colors"
-							style={{ 
-								background: 'var(--surface-base)', 
+							style={{
+								background: 'var(--surface-base)',
 								border: '1px solid var(--border-default)',
-								color: 'var(--text-primary)'
+								color: 'var(--text-primary)',
 							}}
 						>
 							<RefreshCw className="w-3 h-3 inline mr-1" />
@@ -252,104 +337,53 @@ export function MarkdownEditor({ filePath }: MarkdownEditorProps) {
 				</div>
 			)}
 
-			{/* Toolbar */}
-			<div 
-				className="flex items-center justify-between px-3 py-1.5"
-				style={{ 
-					background: 'var(--surface-base)', 
-					borderBottom: '1px solid var(--border-subtle)' 
-				}}
-			>
-				<div className="flex items-center gap-2">
-					{/* View/Edit Toggle */}
-					<button
-						onClick={() => setIsEditing(false)}
-						className="p-1.5 rounded transition-colors"
-						style={{ 
-							color: !isEditing ? '#DA7756' : 'var(--text-tertiary)',
-							background: !isEditing ? 'rgba(218, 119, 86, 0.1)' : 'transparent'
-						}}
-						title="View (rendered)"
-					>
-						<Eye className="w-4 h-4" />
-					</button>
-					{canEdit && (
-						<button
-							onClick={() => setIsEditing(true)}
-							className="p-1.5 rounded transition-colors"
-							style={{ 
-								color: isEditing ? '#DA7756' : 'var(--text-tertiary)',
-								background: isEditing ? 'rgba(218, 119, 86, 0.1)' : 'transparent'
-							}}
-							title="Edit (source)"
-						>
-							<Edit3 className="w-4 h-4" />
-						</button>
-					)}
-				</div>
-
-				<div className="flex items-center gap-2">
-					{/* Status */}
-					<div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-					{isLargeFile ? (
-						<span className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ background: 'var(--surface-accent)', color: 'var(--text-tertiary)' }}>
-							Large file
-						</span>
-					) : isReadOnly ? (
-						<span className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ background: 'rgba(218, 119, 86, 0.1)', color: '#DA7756' }}>
-							<svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-								<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-								<path d="M7 11V7a5 5 0 0 1 10 0v4" />
-							</svg>
-							Claude System File
-						</span>
-					) : (
-						<>
-							{isSaving && (
-								<>
-									<Loader2 className="w-3 h-3 animate-spin" />
-									<span>Saving...</span>
-								</>
-							)}
-							{!isSaving && hasConflict && (
-								<span style={{ color: 'var(--color-warning)' }}>Conflict</span>
-							)}
-							{!isSaving && !hasConflict && hasChanges && (
-								<span style={{ color: 'var(--color-warning)' }}>Unsaved changes</span>
-							)}
-							{!isSaving && !hasConflict && !hasChanges && (
-								<span style={{ color: 'var(--color-success)' }}>Saved</span>
-							)}
-						</>
-					)}
-					</div>
-				</div>
-			</div>
 
 			{/* Content */}
-			<div className="flex-1 overflow-auto">
-				{isEditing && canEdit ? (
-					<textarea
+			{isEditing && canEdit ? (
+				<div className="flex-1 overflow-hidden">
+					<Editor
 						value={content}
-						onChange={(e) => handleContentChange(e.target.value)}
-						className="w-full h-full p-4 font-mono text-sm resize-none focus:outline-none leading-relaxed"
-						style={{ 
-							background: 'var(--surface-sunken)', 
-							color: 'var(--text-primary)' 
+						language="markdown"
+						theme={themeName}
+						beforeMount={handleBeforeMount}
+						onMount={handleEditorMount}
+						onChange={(value) => {
+							if (typeof value === 'string') {
+								handleContentChange(value);
+							}
 						}}
-						spellCheck={false}
+						options={{
+							readOnly: false,
+							minimap: { enabled: false },
+							fontFamily: 'JetBrains Mono, SF Mono, ui-monospace, Menlo, Consolas, monospace',
+							fontSize: 13,
+							lineHeight: 20,
+							wordWrap: 'on',
+							smoothScrolling: true,
+							cursorBlinking: 'smooth',
+							scrollBeyondLastLine: false,
+							padding: { top: 14, bottom: 14 },
+							automaticLayout: true,
+							lineNumbersMinChars: 4,
+							scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+							overviewRulerBorder: false,
+						}}
 					/>
-				) : (
-					<div 
-						className="p-6 prose prose-sm max-w-none"
-						style={{ background: 'var(--surface-raised)' }}
-					>
+				</div>
+			) : (
+				<div
+					ref={scrollContainerRef}
+					className="flex-1 overflow-auto"
+					onScroll={handleScroll}
+					style={{ background: 'var(--surface-raised)' }}
+				>
+					<div className="claude-markdown">
 						<ReactMarkdown remarkPlugins={[remarkGfm]}>
 							{stripFrontmatter(content)}
 						</ReactMarkdown>
 					</div>
-				)}
-			</div>
+				</div>
+			)}
 		</div>
 	);
 }

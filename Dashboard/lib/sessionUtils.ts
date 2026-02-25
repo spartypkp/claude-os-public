@@ -7,6 +7,7 @@
 
 import {
   Archive,
+  ArrowRightLeft,
   BookOpen,
   Brain,
   Briefcase,
@@ -105,6 +106,14 @@ export const ROLE_CONFIGS: Record<string, RoleConfig> = {
     label: 'Trainer',
     description: 'Tutoring and skill development',
     icon: GraduationCap,
+    color: CLAUDE_COLOR,
+    bgColor: CLAUDE_BG,
+    ringColor: CLAUDE_RING,
+  },
+  release: {
+    label: 'Release',
+    description: 'Sync private to public repo',
+    icon: ArrowRightLeft,
     color: CLAUDE_COLOR,
     bgColor: CLAUDE_BG,
     ringColor: CLAUDE_RING,

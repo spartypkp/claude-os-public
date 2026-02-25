@@ -185,7 +185,7 @@ MAX_PREVIEW_CHARS = 2000
 INBOX_PATH = 'Inbox'
 
 // API
-API_BASE: re-exported from '@/lib/api' (reads NEXT_PUBLIC_API_URL env var, defaults to http://localhost:5001)
+API_BASE — re-exported from '@/lib/api' (reads NEXT_PUBLIC_API_URL env var, defaults to http://localhost:5001)
 
 // Configs
 BREAK_MESSAGES: BreakMessage[]
@@ -238,10 +238,24 @@ Role configs are defined in `lib/sessionUtils.ts` as the single source of truth 
 - Deep linking to specific conversations (e.g., `?conversation=chief`)
 - Auto-clears invalid conversation params
 
+### Send Reliability
+- `sendMessage()` returns `Promise<boolean>` — `true` on success, `false` on error
+- On failure (message too long, network error), input text is preserved (not cleared)
+- Error banner auto-dismisses after 5 seconds
+- Max message length: 100,000 characters
+
+### Queued Messages
+Messages sent while Claude is mid-turn get queued by Claude Code (written as `queue-operation` events in the JSONL transcript). The system handles these with deduplication:
+
+- **Live streaming:** Enqueue events emit immediately as `user_message` with `queued: true`. When dequeued, either a real `user_message` replaces it (frontend filters out the queued version) or a `replaces_queued` event updates it in-place.
+- **Historical load:** Two-pass dedup in `get_all_events()` — skips enqueue if matching user_message exists, clears queued flag if dequeue/remove exists.
+- **UI:** Queued messages render at 50% opacity with a clock icon and "Queued" label. Resolved to full opacity when processed.
+- Task notification XML (`<task-notification>`) from background agents is always filtered out (rendered via tool_result system instead).
+
 ### Keyboard Shortcuts
-- `Enter`: Send message
-- `Shift+Enter`: Newline
-- `Escape`: Interrupt session (when panel focused)
+- `Enter` — Send message
+- `Shift+Enter` — Newline
+- `Escape` — Interrupt session (when panel focused)
 
 ---
 
@@ -270,24 +284,34 @@ Role configs are defined in `lib/sessionUtils.ts` as the single source of truth 
 
 User messages in the transcript may actually be system injections (hook outputs, handoffs, role prompts, etc.). The `isSystemMessage()` function gates which messages get rendered as system pills vs. user bubbles.
 
-**Critical rule:** All pattern matching uses `startsWith` on trimmed content: never `includes`. This prevents false positives when trigger words appear mid-message in normal user text.
+**Critical rule:** All pattern matching uses `startsWith` on trimmed content — never `includes`. This prevents false positives when trigger words appear mid-message in normal user text.
 
 **Patterns detected (must appear at START of message):**
-- `[AUTO-HANDOFF]`: Session handoff injection
-- `<session-role>`, `<session-mode>`: Role/mode prompt injection
-- `<system-reminder>`: System reminder injection
-- `SessionStart:`: Startup hook context
-- `[CLAUDE OS SYS:`: System notifications (specialist complete, context warnings, etc.)
-- `[TEAM →`: Direct team messages between sessions
-- `[TEAM REQUEST:`: Spawn requests from non-Chief specialists
-- `Base directory for this skill:`, `ARGUMENTS:`: Skill invocation
-- `[Request interrupted by user]`: User interrupt
+- `[AUTO-HANDOFF]` — Session handoff injection
+- `<session-role>`, `<session-mode>` — Role/mode prompt injection
+- `<system-reminder>` — System reminder injection
+- `SessionStart:` — Startup hook context
+- `[CLAUDE OS SYS:` — System notifications (specialist complete, context warnings, etc.)
+- `[TEAM →` — Direct team messages between sessions
+- `[TEAM REQUEST:` — Spawn requests from non-Chief specialists
+- `Base directory for this skill:`, `ARGUMENTS:` — Skill invocation
+- `[Request interrupted by user]` — User interrupt
 
-**Downstream routing (in TranscriptViewer):**
-1. `isSpecialistNotification()` → SpecialistReport component (pass/fail card)
-2. `isSpecialistReply()` → SpecialistReplyCard (chat-style card from specialist)
-3. `isTeamMessage()` → Team message card
-4. Other system messages → SystemMessage pill (centered, muted)
+**Downstream routing:** TranscriptViewer calls `renderSystemMessage(content, timestamp)` from `transcript/SystemMessages.tsx`. This shared router handles the full priority chain:
+
+1. `isContextMessage()` → ContextCard (app-tinted, left-aligned)
+2. `isCaptureMessage()` → CaptureCard (type-tinted: bug/idea/drop/dump)
+3. `isSpecialistNotification()` → SpecialistReport (pass/fail card)
+4. `isSpecialistReply()` → SpecialistReplyCard (chat-style card from specialist)
+5. `isTeamMessage()` → TeamMessageCard (from→to with role icons)
+6. `isTeamRequest()` → TeamRequestCard (spawn request)
+7. `isTaskNotification()` → TaskNotificationCard (collapsible subagent result)
+8. WAKE → WakeDivider (tiny inline timestamp)
+9. WARNING/FORCE-HANDOFF → WarningMessage (amber/red accent)
+10. CRON/INFO/LATE/HANDOFF/SessionStart/session-role → SystemMessage plumbing variant (extra muted)
+11. Default → SystemMessage pill (centered, muted)
+
+The same `renderSystemMessage()` function is used by both TranscriptViewer (production) and the UI Test Suite (visual audit). One source of truth for routing and rendering.
 
 **In `groupEventsIntoTurns()`:** System messages after session boundaries are absorbed silently (they're plumbing, not content). System messages at conversation start create a synthetic `session_start` boundary.
 
@@ -295,15 +319,18 @@ User messages in the transcript may actually be system injections (hook outputs,
 
 ## External Dependencies
 
-- `TranscriptViewer`: Renders conversation events (see inline in `transcript/`)
-- `transcript/tools/`: Tool call rendering (see `tools/SYSTEM-SPEC.md`)
-- `lib/systemMessages.ts`: System message detection and parsing
-- `lib/sessionUtils.ts`: Role configs (single source of truth)
-- `hooks/useHandoffState.ts`: SSE handoff lifecycle tracking per conversation
-- `ChatPanelContext`: Global panel state (sessionId, visibility, openSession)
-- `useClaudeSession` / `useConversation`: SSE connection for transcript events
-- `useClaudeActivity`: Session list from API
-- `useChiefStatus`: Chief spawn/status
+- `transcript/TranscriptViewer.tsx` — Renders conversation events
+- `transcript/SystemMessages.tsx` — Shared system message components + `renderSystemMessage()` router (used by TranscriptViewer and UI Test Suite)
+- `transcript/SessionBoundaries.tsx` — Shared session boundary components + `SessionBoundary` dispatcher
+- `transcript/MarkdownLink.tsx` — Shared styled link component for ReactMarkdown
+- `transcript/tools/` — Tool call rendering (see `tools/SYSTEM-SPEC.md`)
+- `lib/systemMessages.ts` — System message detection, classification, and parsing
+- `lib/sessionUtils.ts` — Role configs (single source of truth)
+- `hooks/useHandoffState.ts` — SSE handoff lifecycle tracking per conversation
+- `ChatPanelContext` — Global panel state (sessionId, visibility, openSession)
+- `useClaudeSession` / `useConversation` — SSE connection for transcript events
+- `useClaudeActivity` — Session list from API
+- `useChiefStatus` — Chief spawn/status
 
 ---
 
@@ -316,7 +343,7 @@ Check: `activeSessions`, `sessionId`, `conversationId` in ClaudePanel.
 Check: `attachedFiles` in useAttachments.
 
 ### System messages showing as user bubbles
-Check `lib/systemMessages.ts`: the pattern must appear at the START of the message content. If a new injection format isn't detected, add its prefix to `SYSTEM_MESSAGE_PATTERNS`.
+Check `lib/systemMessages.ts` — the pattern must appear at the START of the message content. If a new injection format isn't detected, add its prefix to `SYSTEM_MESSAGE_PATTERNS`.
 
 ### Panel not resizing
 - Check localStorage key: `claude-panel-width`

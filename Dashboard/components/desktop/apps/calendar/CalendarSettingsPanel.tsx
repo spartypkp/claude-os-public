@@ -688,7 +688,7 @@ export function CalendarSettingsPanel({ onClose }: { onClose: () => void; }) {
 										>
 											<div
 												className="w-4 h-4 rounded"
-												style={{ backgroundColor: cal.color || '#3b82f6' }}
+												style={{ backgroundColor: cal.color || 'var(--color-primary)' }}
 											/>
 											<div className="flex-1">
 												<span className="font-medium">{cal.name}</span>

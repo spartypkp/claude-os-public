@@ -25,7 +25,7 @@ def timeline(description: str) -> Dict[str, Any]:
         Object with success status and entry logged
 
     Example:
-        timeline("Morning check-in with Will")
+        timeline("Morning check-in with user")
         timeline("Completed API refactor, 3 endpoints updated")
         timeline("Mock interview prep session")
     """

@@ -8,7 +8,7 @@ export function ClaudeStatus() {
 	if (!data?.statusText) return null;
 
 	return (
-		<span className="text-[12px] text-[var(--text-tertiary)] truncate max-w-[200px]" title={data.statusText}>
+		<span className="text-[12px] text-[var(--text-tertiary)] truncate" title={data.statusText}>
 			{data.statusText}
 		</span>
 	);

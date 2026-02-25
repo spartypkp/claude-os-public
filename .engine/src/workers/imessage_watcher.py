@@ -34,8 +34,9 @@ POLL_INTERVAL = 5  # seconds
 
 # Whitelisted senders — only these trigger injection
 WHITELIST = {
-    "danbotmorgan@gmail.com",
-    "+16452438876",  # Nudge - Jordan's AI health coach
+    # Add trusted senders here — only these trigger injection
+    # "bot@example.com",
+    # "+15550000001",
 }
 
 

@@ -22,12 +22,12 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 				onClick={(e) => e.stopPropagation()}
 			>
 				<div className="flex flex-col items-center pt-8 pb-3 px-6">
-					<div className="w-20 h-20 rounded-[22px] bg-gradient-to-br from-[#da7756] to-[#C15F3C] flex items-center justify-center mb-5 shadow-lg shadow-[#da7756]/25">
+					<div className="w-20 h-20 rounded-[22px] bg-gradient-to-br from-[var(--color-claude)] to-[var(--color-primary-hover)] flex items-center justify-center mb-5 shadow-lg shadow-[var(--color-claude)]/25">
 						<ClaudeLogo className="w-12 h-12 text-white" />
 					</div>
 					<h2 className="text-xl font-semibold text-[var(--text-primary)]">Claude OS</h2>
 					<p className="text-[13px] text-[var(--text-tertiary)] mt-1">
-						A system where Claude and Will figure out life together
+						A system where Claude and you figure out life together
 					</p>
 				</div>
 
@@ -52,7 +52,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 						onClick={onClose}
 						className="
 							px-8 py-2 rounded-lg
-							bg-gradient-to-r from-[#da7756] to-[#C15F3C] text-white text-sm font-medium
+							bg-gradient-to-r from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white text-sm font-medium
 							hover:opacity-90 active:scale-[0.98]
 							transition-all shadow-sm
 						"

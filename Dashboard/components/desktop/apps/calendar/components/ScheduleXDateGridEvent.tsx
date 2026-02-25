@@ -8,7 +8,7 @@ import { memo } from 'react';
  */
 function ScheduleXDateGridEventInner({ calendarEvent }: { calendarEvent: any }) {
   const title = calendarEvent.title || calendarEvent.summary || 'Untitled';
-  const calendarColor = calendarEvent._calendarColor || '#da7756';
+  const calendarColor = calendarEvent._calendarColor || 'var(--color-claude)';
 
   return (
     <div

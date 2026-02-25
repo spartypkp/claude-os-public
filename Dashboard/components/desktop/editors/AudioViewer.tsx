@@ -23,8 +23,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
 
 	const fileName = filePath.split('/').pop() || filePath;
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const audioUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const audioUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	useEffect(() => {
 		setLoading(true);
@@ -134,7 +133,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 						{/* Album art placeholder */}
 						<div
 							className="w-32 h-32 rounded-xl flex items-center justify-center"
-							style={{ background: 'linear-gradient(135deg, #DA7756 0%, #c66a4d 100%)' }}
+							style={{ background: 'linear-gradient(135deg, var(--color-claude) 0%, #c66a4d 100%)' }}
 						>
 							<Music className="w-16 h-16 text-white/80" />
 						</div>
@@ -171,7 +170,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 						max="100"
 						value={progress}
 						onChange={handleSeek}
-						className="flex-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#DA7756]"
+						className="flex-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--color-claude)]"
 					/>
 					<span className="text-xs min-w-[3rem]" style={{ color: 'var(--text-tertiary)' }}>
 						{formatTime(duration)}
@@ -185,7 +184,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 						<button
 							onClick={handlePlayPause}
 							className="w-12 h-12 rounded-full flex items-center justify-center transition-colors"
-							style={{ background: '#DA7756' }}
+							style={{ background: 'var(--color-claude)' }}
 						>
 							{isPlaying ? (
 								<Pause className="w-6 h-6 text-white" />
@@ -211,7 +210,7 @@ export function AudioViewer({ filePath }: AudioViewerProps) {
 							step="0.1"
 							value={isMuted ? 0 : volume}
 							onChange={handleVolumeChange}
-							className="w-20 h-1 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#DA7756]"
+							className="w-20 h-1 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--color-claude)]"
 						/>
 
 						{/* Download */}

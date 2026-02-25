@@ -1,58 +1,31 @@
 'use client';
 
 import { ToolChip, SystemEventChip, getToolConfig } from '@/components/transcript/tools';
+import { AgentSpawnCard } from '@/components/transcript/tools/AgentCard';
+import { QuestionCard } from '@/components/transcript/tools/QuestionCard';
+import { ExitPlanCard } from '@/components/transcript/tools/PlanCard';
+import { ScheduleCard } from '@/components/transcript/tools/ScheduleCard';
 import type { TranscriptEvent } from '@/hooks/useConversation';
 import { getRoleConfig } from '@/lib/sessionUtils';
+import { useWindowStore } from '@/store/windowStore';
 import {
 	isSystemMessage,
-	isSpecialistNotification,
-	isSpecialistReply,
-	isTeamMessage,
-	isTeamRequest,
-	isTaskNotification,
-	isContextMessage,
-	isCaptureMessage,
-	parseSpecialistNotification,
-	parseSpecialistReply,
-	parseTeamMessage,
-	parseTeamRequest,
-	parseTaskNotification,
-	parseContextPrefix,
-	parseCapturePrefix,
-	summarizeSystemMessage,
-	parseSystemPrefix,
 	normalizeMessageContent,
 } from '@/lib/systemMessages';
 import type { LucideIcon } from 'lucide-react';
 import type { HandoffPhase } from '@/hooks/useHandoffState';
 import {
-	AlertTriangle,
 	ArrowDown,
-	ArrowRight,
-	Bell,
 	Brain,
-	Bug,
-	Calendar,
 	Check,
-	ChevronDown,
-	ChevronRight,
 	Clock,
 	Copy,
-	ExternalLink,
-	Info,
-	Lightbulb,
 	Loader2,
-	Mail,
-	MessageCircle,
 	Monitor,
-	Play,
+	Paperclip,
 	RefreshCw,
 	Send,
-	Timer,
-	User,
-	UserPlus,
 	X,
-	Zap,
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -99,24 +72,13 @@ interface Turn {
 	sessionMode?: string;
 }
 
+import { MarkdownLink } from './MarkdownLink';
+import { renderSystemMessage } from './SystemMessages';
+import {
+	SessionBoundary,
+	ConversationEnded,
+} from './SessionBoundaries';
 import { ClaudeLogo } from '@/components/ClaudePanel/ClaudeLogo';
-
-/**
- * Custom link component for ReactMarkdown - styled and opens in new tab
- */
-function MarkdownLink({ href, children }: { href?: string; children?: React.ReactNode; }) {
-	return (
-		<a
-			href={href}
-			target="_blank"
-			rel="noopener noreferrer"
-			className="text-[var(--color-primary)] hover:text-[var(--color-primary)]/80 underline underline-offset-2 decoration-[var(--color-primary)]/40 hover:decoration-[var(--color-primary)] transition-colors inline-flex items-center gap-0.5"
-		>
-			{children}
-			<ExternalLink className="w-3 h-3 opacity-60" />
-		</a>
-	);
-}
 
 /**
  * Shared ReactMarkdown config for consistent link handling
@@ -124,6 +86,8 @@ function MarkdownLink({ href, children }: { href?: string; children?: React.Reac
 const MARKDOWN_COMPONENTS = {
 	a: MarkdownLink,
 };
+
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode']);
 
 // =============================================================================
 // UTILITIES
@@ -150,32 +114,6 @@ function formatToolName(toolName: string): string {
 	}
 	return toolName;
 }
-
-/**
- * Map from Lucide icon key strings (returned by summarizeSystemMessage)
- * to actual Lucide components.
- */
-const SYSTEM_ICON_MAP: Record<string, LucideIcon> = {
-	'clock': Clock,
-	'timer': Timer,
-	'calendar': Calendar,
-	'alert-triangle': AlertTriangle,
-	'refresh-cw': RefreshCw,
-	'bell': Bell,
-	'zap': Zap,
-	'info': Info,
-	'arrow-right': ArrowRight,
-	'user-plus': UserPlus,
-	'check': Check,
-	'x-circle': X,
-	'play': Play,
-	'brain': Brain,
-	'arrow-down': ArrowDown,
-	'bug': Bug,
-	'lightbulb': Lightbulb,
-	'external-link': ExternalLink,
-	'message-circle': MessageCircle,
-};
 
 /**
  * Group events into turns. A turn = user message + all assistant events until next user message.
@@ -521,11 +459,62 @@ function parseMessageSource(content: string): { source: 'dashboard' | 'telegram'
 }
 
 /**
+ * Parse [Attached Files] block from message content.
+ * Returns { attachments: string[], messageContent: string }
+ */
+function parseAttachments(content: string): { attachments: string[]; messageContent: string } {
+	const attachMatch = content.match(/^\[Attached Files\]:\n((?:@[^\n]+\n?)+)/);
+	if (!attachMatch) return { attachments: [], messageContent: content };
+
+	const attachBlock = attachMatch[1];
+	const attachments = attachBlock
+		.split('\n')
+		.filter(line => line.startsWith('@'))
+		.map(line => line.slice(1).trim());
+
+	const messageContent = content.slice(attachMatch[0].length).trim();
+	return { attachments, messageContent };
+}
+
+/**
+ * Render attachment chips for sent messages — clickable to open on desktop
+ */
+function AttachmentChips({ paths }: { paths: string[] }) {
+	const { openWindow } = useWindowStore();
+
+	return (
+		<div className="flex flex-wrap gap-1 mb-1.5">
+			{paths.map((path) => {
+				const name = path.split('/').pop() || path;
+				const displayName = name.replace(/\.[^.]+$/, '');
+				const ext = name.split('.').pop()?.toLowerCase() || '';
+
+				return (
+					<button
+						key={path}
+						onClick={(e) => {
+							e.stopPropagation();
+							openWindow(path, name);
+						}}
+						className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/15 hover:bg-white/25 transition-colors text-[10px] cursor-pointer"
+					>
+						<Paperclip className="w-2.5 h-2.5 opacity-70" />
+						<span className="max-w-[120px] truncate">{displayName}</span>
+						{ext && <span className="opacity-60 uppercase text-[9px]">{ext}</span>}
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+/**
  * User message bubble - right aligned with accent color
  */
-const UserMessage = memo(function UserMessage({ content, timestamp }: { content: string; timestamp?: string; }) {
+const UserMessage = memo(function UserMessage({ content, timestamp, queued }: { content: string; timestamp?: string; queued?: boolean; }) {
 	const [copied, setCopied] = useState(false);
 	const { source, displayContent } = parseMessageSource(content);
+	const { attachments, messageContent } = parseAttachments(displayContent);
 
 	const handleCopy = (e: React.MouseEvent) => {
 		e.stopPropagation();
@@ -567,12 +556,25 @@ const UserMessage = memo(function UserMessage({ content, timestamp }: { content:
 					)}
 				</button>
 				{/* Message bubble */}
-				<div className="bg-[var(--color-primary)] text-white px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words rounded-2xl rounded-br-md shadow-sm">
-					{displayContent}
+				<div className={`px-4 py-2.5 text-[13px] leading-relaxed rounded-2xl rounded-br-md shadow-sm ${
+					queued
+						? 'bg-[var(--color-primary)] text-white opacity-50'
+						: 'bg-[var(--color-primary)] text-white'
+				}`}>
+					{attachments.length > 0 && <AttachmentChips paths={attachments} />}
+					{messageContent && (
+						<div className="whitespace-pre-wrap break-words">{messageContent}</div>
+					)}
 				</div>
-				{/* Timestamp + source icon */}
-				{(formattedTime || SourceIcon) && (
+				{/* Timestamp + source icon + queued indicator */}
+				{(formattedTime || SourceIcon || queued) && (
 					<div className="flex items-center justify-end gap-1 mt-1 mr-1">
+						{queued && (
+							<>
+								<Clock className="w-2.5 h-2.5 text-[var(--text-muted)] opacity-60" />
+								<span className="text-[10px] text-[var(--text-muted)] opacity-60">Queued</span>
+							</>
+						)}
 						{SourceIcon && (
 							<SourceIcon className="w-2.5 h-2.5 text-[var(--text-muted)] opacity-60" />
 						)}
@@ -586,609 +588,7 @@ const UserMessage = memo(function UserMessage({ content, timestamp }: { content:
 	);
 });
 
-/**
- * Wake Divider — tiny inline timestamp, nearly invisible.
- * Replaces the full pill treatment for WAKE messages.
- */
-function WakeDivider({ timestamp }: { timestamp?: string }) {
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-		} catch { return ''; }
-	})() : '';
 
-	return (
-		<div className="flex items-center gap-3 my-1 px-4">
-			<div className="flex-1 h-px bg-[var(--border-subtle)] opacity-40" />
-			<div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] opacity-50">
-				<Clock className="w-2.5 h-2.5" />
-				{formattedTime && <span>{formattedTime}</span>}
-			</div>
-			<div className="flex-1 h-px bg-[var(--border-subtle)] opacity-40" />
-		</div>
-	);
-}
-
-/**
- * Warning Message — amber/red accent for WARNING and FORCE-HANDOFF.
- * Demands attention. Uses AlertTriangle icon.
- */
-function WarningMessage({ content, timestamp }: { content: string; timestamp?: string }) {
-	const { summary } = summarizeSystemMessage(content);
-	const parsed = parseSystemPrefix(content);
-	const isForceHandoff = parsed?.type === 'FORCE-HANDOFF';
-	const color = isForceHandoff ? '#ef4444' : '#f59e0b';
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-		} catch { return ''; }
-	})() : '';
-
-	return (
-		<div className="flex justify-center my-2">
-			<div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"
-				style={{
-					color,
-					backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
-					border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
-				}}>
-				<AlertTriangle className="w-3 h-3" />
-				<span className="font-medium">{summary}</span>
-				{formattedTime && (
-					<span className="text-[10px] opacity-60 ml-1">{formattedTime}</span>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * System message — center aligned, compact, muted.
- * For handoffs, wakes, worker notifications, session context.
- *
- * variant='plumbing' — extra muted for CRON, INFO, session plumbing.
- */
-function SystemMessage({
-	content,
-	isExpanded,
-	onToggle,
-	variant = 'default',
-}: {
-	content: string;
-	isExpanded?: boolean;
-	onToggle?: () => void;
-	variant?: 'default' | 'plumbing';
-}) {
-	const { icon: iconKey, summary } = summarizeSystemMessage(content);
-	const IconComponent = SYSTEM_ICON_MAP[iconKey];
-
-	if (variant === 'plumbing') {
-		return (
-			<div className="flex justify-center my-1">
-				<div className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] text-[var(--text-muted)] opacity-50">
-					{IconComponent && <IconComponent className="w-2.5 h-2.5" />}
-					<span>{summary}</span>
-				</div>
-			</div>
-		);
-	}
-
-	return (
-		<div className="flex justify-center my-2">
-			<div className="flex items-center gap-3 max-w-[90%]">
-				{/* Decorative line left */}
-				<div className="hidden sm:block flex-1 h-px bg-gradient-to-r from-transparent to-[var(--border-subtle)]" />
-
-				{/* System pill */}
-				<button
-					onClick={onToggle}
-					disabled={!onToggle}
-					className={`
-						group flex items-center gap-2 px-3 py-1.5 text-[11px]
-						text-[var(--text-muted)] bg-[var(--surface-subtle)]
-						border border-[var(--border-subtle)] rounded-full
-						${onToggle ? 'hover:bg-[var(--surface-accent)] hover:border-[var(--border-default)] cursor-pointer' : 'cursor-default'}
-						transition-all duration-150
-					`}
-				>
-					{IconComponent ? (
-						<IconComponent className="w-3 h-3" />
-					) : (
-						<span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" />
-					)}
-					<span className="font-medium">{summary}</span>
-					{onToggle && (
-						<ChevronDown
-							className={`w-3 h-3 opacity-50 group-hover:opacity-100 transition-all duration-150 ${isExpanded ? 'rotate-180' : ''}`}
-						/>
-					)}
-				</button>
-
-				{/* Decorative line right */}
-				<div className="hidden sm:block flex-1 h-px bg-gradient-to-l from-transparent to-[var(--border-subtle)]" />
-			</div>
-		</div>
-	);
-}
-
-/**
- * Specialist Report — renders specialist completion/failure notifications
- * as a report card rather than a generic system pill.
- *
- * Shows role icon, pass/fail status, summary text, and workspace path.
- * Left-aligned like assistant messages but in a distinct card.
- */
-function SpecialistReport({ content, timestamp }: { content: string; timestamp?: string }) {
-	const notification = parseSpecialistNotification(content);
-	if (!notification) return <SystemMessage content={content} />;
-
-	const { role, sessionId, passed, summary, workspace } = notification;
-	const roleConfig = getRoleConfig(role);
-	const RoleIcon = roleConfig.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
-	})() : '';
-
-	// Truncate session ID for display
-	const shortId = sessionId.length > 20 ? sessionId.slice(0, 20) + '...' : sessionId;
-
-	return (
-		<div className="my-3">
-			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3 max-w-[90%]">
-				{/* Header: role icon + name + status + time */}
-				<div className="flex items-center gap-2 mb-2">
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
-					>
-						<RoleIcon className="w-3.5 h-3.5 text-[#da7756]" />
-					</div>
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
-						{roleConfig.label}
-					</span>
-					{passed ? (
-						<span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
-							<Check className="w-3 h-3" />
-							Passed
-						</span>
-					) : (
-						<span className="flex items-center gap-0.5 text-[10px] font-medium text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded-full">
-							<X className="w-3 h-3" />
-							Failed
-						</span>
-					)}
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-
-				{/* Summary body */}
-				{summary && (
-					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
-						{summary}
-					</p>
-				)}
-
-				{/* Workspace footer */}
-				{workspace && (
-					<div className="mt-2 pt-2 border-t border-[var(--border-subtle)] flex items-center gap-1.5">
-						<span className="text-[10px] text-[var(--text-muted)] font-mono truncate">
-							{workspace}
-						</span>
-					</div>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * Specialist Reply — renders injected "Reply from {role}" messages
- * as a chat-style card from the specialist.
- */
-function SpecialistReplyCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const reply = parseSpecialistReply(content);
-	if (!reply) return <SystemMessage content={content} />;
-
-	const { role, sessionId, message } = reply;
-	const roleConfig = getRoleConfig(role);
-	const RoleIcon = roleConfig.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
-	})() : '';
-
-	return (
-		<div className="my-3">
-			<div className="max-w-[90%]">
-				{/* Header: role icon + name + session ID */}
-				<div className="flex items-center gap-2 mb-1.5">
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
-					>
-						<RoleIcon className="w-3.5 h-3.5 text-[#da7756]" />
-					</div>
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
-						{roleConfig.label}
-					</span>
-					<span className="text-[10px] font-mono text-[var(--text-muted)]">
-						{sessionId.slice(0, 8)}
-					</span>
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-
-				{/* Message bubble */}
-				<div className="ml-7 rounded-lg border border-[#da7756]/15 bg-[#da7756]/5 px-3 py-2">
-					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
-						{message}
-					</p>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Team Message Card — renders direct team communication between sessions.
- * Shows from→to header with role icons and direction arrow.
- * Format: [TEAM → Target] from Source: message
- */
-function TeamMessageCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const parsed = parseTeamMessage(content);
-	if (!parsed) return <SystemMessage content={content} />;
-
-	const { sourceRole, targetRole, message } = parsed;
-	const sourceConfig = getRoleConfig(sourceRole);
-	const targetConfig = getRoleConfig(targetRole);
-	const SourceIcon = sourceConfig.icon;
-	const TargetIcon = targetConfig.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
-	})() : '';
-
-	return (
-		<div className="my-3">
-			<div className="max-w-[90%]">
-				{/* Header: source → target with role icons */}
-				<div className="flex items-center gap-2 mb-1.5">
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
-					>
-						<SourceIcon className="w-3.5 h-3.5 text-[#da7756]" />
-					</div>
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
-						{sourceConfig.label}
-					</span>
-					<ArrowRight className="w-3 h-3 text-[var(--text-muted)]" />
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
-					>
-						<TargetIcon className="w-3.5 h-3.5 text-[#da7756]" />
-					</div>
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
-						{targetConfig.label}
-					</span>
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-
-				{/* Message bubble */}
-				<div className="ml-7 rounded-lg border border-[#da7756]/15 bg-[#da7756]/5 px-3 py-2">
-					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
-						{message}
-					</p>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Team Request Card — renders spawn requests from non-Chief specialists.
- * Shows requesting role and what they want spawned.
- * Format: [TEAM REQUEST: Role wants OtherRole for "purpose"]
- */
-function TeamRequestCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const parsed = parseTeamRequest(content);
-	if (!parsed) return <SystemMessage content={content} />;
-
-	const { requestingRole, requestedRole, purpose } = parsed;
-	const reqConfig = getRoleConfig(requestingRole);
-	const ReqIcon = reqConfig.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
-	})() : '';
-
-	return (
-		<div className="my-3">
-			<div className="rounded-lg border border-[#da7756]/20 bg-[#da7756]/5 p-3 max-w-[90%]">
-				{/* Header: requesting role + badge */}
-				<div className="flex items-center gap-2 mb-2">
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #da7756 12%, transparent)' }}
-					>
-						<ReqIcon className="w-3.5 h-3.5 text-[#da7756]" />
-					</div>
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)]">
-						{reqConfig.label}
-					</span>
-					<span className="flex items-center gap-0.5 text-[10px] font-medium text-[#da7756] bg-[#da7756]/10 px-1.5 py-0.5 rounded-full">
-						Spawn Request
-					</span>
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-
-				{/* Request details */}
-				<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
-					Wants <span className="font-semibold capitalize">{requestedRole}</span> for &ldquo;{purpose}&rdquo;
-				</p>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Task Notification Card — renders subagent completion results.
- * Collapsible: shows summary + stats in header, expands to full markdown result.
- */
-function TaskNotificationCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const notification = parseTaskNotification(content);
-	const [isExpanded, setIsExpanded] = useState(false);
-
-	if (!notification) return <SystemMessage content={content} />;
-
-	const { status, summary, result, totalTokens, toolUses, durationMs } = notification;
-	const isSuccess = status === 'completed';
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', {
-				hour: 'numeric',
-				minute: '2-digit',
-				hour12: true
-			});
-		} catch {
-			return '';
-		}
-	})() : '';
-
-	// Format duration
-	const duration = durationMs ? (
-		durationMs > 60000
-			? `${Math.round(durationMs / 60000)}m`
-			: `${Math.round(durationMs / 1000)}s`
-	) : null;
-
-	// Strip "Agent " prefix from summary for cleaner display
-	const cleanSummary = summary.replace(/^Agent "/, '"');
-
-	return (
-		<div className="my-3">
-			<div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] max-w-[90%] overflow-hidden">
-				{/* Header — always visible */}
-				<button
-					onClick={() => setIsExpanded(!isExpanded)}
-					className="w-full flex items-center gap-2 p-3 text-left hover:bg-[var(--surface-accent)] transition-colors"
-				>
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: 'color-mix(in srgb, #3b82f6 12%, transparent)' }}
-					>
-						<Zap className="w-3.5 h-3.5 text-[#3b82f6]" />
-					</div>
-
-					<span className="text-[12px] font-semibold text-[var(--text-secondary)] flex-1 truncate">
-						{cleanSummary}
-					</span>
-
-					{/* Status badge */}
-					{isSuccess ? (
-						<span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
-							<Check className="w-3 h-3" />
-						</span>
-					) : (
-						<span className="flex items-center gap-0.5 text-[10px] font-medium text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
-							<X className="w-3 h-3" />
-						</span>
-					)}
-
-					{/* Stats */}
-					<div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] flex-shrink-0">
-						{duration && <span>{duration}</span>}
-						{toolUses !== undefined && <span>{toolUses} tools</span>}
-						{formattedTime && (
-							<>
-								<span className="w-0.5 h-0.5 rounded-full bg-[var(--text-muted)]" />
-								<span>{formattedTime}</span>
-							</>
-						)}
-					</div>
-
-					<ChevronRight
-						className={`w-3.5 h-3.5 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
-					/>
-				</button>
-
-				{/* Expanded result */}
-				{isExpanded && result && (
-					<div className="border-t border-[var(--border-subtle)] px-4 py-3 max-h-96 overflow-y-auto">
-						<div className="text-[12px] text-[var(--text-secondary)] leading-relaxed prose prose-sm prose-invert max-w-none
-							[&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2
-							[&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
-							[&_p]:my-1.5 [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1
-							[&_table]:text-[11px] [&_th]:px-2 [&_th]:py-1 [&_td]:px-2 [&_td]:py-1
-							[&_code]:text-[11px] [&_code]:bg-[var(--surface-muted)] [&_code]:px-1 [&_code]:rounded
-							[&_hr]:my-3 [&_hr]:border-[var(--border-subtle)]
-							[&_a]:text-[var(--color-primary)] [&_a]:underline">
-							<ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-								{result}
-							</ReactMarkdown>
-						</div>
-					</div>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * Context Card — renders [CONTEXT:App] messages from AttachToChat.
- * Visually distinct from user/system messages: left-aligned, app-tinted accent.
- */
-function ContextCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const parsed = parseContextPrefix(content);
-	if (!parsed) return <SystemMessage content={content} />;
-
-	const { app, body } = parsed;
-
-	const appConfig: Record<string, { icon: typeof Mail; color: string }> = {
-		Email: { icon: Mail, color: '#3b82f6' },
-		Calendar: { icon: Calendar, color: '#f59e0b' },
-		Contact: { icon: User, color: '#8b5cf6' },
-		Project: { icon: Zap, color: '#10b981' },
-	};
-	const config = appConfig[app] || { icon: ExternalLink, color: '#6b7280' };
-	const AppIcon = config.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-		} catch { return ''; }
-	})() : '';
-
-	return (
-		<div className="my-2">
-			<div className="max-w-[90%]">
-				{/* Header: app icon + badge */}
-				<div className="flex items-center gap-2 mb-1.5">
-					<div
-						className="flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
-						style={{ backgroundColor: `color-mix(in srgb, ${config.color} 12%, transparent)` }}
-					>
-						<AppIcon className="w-3.5 h-3.5" style={{ color: config.color }} />
-					</div>
-					<span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
-						style={{ color: config.color, backgroundColor: `color-mix(in srgb, ${config.color} 10%, transparent)` }}>
-						{app}
-					</span>
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-
-				{/* Context body */}
-				<div className="ml-7 rounded-lg border px-3 py-2"
-					style={{ borderColor: `color-mix(in srgb, ${config.color} 15%, transparent)`, backgroundColor: `color-mix(in srgb, ${config.color} 5%, transparent)` }}>
-					<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
-						{body}
-					</p>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Capture Card — renders [CAPTURE:TYPE] messages (drop, bug, idea, dump).
- * Type-specific accent colors.
- */
-function CaptureCard({ content, timestamp }: { content: string; timestamp?: string }) {
-	const parsed = parseCapturePrefix(content);
-	if (!parsed) return <SystemMessage content={content} />;
-
-	const { type, body } = parsed;
-
-	const typeConfig: Record<string, { icon: typeof Bug; color: string; label: string }> = {
-		BUG: { icon: Bug, color: '#ef4444', label: 'Bug' },
-		IDEA: { icon: Lightbulb, color: '#8b5cf6', label: 'Idea' },
-		DROP: { icon: ArrowDown, color: '#6b7280', label: 'Drop' },
-		DUMP: { icon: Zap, color: '#6b7280', label: 'Brain Dump' },
-	};
-	const config = typeConfig[type] || { icon: Zap, color: '#6b7280', label: type };
-	const TypeIcon = config.icon;
-
-	const formattedTime = timestamp ? (() => {
-		try {
-			const date = new Date(timestamp);
-			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-		} catch { return ''; }
-	})() : '';
-
-	return (
-		<div className="my-2">
-			<div
-				className="rounded-lg border-l-2 px-3 py-2 max-w-[90%]"
-				style={{ borderLeftColor: config.color, backgroundColor: `color-mix(in srgb, ${config.color} 5%, transparent)` }}
-			>
-				<div className="flex items-center gap-2">
-					<TypeIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: config.color }} />
-					<span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: config.color }}>
-						{config.label}
-					</span>
-					{formattedTime && (
-						<span className="text-[10px] text-[var(--text-muted)] ml-auto">{formattedTime}</span>
-					)}
-				</div>
-				<p className="text-[12px] text-[var(--text-secondary)] leading-relaxed mt-1 whitespace-pre-wrap">
-					{body}
-				</p>
-			</div>
-		</div>
-	);
-}
 
 /**
  * Tool display wrapper — routes to ToolChip or SystemEventChip based on registry category.
@@ -1206,6 +606,48 @@ function ToolOneLiner({
 }) {
 	const toolName = event.toolName || 'Unknown';
 	const formattedName = formatToolName(toolName);
+
+	// Interactive tools render as block-level cards (not chip + expanded)
+	if (formattedName === 'AskUserQuestion') {
+		return (
+			<QuestionCard
+				toolInput={event.toolInput as Record<string, unknown> | undefined}
+				resultContent={result?.content}
+			/>
+		);
+	}
+	// EnterPlanMode renders as a normal chip (auto-approved, low importance)
+	// ExitPlanMode renders as a block-level card (plan review is the real interaction)
+	if (formattedName === 'ExitPlanMode') {
+		return <ExitPlanCard resultContent={result?.content} />;
+	}
+
+	// Agent tools render as block-level cards (not inline chips)
+	if (formattedName === 'Task') {
+		return (
+			<AgentSpawnCard
+				toolInput={event.toolInput as Record<string, unknown> | undefined}
+				resultContent={result?.content}
+				agentId={result?.agentId}
+				eventSessionId={event.session_id}
+			/>
+		);
+	}
+	// TaskOutput and TaskStop are hidden — AgentSpawnCard's transcript already shows the full output
+	if (formattedName === 'TaskOutput' || formattedName === 'TaskStop') {
+		return null;
+	}
+
+	// Schedule renders as a block-level card (not chip + expanded)
+	if (formattedName === 'schedule') {
+		return (
+			<ScheduleCard
+				toolInput={event.toolInput as Record<string, unknown> | undefined}
+				resultContent={result?.content}
+			/>
+		);
+	}
+
 	const config = getToolConfig(formattedName);
 	const Icon = config.icon;
 	const color = config.color;
@@ -1312,7 +754,7 @@ function ToolBatchDisplay({
 				</span>
 
 				{/* Count badge */}
-				<span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded flex-shrink-0">
+				<span className="text-[10px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded flex-shrink-0">
 					×{batch.tools.length}
 				</span>
 
@@ -1321,11 +763,6 @@ function ToolBatchDisplay({
 					<X className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />
 				)}
 
-				{/* Expand indicator */}
-				<ChevronRight
-					className={`w-3 h-3 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''
-						}`}
-				/>
 			</button>
 
 			{/* Expanded: show individual tools */}
@@ -1392,10 +829,6 @@ const ThinkingBlock = memo(function ThinkingBlock({
 					)}
 				</span>
 
-				{/* Expand indicator */}
-				<ChevronRight
-					className={`w-3 h-3 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
-				/>
 			</button>
 
 			{/* Expanded content */}
@@ -1448,279 +881,17 @@ const TextBlock = memo(function TextBlock({ content }: { content: string; }) {
 });
 
 /**
- * Format mode names for display
- */
-function formatModeName(mode: string): string {
-	const modeMap: Record<string, string> = {
-		'preparation': 'Preparation',
-		'implementation': 'Implementation',
-		'verification': 'Verification',
-		'interactive': 'Interactive',
-	};
-	return modeMap[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
-}
-
-/**
- * Format the timestamp nicely for boundaries
- */
-function formatBoundaryTime(ts: string): string {
-	try {
-		const date = new Date(ts);
-		return date.toLocaleTimeString('en-US', {
-			hour: 'numeric',
-			minute: '2-digit',
-			hour12: true
-		});
-	} catch {
-		return '';
-	}
-}
-
-/** Specialist phase ordering */
-const PHASE_ORDER = ['preparation', 'implementation', 'verification'] as const;
-type Phase = typeof PHASE_ORDER[number];
-
-/**
- * Mode Transition Boundary — shows phase progression bar for autonomous specialist flows.
- * e.g. Preparation ✓ → Implementation ● → Verification ○
- */
-function ModeTransitionBoundary({ event }: { event: TranscriptEvent }) {
-	const prevMode = (event as any).prev_mode as string | undefined;
-	const currMode = (event as any).mode as string | undefined;
-	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-
-	// Determine which phase we're entering
-	const currPhaseIdx = PHASE_ORDER.indexOf(currMode as Phase);
-
-	return (
-		<div className="py-4 my-2">
-			<div className="flex items-center gap-3">
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-
-				<div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
-					{/* Phase progression bar */}
-					<div className="flex items-center gap-1">
-						{PHASE_ORDER.map((phase, idx) => {
-							const isCompleted = idx < currPhaseIdx;
-							const isCurrent = idx === currPhaseIdx;
-							const isFuture = idx > currPhaseIdx;
-
-							// Phase colors
-							const phaseColors: Record<string, string> = {
-								preparation: '#60a5fa',    // blue
-								implementation: '#f59e0b', // amber
-								verification: '#34d399',   // green
-							};
-							const color = phaseColors[phase] || 'var(--text-muted)';
-
-							return (
-								<div key={phase} className="flex items-center gap-1">
-									{/* Connector line (not before first) */}
-									{idx > 0 && (
-										<div
-											className="w-4 h-px"
-											style={{
-												backgroundColor: isCompleted || isCurrent
-													? color
-													: 'var(--border-subtle)',
-												opacity: isCompleted || isCurrent ? 0.6 : 0.3,
-											}}
-										/>
-									)}
-
-									{/* Phase indicator */}
-									<div className="flex items-center gap-1">
-										{isCompleted ? (
-											<Check className="w-3 h-3" style={{ color }} />
-										) : isCurrent ? (
-											<div
-												className="w-2 h-2 rounded-full"
-												style={{ backgroundColor: color }}
-											/>
-										) : (
-											<div
-												className="w-2 h-2 rounded-full border"
-												style={{ borderColor: 'var(--text-muted)', opacity: 0.3 }}
-											/>
-										)}
-										<span
-											className="text-[10px] font-medium"
-											style={{
-												color: isFuture ? 'var(--text-muted)' : color,
-												opacity: isFuture ? 0.4 : 1,
-											}}
-										>
-											{formatModeName(phase).slice(0, 4)}
-										</span>
-									</div>
-								</div>
-							);
-						})}
-					</div>
-
-					{/* Timestamp */}
-					{time && (
-						<>
-							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
-							<span className="text-[10px] text-[#da7756]/50">{time}</span>
-						</>
-					)}
-				</div>
-
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-			</div>
-		</div>
-	);
-}
-
-/**
- * Reset Boundary — shown when a session calls reset() for context handoff.
- * Simple inline marker — no expand/collapse.
- */
-function ResetBoundary({ event }: { event: TranscriptEvent }) {
-	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-
-	return (
-		<div className="py-4 my-2">
-			<div className="flex items-center gap-3">
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-
-				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
-					<RefreshCw className="w-3.5 h-3.5 text-[#da7756]" />
-					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
-						Context reset
-					</span>
-					{time && (
-						<>
-							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
-							<span className="text-[10px] text-[#da7756]/50">{time}</span>
-						</>
-					)}
-				</div>
-
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-			</div>
-		</div>
-	);
-}
-
-/**
- * Session Start Boundary — first session in a conversation.
- * Clean marker showing when the session began.
- */
-function SessionStartBoundary({ event }: { event: TranscriptEvent }) {
-	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-	return (
-		<div className="py-4 my-2">
-			<div className="flex items-center gap-3">
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
-					<ClaudeLogo className="w-3.5 h-3.5 text-[#da7756]" />
-					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
-						Session started
-					</span>
-					{time && (
-						<>
-							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
-							<span className="text-[10px] text-[#da7756]/50">{time}</span>
-						</>
-					)}
-				</div>
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-			</div>
-		</div>
-	);
-}
-
-/**
- * Conversation Ended — final bar when a conversation closes (done() with no next mode).
- */
-function ConversationEnded({ event }: { event: TranscriptEvent }) {
-	const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-	return (
-		<div className="py-4 my-2">
-			<div className="flex items-center gap-3">
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-				<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
-					<Check className="w-3.5 h-3.5 text-[#da7756]" />
-					<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
-						Session complete
-					</span>
-					{time && (
-						<>
-							<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
-							<span className="text-[10px] text-[#da7756]/50">{time}</span>
-						</>
-					)}
-				</div>
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-			</div>
-		</div>
-	);
-}
-
-/**
- * Session boundary marker - dispatches to the right boundary component
- * based on boundary_type from the event metadata.
- *
- * All boundaries share the same visual structure: horizontal line + chip.
- * Variations: session_start (claude logo), mode_transition (phase bar),
- * summarizer (brain icon), reset (simple marker).
- */
-function SessionBoundary({ event }: { event: TranscriptEvent }) {
-	const boundaryType = (event as any).boundary_type || (event as any).boundaryType;
-
-	if (boundaryType === 'session_start') {
-		return <SessionStartBoundary event={event} />;
-	}
-
-	if (boundaryType === 'mode_transition') {
-		return <ModeTransitionBoundary event={event} />;
-	}
-
-	if (boundaryType === 'summarizer') {
-		// Memory Agent is a mode — use same structure as other boundaries
-		const time = event.timestamp ? formatBoundaryTime(event.timestamp) : '';
-		return (
-			<div className="py-4 my-2">
-				<div className="flex items-center gap-3">
-					<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-					<div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--surface-base)] border-[0.5px] border-[#da7756]/20">
-						<Brain className="w-3.5 h-3.5 text-[#da7756]" />
-						<span className="text-[10px] font-semibold uppercase tracking-wider text-[#da7756]/80">
-							Memory Agent
-						</span>
-						{time && (
-							<>
-								<span className="w-1 h-1 rounded-full bg-[#da7756]/30" />
-								<span className="text-[10px] text-[#da7756]/50">{time}</span>
-							</>
-						)}
-					</div>
-					<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/15 to-[#da7756]/25" />
-				</div>
-			</div>
-		);
-	}
-
-	return <ResetBoundary event={event} />;
-}
-
-/**
  * Complete turn: optional user message + assistant response with inline tools
+ * Memo-wrapped so past turns never re-render when new messages arrive.
  */
-function TurnBlock({
+const TurnBlock = memo(function TurnBlock({
 	turn,
 	roleIcon: DefaultRoleIcon,
 	roleLabel: defaultRoleLabel,
-	isFocused,
-	onFocus,
 }: {
 	turn: Turn;
 	roleIcon: LucideIcon;
 	roleLabel: string;
-	isFocused: boolean;
-	onFocus: () => void;
 }) {
 	// Override icon/label for summarizer sessions (Memory Agent mode)
 	const isSummarizer = turn.sessionMode === 'summarizer';
@@ -1759,12 +930,12 @@ function TurnBlock({
 		});
 	};
 
-	// Auto-expand AskUserQuestion when it's waiting for input
+	// Auto-expand interactive tools when they're waiting for input
 	useEffect(() => {
 		for (const event of turn.responseEvents) {
 			if (event.type === 'tool_use') {
 				const name = formatToolName(event.toolName || '');
-				if (name === 'AskUserQuestion' && event.toolUseId) {
+				if (INTERACTIVE_TOOLS.has(name) && event.toolUseId) {
 					const hasResult = turn.toolsWithResults.has(event.toolUseId);
 					if (!hasResult) {
 						setExpandedTools(prev => {
@@ -1791,49 +962,15 @@ function TurnBlock({
 	// Check if user message is actually a system injection
 	const userContent = normalizeMessageContent(turn.userMessage?.content || '');
 	const isSystem = turn.userMessage && isSystemMessage(userContent);
-	const isContextMsg = isSystem && isContextMessage(userContent);
-	const isCaptureMsg = isSystem && !isContextMsg && isCaptureMessage(userContent);
-	const isSpecialistComplete = isSystem && !isContextMsg && !isCaptureMsg && isSpecialistNotification(userContent);
-	const isReply = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && isSpecialistReply(userContent);
-	const isTeamMsg = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && isTeamMessage(userContent);
-	const isTeamReq = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && isTeamRequest(userContent);
-	const isTaskNotif = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && isTaskNotification(userContent);
-
-	// Type-aware system message routing (WAKE, WARNING, plumbing)
-	const isGenericSystem = isSystem && !isContextMsg && !isCaptureMsg && !isSpecialistComplete && !isReply && !isTeamMsg && !isTeamReq && !isTaskNotif;
-	const systemParsed = isGenericSystem ? parseSystemPrefix(userContent) : null;
-	const isWake = systemParsed?.type === 'WAKE';
-	const isWarning = !!(systemParsed && (systemParsed.type === 'WARNING' || systemParsed.type === 'FORCE-HANDOFF'));
-	const isPlumbingMsg = !!(systemParsed && ['CRON', 'INFO', 'LATE', 'HANDOFF'].includes(systemParsed.type));
 
 	return (
-		<div className="mb-5" onClick={onFocus}>
-			{/* User message routing — type-specific renderers for system injections */}
+		<div className="mb-5">
+			{/* User message routing — shared renderer for system injections, inline for user messages */}
 			{turn.userMessage && (
-				isContextMsg ? (
-					<ContextCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isCaptureMsg ? (
-					<CaptureCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isSpecialistComplete ? (
-					<SpecialistReport content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isReply ? (
-					<SpecialistReplyCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isTeamMsg ? (
-					<TeamMessageCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isTeamReq ? (
-					<TeamRequestCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isTaskNotif ? (
-					<TaskNotificationCard content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isWake ? (
-					<WakeDivider timestamp={turn.userMessage.timestamp} />
-				) : isWarning ? (
-					<WarningMessage content={userContent} timestamp={turn.userMessage.timestamp} />
-				) : isPlumbingMsg ? (
-					<SystemMessage content={userContent} variant="plumbing" />
-				) : isSystem ? (
-					<SystemMessage content={userContent} />
+				isSystem ? (
+					renderSystemMessage(userContent, turn.userMessage.timestamp)
 				) : (
-					<UserMessage content={userContent} timestamp={turn.userMessage.timestamp} />
+					<UserMessage content={userContent} timestamp={turn.userMessage.timestamp} queued={turn.userMessage.queued} />
 				)
 			)}
 
@@ -1915,7 +1052,7 @@ function TurnBlock({
 			)}
 		</div>
 	);
-}
+});
 
 /**
  * HandoffProgress - Inline indicator during session handoff
@@ -1936,13 +1073,13 @@ function HandoffProgress({ phase }: { phase: HandoffPhase }) {
 	return (
 		<div className="py-4 my-2">
 			<div className="flex items-center gap-3">
-				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#da7756]/20 to-[#da7756]/40" />
+				<div className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--color-claude)]/20 to-[var(--color-claude)]/40" />
 
-				<div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[var(--surface-base)] border border-[#da7756]/20">
+				<div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--color-claude)]/20">
 					{isComplete ? (
-						<Check className="w-4 h-4 text-[#da7756] flex-shrink-0" />
+						<Check className="w-4 h-4 text-[var(--color-claude)] flex-shrink-0" />
 					) : (
-						<RefreshCw className="w-4 h-4 text-[#da7756] animate-spin flex-shrink-0" />
+						<RefreshCw className="w-4 h-4 text-[var(--color-claude)] animate-spin flex-shrink-0" />
 					)}
 					<div className="flex flex-col">
 						<span className="text-[12px] font-medium text-[var(--text-secondary)]">{text}</span>
@@ -1950,7 +1087,7 @@ function HandoffProgress({ phase }: { phase: HandoffPhase }) {
 					</div>
 				</div>
 
-				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#da7756]/20 to-[#da7756]/40" />
+				<div className="flex-1 h-px bg-gradient-to-l from-transparent via-[var(--color-claude)]/20 to-[var(--color-claude)]/40" />
 			</div>
 		</div>
 	);
@@ -1968,14 +1105,11 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 	// Group events into turns
 	const turns = useMemo(() => groupEventsIntoTurns(events), [events]);
 
-	// Focus state
-	const [focusedTurnIndex, setFocusedTurnIndex] = useState<number | null>(null);
-
 	// Auto-scroll state: follow when at bottom, pause when scrolled up
 	const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 	const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
-	// Track scroll position to determine if at bottom
+	// Track scroll position for auto-scroll
 	const handleScroll = useCallback(() => {
 		if (!containerRef.current) return;
 		const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
@@ -2001,67 +1135,6 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 			setShowScrollIndicator(false);
 		}
 	}, []);
-
-	// Keyboard navigation
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			// Only handle if no input is focused
-			if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-				return;
-			}
-
-			switch (e.key) {
-				case 'j':
-				case 'ArrowDown':
-					e.preventDefault();
-					setFocusedTurnIndex(prev => {
-						if (prev === null) return 0;
-						return Math.min(prev + 1, turns.length - 1);
-					});
-					break;
-
-				case 'k':
-				case 'ArrowUp':
-					e.preventDefault();
-					setFocusedTurnIndex(prev => {
-						if (prev === null) return turns.length - 1;
-						return Math.max(prev - 1, 0);
-					});
-					break;
-
-				case 'G':
-					e.preventDefault();
-					scrollToBottom();
-					setFocusedTurnIndex(turns.length - 1);
-					break;
-
-				case 'z':
-					e.preventDefault();
-					// Collapse all - reset focus
-					setFocusedTurnIndex(null);
-					break;
-
-				case 'Escape':
-					e.preventDefault();
-					setFocusedTurnIndex(null);
-					break;
-			}
-		};
-
-		window.addEventListener('keydown', handleKeyDown);
-		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [turns.length, scrollToBottom]);
-
-	// Scroll focused turn into view
-	useEffect(() => {
-		if (focusedTurnIndex !== null && containerRef.current) {
-			const turnElements = containerRef.current.querySelectorAll('[data-turn-index]');
-			const focusedElement = turnElements[focusedTurnIndex];
-			if (focusedElement) {
-				focusedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-			}
-		}
-	}, [focusedTurnIndex]);
 
 	// Empty state
 	if (events.length === 0) {
@@ -2094,7 +1167,7 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 				className="flex flex-col px-4 pt-4 pb-8 overflow-auto h-full"
 				onScroll={handleScroll}
 			>
-				{/* Load earlier history button */}
+				{/* Load earlier session history button */}
 				{pagination?.hasEarlier && onLoadEarlier && (
 					<div className="flex justify-center mb-4">
 						<button
@@ -2127,18 +1200,23 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 				)}
 
 				{turns.map((turn, idx) => (
-					<div key={turn.id} data-turn-index={idx}>
+					<div
+						key={turn.id}
+						data-turn-index={idx}
+					>
 						{turn.type === 'session_boundary' ? (
-							<SessionBoundary event={turn.boundaryEvent!} />
+							<SessionBoundary
+								boundaryType={(turn.boundaryEvent as any)?.boundary_type || (turn.boundaryEvent as any)?.boundaryType}
+								mode={(turn.boundaryEvent as any)?.mode}
+								timestamp={turn.boundaryEvent?.timestamp}
+							/>
 						) : turn.type === 'conversation_ended' ? (
-							<ConversationEnded event={turn.boundaryEvent!} />
+							<ConversationEnded timestamp={turn.boundaryEvent?.timestamp} />
 						) : (
 							<TurnBlock
 								turn={turn}
 								roleIcon={RoleIcon}
 								roleLabel={roleConfig.label}
-								isFocused={focusedTurnIndex === idx}
-								onFocus={() => setFocusedTurnIndex(idx)}
 							/>
 						)}
 					</div>
@@ -2159,10 +1237,10 @@ export function TranscriptViewer({ events, isConnected = false, role, activityIn
 			{showScrollIndicator && (
 				<button
 					onClick={scrollToBottom}
-					className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 
-						bg-[var(--surface-muted)] hover:bg-[var(--surface-accent)] 
-						text-[12px] font-medium text-[var(--text-secondary)] 
-						rounded-full shadow-lg border border-[var(--border-default)] 
+					className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2
+						bg-[var(--surface-muted)] hover:bg-[var(--surface-accent)]
+						text-[12px] font-medium text-[var(--text-secondary)]
+						rounded-full shadow-lg border border-[var(--border-default)]
 						transition-all duration-150 hover:shadow-xl"
 				>
 					<ArrowDown className="w-3.5 h-3.5" />

@@ -21,8 +21,7 @@ export function HeicViewer({ filePath }: HeicViewerProps) {
 	const [fitMode, setFitMode] = useState<'contain' | 'actual'>('contain');
 
 	const fileName = filePath.split('/').pop() || filePath;
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	const loadFile = useCallback(async () => {
 		setLoading(true);
@@ -186,7 +185,7 @@ export function HeicViewer({ filePath }: HeicViewerProps) {
 						onClick={handleFitToggle}
 						className="p-1.5 rounded transition-colors"
 						style={{
-							color: fitMode === 'contain' ? '#DA7756' : 'var(--text-tertiary)',
+							color: fitMode === 'contain' ? 'var(--color-claude)' : 'var(--text-tertiary)',
 							background: fitMode === 'contain' ? 'rgba(218, 119, 86, 0.1)' : 'transparent'
 						}}
 						title={fitMode === 'contain' ? 'Fit to window' : 'Actual size'}
@@ -210,7 +209,7 @@ export function HeicViewer({ filePath }: HeicViewerProps) {
 				</div>
 
 				<div className="flex items-center gap-2">
-					<span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+					<span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-primary)' }}>
 						HEIC
 					</span>
 					{/* Download */}

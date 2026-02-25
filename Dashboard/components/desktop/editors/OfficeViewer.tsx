@@ -24,8 +24,7 @@ const OFFICE_TYPES: Record<string, { icon: typeof FileText; name: string; color:
 export function OfficeViewer({ filePath }: OfficeViewerProps) {
 	const fileName = filePath.split('/').pop() || filePath;
 	const extension = fileName.split('.').pop()?.toLowerCase() || '';
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	const officeType = OFFICE_TYPES[extension] || { icon: FileText, name: 'Office Document', color: '#666' };
 	const Icon = officeType.icon;

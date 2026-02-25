@@ -185,57 +185,33 @@ if [[ ! -d "venv" ]]; then
 fi
 
 # Python dependencies
-SETUP_LOG="${INSTALL_DIR}/setup.log"
-echo "=== Claude OS Setup Log ===" > "$SETUP_LOG"
-echo "Date: $(date)" >> "$SETUP_LOG"
-echo "Python: $($PYTHON_CMD --version 2>&1)" >> "$SETUP_LOG"
-echo "Node: $(node --version 2>&1)" >> "$SETUP_LOG"
-echo "OS: $(sw_vers -productVersion 2>/dev/null || uname -r)" >> "$SETUP_LOG"
-echo "" >> "$SETUP_LOG"
-
 info "Installing Python dependencies..."
 source venv/bin/activate
 pip install --upgrade pip --quiet
-
-echo "--- pip install requirements.txt ---" >> "$SETUP_LOG"
-if pip install -r requirements.txt 2>>"$SETUP_LOG"; then
-    success "Python dependencies installed"
-else
-    warn "Some dependencies failed (see setup.log for details)"
-    echo "" >> "$SETUP_LOG"
-    echo "--- Fallback: core deps only ---" >> "$SETUP_LOG"
-    pip install \
-        fastapi uvicorn aiosqlite "pydantic>=2.0" python-dotenv \
-        sse-starlette PyYAML watchfiles Jinja2 croniter \
-        python-dateutil python-multipart \
-        fastmcp mcp claude-agent-sdk 2>>"$SETUP_LOG" || {
-        warn "Core dependency install also had errors (see setup.log)"
-    }
-    success "Core Python dependencies installed"
-fi
+pip install -r requirements.txt --quiet 2>/dev/null || {
+    warn "Some optional dependencies failed. Installing core deps..."
+    pip install --quiet \
+        fastapi uvicorn aiosqlite httpx aiohttp jinja2 \
+        python-multipart "pydantic>=2.0" python-dotenv \
+        sse-starlette PyYAML watchdog python-dateutil \
+        mcp fastmcp 2>/dev/null || true
+}
 
 # macOS-specific integrations (Calendar, Contacts, Mail)
-echo "" >> "$SETUP_LOG"
-echo "--- macOS integrations ---" >> "$SETUP_LOG"
-pip install \
+pip install --quiet \
     pyapple-mcp \
     pyobjc-framework-Contacts \
-    pyobjc-framework-EventKit 2>>"$SETUP_LOG" || {
-    warn "Some macOS integrations failed (Calendar/Contacts may not work)"
-}
+    pyobjc-framework-EventKit 2>/dev/null || true
+
+success "Python dependencies installed"
 
 # Dashboard dependencies
 if [[ -d "Dashboard" ]]; then
     info "Installing Dashboard dependencies..."
-    echo "" >> "$SETUP_LOG"
-    echo "--- npm install (Dashboard) ---" >> "$SETUP_LOG"
     cd Dashboard
-    if npm install 2>>"$SETUP_LOG"; then
-        success "Dashboard dependencies installed"
-    else
-        warn "Dashboard npm install had errors (see setup.log)"
-    fi
+    npm install --silent 2>/dev/null || npm install
     cd ..
+    success "Dashboard dependencies installed"
 fi
 
 # Config files

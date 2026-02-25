@@ -74,7 +74,7 @@ function formatTimestamp(ts: string): string {
 function getRoleColor(role: string): string {
   switch (role?.toLowerCase()) {
     case 'chief':
-      return 'bg-[#DA7756]';
+      return 'bg-[var(--color-claude)]';
     case 'builder':
     case 'system':
       return 'bg-cyan-500';
@@ -207,7 +207,7 @@ export function SessionInfoPanel({
           <div className="p-4">
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-[#DA7756]" />
+                <Loader2 className="w-6 h-6 animate-spin text-[var(--color-claude)]" />
               </div>
             ) : error ? (
               <div className="text-center py-8">

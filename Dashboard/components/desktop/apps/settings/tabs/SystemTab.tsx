@@ -59,7 +59,7 @@ export function SystemTab({
         <p className="text-sm">{error}</p>
         <button
           onClick={onRefresh}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-[#DA7756] rounded-md hover:bg-[#C15F3C] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-[var(--color-claude)] rounded-md hover:bg-[var(--color-primary-hover)] transition-colors"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Retry
         </button>
@@ -107,7 +107,7 @@ export function SystemTab({
           <div className="flex items-center gap-2 px-3 py-2.5">
             <Clock className="w-4 h-4 text-[#8E8E93]" />
             <span className="text-[13px] text-[#1D1D1F] dark:text-[#E5E5E5]">
-              Quiet Hours: <span className="text-[#DA7756] font-medium">{config.sms.quiet_hours.start} – {config.sms.quiet_hours.end}</span>
+              Quiet Hours: <span className="text-[var(--color-claude)] font-medium">{config.sms.quiet_hours.start} – {config.sms.quiet_hours.end}</span>
             </span>
           </div>
         )}

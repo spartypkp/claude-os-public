@@ -24,6 +24,8 @@ export interface WindowState {
 	appType?: CoreAppType;
 	/** Initial path for Finder windows (relative to Desktop/) */
 	initialPath?: string;
+	/** Window is playing close animation before removal */
+	closing?: boolean;
 }
 
 
@@ -112,6 +114,9 @@ interface WindowStore {
 	/** Quick Look file path (null = closed) */
 	quickLookPath: string | null;
 
+	/** Quick Look origin rect for animation (from the icon that triggered it) */
+	quickLookOrigin: { x: number; y: number; width: number; height: number } | null;
+
 	/** Context menu state (null = closed) */
 	contextMenu: ContextMenuState | null;
 
@@ -137,8 +142,11 @@ interface WindowStore {
 	/** Get app window by type (if already open) */
 	getAppWindow: (appType: CoreAppType) => WindowState | undefined;
 
-	/** Close a window */
+	/** Close a window (starts close animation) */
 	closeWindow: (id: string) => void;
+
+	/** Remove a window from state (called after close animation ends) */
+	removeWindow: (id: string) => void;
 
 	/** Bring window to front */
 	focusWindow: (id: string) => void;
@@ -181,13 +189,13 @@ interface WindowStore {
 	clearSelection: () => void;
 
 	/** Open Quick Look for a file */
-	openQuickLook: (path: string) => void;
+	openQuickLook: (path: string, origin?: { x: number; y: number; width: number; height: number }) => void;
 
 	/** Close Quick Look */
 	closeQuickLook: () => void;
 
 	/** Toggle Quick Look (open if closed, close if same file, switch if different) */
-	toggleQuickLook: (path: string) => void;
+	toggleQuickLook: (path: string, origin?: { x: number; y: number; width: number; height: number }) => void;
 
 	/** Get the focused window ID (front of stack) */
 	getFocusedWindowId: () => string | null;
@@ -256,6 +264,49 @@ interface WindowStore {
 const DEFAULT_WINDOW_WIDTH = 700;
 const DEFAULT_WINDOW_HEIGHT = 500;
 
+// Layout constants
+const MENUBAR_HEIGHT = 28;
+const DOCK_HEIGHT = 72;
+const DEFAULT_CLAUDE_PANEL_WIDTH = 440;
+const PANEL_WIDTH_KEY = 'claude-panel-width';
+
+/**
+ * Get the available desktop area (accounting for ClaudePanel, menubar, dock).
+ * Returns { maxX, maxY } representing the max usable right/bottom edges.
+ */
+function getDesktopBounds() {
+	if (typeof window === 'undefined') return { maxX: 1280, maxY: 900 };
+	const vw = window.innerWidth;
+	const vh = window.innerHeight;
+	// Read panel width from localStorage (same key as ClaudePanel)
+	let panelWidth = DEFAULT_CLAUDE_PANEL_WIDTH;
+	try {
+		const stored = localStorage.getItem(PANEL_WIDTH_KEY);
+		if (stored) {
+			const parsed = parseInt(stored, 10);
+			if (!isNaN(parsed) && parsed >= 320 && parsed <= 800) panelWidth = parsed;
+		}
+	} catch { /* noop */ }
+	return {
+		maxX: vw - panelWidth,
+		maxY: vh - DOCK_HEIGHT,
+	};
+}
+
+/**
+ * Clamp a window's position and size to fit within the available desktop area.
+ */
+function clampToDesktop(x: number, y: number, width: number, height: number) {
+	const { maxX, maxY } = getDesktopBounds();
+	// Clamp size first: window shouldn't exceed desktop bounds
+	const clampedWidth = Math.min(width, maxX - 20); // 20px margin
+	const clampedHeight = Math.min(height, maxY - MENUBAR_HEIGHT - 20);
+	// Clamp position: window must stay within bounds
+	const clampedX = Math.max(0, Math.min(x, maxX - Math.min(clampedWidth, 300)));
+	const clampedY = Math.max(MENUBAR_HEIGHT, Math.min(y, maxY - 200));
+	return { x: clampedX, y: clampedY, width: Math.max(300, clampedWidth), height: Math.max(200, clampedHeight) };
+}
+
 // Default widget configs
 const WIDGET_DEFAULTS: Record<'priorities' | 'calendar' | 'sessions', Omit<WidgetState, 'id'>> = {
 	priorities: {
@@ -300,6 +351,7 @@ export const useWindowStore = create<WindowStore>()(
 			menubarWidgets: new Set<'priorities' | 'calendar' | 'sessions'>(['priorities', 'calendar', 'sessions']), // All widgets visible by default
 			selectedIcons: [],
 			quickLookPath: null,
+			quickLookOrigin: null,
 			contextMenu: null,
 			renamingPath: null,
 			darkMode: false, // Light mode by default
@@ -320,10 +372,11 @@ export const useWindowStore = create<WindowStore>()(
 				const id = generateId();
 				const docType = getDocumentType(filePath);
 				const windowTitle = docType === 'code' ? `${title} — Code in Claude Code` : title;
-				// Cascade new windows
+				// Cascade new windows, clamped to desktop bounds
 				const existingCount = get().windows.length;
-				const x = 100 + (existingCount % 10) * 30;
-				const y = 100 + (existingCount % 10) * 30;
+				const rawX = 100 + (existingCount % 10) * 30;
+				const rawY = 100 + (existingCount % 10) * 30;
+				const { x, y, width, height } = clampToDesktop(rawX, rawY, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
 
 				const newWindow: WindowState = {
 					id,
@@ -331,8 +384,8 @@ export const useWindowStore = create<WindowStore>()(
 					title: windowTitle,
 					x,
 					y,
-					width: DEFAULT_WINDOW_WIDTH,
-					height: DEFAULT_WINDOW_HEIGHT,
+					width,
+					height,
 					minimized: false,
 				};
 
@@ -348,6 +401,14 @@ export const useWindowStore = create<WindowStore>()(
 				if (appType !== 'finder' || !initialPath) {
 					const existing = get().getAppWindow(appType);
 					if (existing) {
+						// Update initialPath if provided (e.g., contact name for contacts app)
+						if (initialPath) {
+							set((state) => ({
+								windows: state.windows.map(w =>
+									w.id === existing.id ? { ...w, initialPath } : w
+								),
+							}));
+						}
 						// Already open - unminimize if needed and focus
 						if (existing.minimized) {
 							get().unminimizeWindow(existing.id);
@@ -369,7 +430,7 @@ export const useWindowStore = create<WindowStore>()(
 					email: { width: 1000, height: 650, title: 'Claude Mail', x: 120, y: 70 },
 					messages: { width: 900, height: 600, title: 'Claude Messages', x: 130, y: 75 },
 					analytics: { width: 1000, height: 700, title: 'Observatory', x: 120, y: 60 },
-					projects: { width: 1100, height: 700, title: 'Projects', x: 80, y: 50 },
+					projects: { width: 1200, height: 750, title: 'Projects', x: 80, y: 50 },
 				};
 
 				const defaults = appDefaults[appType];
@@ -382,10 +443,13 @@ export const useWindowStore = create<WindowStore>()(
 					: 0;
 				const cascadeOffset = existingFinderCount * 30;
 
-				const x = (savedPosition?.x ?? defaults.x) + cascadeOffset;
-				const y = (savedPosition?.y ?? defaults.y) + cascadeOffset;
-				const width = savedPosition?.width ?? defaults.width;
-				const height = savedPosition?.height ?? defaults.height;
+				const rawX = (savedPosition?.x ?? defaults.x) + cascadeOffset;
+				const rawY = (savedPosition?.y ?? defaults.y) + cascadeOffset;
+				const rawWidth = savedPosition?.width ?? defaults.width;
+				const rawHeight = savedPosition?.height ?? defaults.height;
+
+				// Clamp to available desktop area (avoids clipping behind ClaudePanel)
+				const { x, y, width, height } = clampToDesktop(rawX, rawY, rawWidth, rawHeight);
 
 				// For Finder with path, use folder name as title
 				let title = defaults.title;
@@ -419,8 +483,17 @@ export const useWindowStore = create<WindowStore>()(
 
 			closeWindow: (id) => {
 				set((state) => ({
-					windows: state.windows.filter((w) => w.id !== id),
+					windows: state.windows.map((w) =>
+						w.id === id ? { ...w, closing: true } : w
+					),
+					// Remove from stack immediately so next window gets focus
 					windowStack: state.windowStack.filter((w) => w !== id),
+				}));
+			},
+
+			removeWindow: (id) => {
+				set((state) => ({
+					windows: state.windows.filter((w) => w.id !== id),
 				}));
 			},
 
@@ -530,20 +603,20 @@ export const useWindowStore = create<WindowStore>()(
 				set({ selectedIcons: [], quickLookPath: null });
 			},
 
-			openQuickLook: (path) => {
-				set({ quickLookPath: path });
+			openQuickLook: (path, origin) => {
+				set({ quickLookPath: path, quickLookOrigin: origin || null });
 			},
 
 			closeQuickLook: () => {
-				set({ quickLookPath: null });
+				set({ quickLookPath: null, quickLookOrigin: null });
 			},
 
-			toggleQuickLook: (path) => {
+			toggleQuickLook: (path, origin) => {
 				const current = get().quickLookPath;
 				if (current === path) {
-					set({ quickLookPath: null });
+					set({ quickLookPath: null, quickLookOrigin: null });
 				} else {
-					set({ quickLookPath: path });
+					set({ quickLookPath: path, quickLookOrigin: origin || null });
 				}
 			},
 
@@ -682,7 +755,8 @@ export const useWindowStore = create<WindowStore>()(
 				widgets: state.widgets,
 				menubarWidgets: state.menubarWidgets,
 				darkMode: state.darkMode,
-				windows: state.windows,
+				// Filter out closing windows so they don't persist mid-animation
+				windows: state.windows.filter((w) => !w.closing),
 				windowStack: state.windowStack,
 				appWindowPositions: state.appWindowPositions,
 			}),
@@ -717,10 +791,6 @@ export const useWindowStore = create<WindowStore>()(
 				if (!state) return;
 
 				try {
-					// Get viewport dimensions
-					const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-					const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
-
 					// Filter and validate windows
 					const validatedWindows = (state.windows || []).filter((win) => {
 						// Keep all Core App windows (they don't depend on files)
@@ -730,14 +800,8 @@ export const useWindowStore = create<WindowStore>()(
 						// (can't check file existence here without async)
 						return true;
 					}).map((win) => {
-						// Clamp positions to viewport
-						const x = Math.max(0, Math.min(win.x, viewportWidth - 300));
-						const y = Math.max(0, Math.min(win.y, viewportHeight - 200));
-
-						// Ensure reasonable size
-						const width = Math.max(300, Math.min(win.width, viewportWidth));
-						const height = Math.max(200, Math.min(win.height, viewportHeight));
-
+						// Clamp positions/sizes to available desktop area (accounts for ClaudePanel)
+						const { x, y, width, height } = clampToDesktop(win.x, win.y, win.width, win.height);
 						return { ...win, x, y, width, height };
 					});
 
@@ -770,6 +834,7 @@ export const useWidgets = () => useWindowStore((s) => s.widgets);
 export const useMenubarWidgets = () => useWindowStore((s) => s.menubarWidgets);
 export const useSelectedIcons = () => useWindowStore((s) => s.selectedIcons);
 export const useQuickLookPath = () => useWindowStore((s) => s.quickLookPath);
+export const useQuickLookOrigin = () => useWindowStore((s) => s.quickLookOrigin);
 export const useContextMenu = () => useWindowStore((s) => s.contextMenu);
 export const useRenamingPath = () => useWindowStore((s) => s.renamingPath);
 export const useDarkMode = () => useWindowStore((s) => s.darkMode);
@@ -780,6 +845,7 @@ export const useWindowActions = () => useWindowStore(
 		openWindow: s.openWindow,
 		openAppWindow: s.openAppWindow,
 		closeWindow: s.closeWindow,
+		removeWindow: s.removeWindow,
 		focusWindow: s.focusWindow,
 		moveWindow: s.moveWindow,
 		resizeWindow: s.resizeWindow,

@@ -1,9 +1,20 @@
 'use client';
 
-import { ChevronRight, ExternalLink, Loader2, X, Zap } from 'lucide-react';
+import {
+  ExternalLink,
+  Globe,
+  Loader2,
+  Search,
+  Terminal,
+  Workflow,
+  X,
+  Zap,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { getToolOneLiner, parseToolInput, parseToolResult } from './registry';
 import { getExpandedView } from './ExpandedViews';
 import { useOpenInDesktop, isViewableFile } from './ClickableRef';
+import { isErrorResult } from './shared';
 
 // File operations that should click-to-open (not expand)
 const FILE_OPERATION_TOOLS = ['Read', 'Write', 'Edit', 'read_file', 'write', 'edit'];
@@ -11,27 +22,28 @@ const SEARCH_TOOLS = ['Grep', 'Glob', 'grep', 'glob', 'codebase_search', 'file_s
 const CONTACT_TOOLS = ['contact', 'contact_search', 'contact_view', 'contact_update'];
 const CALENDAR_TOOLS = ['calendar', 'calendar_create', 'calendar_list', 'calendar_delete', 'local_calendar'];
 
-// Subagent tools that get the rich chip treatment
-const SUBAGENT_TOOLS = ['Task', 'TaskOutput', 'TaskStop'];
+/** Uniform agent color — all agents share this */
+export const AGENT_COLOR = 'var(--color-info)';
 
-/** Color map for subagent types — shared with claude-code expanded views */
-export const AGENT_COLORS: Record<string, string> = {
-  'Bash': 'var(--color-primary)',
-  'general-purpose': '#8b5cf6',
-  'Explore': 'var(--color-cyan)',
-  'Plan': '#f59e0b',
-  'web-research': 'var(--color-success)',
-  'test-runner': '#ef4444',
-  'error-investigate': '#ef4444',
-  'dependency-trace': '#06b6d4',
-  'codebase-map': '#3b82f6',
-  'context-find': '#06b6d4',
-  'recall': '#8b5cf6',
-  'file-organize': '#64748b',
-  'doc-update': '#64748b',
-  'memory-helper': '#f59e0b',
-  'contact-updater': '#06b6d4',
-  'meeting-prep': '#3b82f6',
+/** Icon map for subagent types */
+export const AGENT_ICONS: Record<string, LucideIcon> = {
+  'Bash': Terminal,
+  'general-purpose': Zap,
+  'Explore': Search,
+  'Plan': Workflow,
+  'web-research': Globe,
+};
+
+/** Agent category — determines badges and behavior */
+export type AgentCategory = 'background' | 'foreground' | 'system';
+export const AGENT_CATEGORIES: Record<string, AgentCategory> = {
+  // Background agents (no MCP)
+  'Explore': 'background',
+  'web-research': 'background',
+  // System built-ins
+  'general-purpose': 'system',
+  'Bash': 'system',
+  'Plan': 'system',
 };
 
 interface ToolChipProps {
@@ -43,6 +55,8 @@ interface ToolChipProps {
   resultContent?: string;
   isExpanded: boolean;
   onToggle: () => void;
+  /** Compact mode — smaller sizes for embedding in MiniTranscript */
+  compact?: boolean;
 }
 
 /**
@@ -63,12 +77,12 @@ export function ToolChip({
   resultContent,
   isExpanded,
   onToggle,
+  compact = false,
 }: ToolChipProps) {
   const { openFile, openInFinder, openContact, openCalendar } = useOpenInDesktop();
 
-  const isRunning = !resultContent;
-  const hasError = resultContent?.toLowerCase().includes('error') ||
-                   resultContent?.toLowerCase().includes('failed');
+  const isRunning = resultContent === undefined || resultContent === null;
+  const hasError = isErrorResult(resultContent);
 
   // Get smart one-liner from registry
   const { text: oneLiner, showToolName, chipLabel } = getToolOneLiner(formattedName, toolInput, resultContent);
@@ -86,7 +100,6 @@ export function ToolChip({
   const isSearchTool = SEARCH_TOOLS.includes(formattedName) || SEARCH_TOOLS.includes(toolName);
   const isContactTool = CONTACT_TOOLS.some(t => formattedName.includes(t) || toolName.includes(t));
   const isCalendarTool = CALENDAR_TOOLS.some(t => formattedName.includes(t) || toolName.includes(t));
-  const isSubagent = SUBAGENT_TOOLS.includes(formattedName);
 
   // Extract file path from input
   const filePath = parsedInput.filePath ||
@@ -143,7 +156,42 @@ export function ToolChip({
     </div>
   );
 
-  // Shared chip wrapper classes
+  // ─── Compact mode: smaller sizes, no expanded view, for MiniTranscript ─
+  if (compact) {
+    return (
+      <div className="my-0.5">
+        <button
+          onClick={handleMainClick}
+          className={`group inline-flex items-center gap-1 py-0.5 px-1.5 rounded text-left transition-all duration-150 hover:bg-[var(--surface-accent)] ${canClickToOpen ? 'cursor-pointer' : ''} ${hasError ? 'bg-[var(--color-error)]/5' : ''}`}
+          title={canClickToOpen ? `Open ${filePath}` : undefined}
+        >
+          <span
+            className="flex items-center justify-center w-3.5 h-3.5 rounded flex-shrink-0"
+            style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
+          >
+            {isRunning ? <Loader2 className="w-2 h-2 animate-spin" /> : <Icon className="w-2 h-2" />}
+          </span>
+          <span className="text-[10px] text-[var(--text-secondary)] truncate max-w-[280px] font-mono">
+            {showToolName && oneLiner ? (
+              <>
+                <span className="text-[var(--text-muted)] uppercase text-[9px] tracking-wide">{displayLabel}</span>
+                {': '}
+                {oneLiner}
+              </>
+            ) : (
+              oneLiner || formattedName
+            )}
+          </span>
+          {hasError && <X className="w-2 h-2 text-[var(--color-error)] flex-shrink-0" />}
+          {isFileOperation && !isRunning && (
+            <ExternalLink className="w-2 h-2 text-[var(--text-muted)] group-hover:text-[var(--color-claude)] flex-shrink-0" />
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Standard chip: icon + one-liner ───────────────────────────────────
   const chipClasses = `
     group inline-flex items-center gap-1.5 py-1 px-2 rounded-md text-left
     transition-all duration-150
@@ -151,54 +199,9 @@ export function ToolChip({
       ? 'bg-[var(--surface-accent)] ring-1 ring-[var(--border-default)]'
       : 'bg-[var(--surface-base)] hover:bg-[var(--surface-accent)]'
     }
-    ${hasError ? 'ring-1 ring-[var(--color-error)]/30' : ''}
+    ${hasError ? 'ring-1 ring-[var(--color-error)]/50 bg-[var(--color-error)]/5' : ''}
   `;
 
-  // ─── Subagent chip: agent-type pill + badges + description ──────────────
-  if (isSubagent) {
-    const agentType = toolInput?.subagent_type ? String(toolInput.subagent_type) : '';
-    const description = toolInput?.description ? String(toolInput.description) : '';
-    const model = toolInput?.model ? String(toolInput.model) : '';
-    const runInBg = Boolean(toolInput?.run_in_background);
-    const agentColor = AGENT_COLORS[agentType] || '#8b5cf6';
-
-    return (
-      <div className="my-1">
-        <button onClick={onToggle} className={chipClasses}>
-          <span
-            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${agentColor} 15%, transparent)`,
-              color: agentColor,
-            }}
-          >
-            {isRunning ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Zap className="w-2.5 h-2.5" />}
-            {agentType || 'Subagent'}
-          </span>
-          {model && (
-            <span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded flex-shrink-0">
-              {model}
-            </span>
-          )}
-          {runInBg && (
-            <span className="text-[9px] text-[var(--text-muted)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded flex-shrink-0">
-              bg
-            </span>
-          )}
-          {description && (
-            <span className="text-[11px] text-[var(--text-muted)] truncate max-w-[180px]">
-              {description}
-            </span>
-          )}
-          {hasError && <X className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />}
-          <ChevronRight className={`w-3 h-3 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
-        </button>
-        {expandedView}
-      </div>
-    );
-  }
-
-  // ─── Standard chip: icon + one-liner ───────────────────────────────────
   return (
     <div className="my-1">
       <button
@@ -212,7 +215,7 @@ export function ToolChip({
         >
           {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" />}
         </span>
-        <span className="text-[11px] text-[var(--text-secondary)] truncate max-w-[250px] font-mono">
+        <span className="text-[11px] text-[var(--text-secondary)] truncate max-w-[350px] font-mono">
           {showToolName && oneLiner ? (
             <>
               <span className="text-[var(--text-muted)] uppercase text-[10px] tracking-wide">{displayLabel}</span>
@@ -230,14 +233,11 @@ export function ToolChip({
             className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[var(--surface-muted)] rounded transition-opacity"
             title={isSearchTool ? 'Show in Finder' : isContactTool ? 'Open in Contacts' : isCalendarTool ? 'Open in Calendar' : 'Open'}
           >
-            <ExternalLink className="w-3 h-3 text-[var(--text-muted)] hover:text-[#da7756]" />
+            <ExternalLink className="w-3 h-3 text-[var(--text-muted)] hover:text-[var(--color-claude)]" />
           </span>
         )}
         {isFileOperation && !isRunning && (
-          <ExternalLink className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[#da7756] flex-shrink-0" />
-        )}
-        {!isFileOperation && (
-          <ChevronRight className={`w-3 h-3 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
+          <ExternalLink className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--color-claude)] flex-shrink-0" />
         )}
       </button>
       {expandedView}

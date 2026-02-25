@@ -127,7 +127,7 @@ class AppleMailAdapter(EmailAdapter):
         
         try:
             conn = sqlite3.connect(
-                f"file:{self._db_path}?mode=ro&immutable=1",
+                f"file:{self._db_path}?mode=ro",
                 uri=True,
             )
             conn.row_factory = sqlite3.Row

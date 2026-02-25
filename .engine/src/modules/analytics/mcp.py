@@ -5,6 +5,7 @@ Operations:
     - tools: Tool call frequency, error rates
     - sessions: Session distribution and work rhythm
     - resets: Reset frequency and context patterns
+    - subagents: Task subagent usage breakdown by agent type
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ def analytics(
     """Operational analytics for Claude OS.
 
     Args:
-        operation: Operation - 'specialists', 'tools', 'sessions', 'resets', 'files', 'insights'
+        operation: Operation - 'specialists', 'tools', 'sessions', 'resets', 'files', 'insights', 'subagents'
         days: Number of days to look back (default 30)
         role: Filter by role (for specialists operation)
         tool_name: Filter by tool name (for tools operation)
@@ -50,6 +51,8 @@ def analytics(
         analytics("resets", days=30)
         analytics("files", days=7)
         analytics("insights")
+        analytics("subagents")
+        analytics("subagents", days=7)
     """
     try:
         if operation == "specialists":
@@ -64,8 +67,10 @@ def analytics(
             return _files(days)
         elif operation == "insights":
             return _insights(days)
+        elif operation == "subagents":
+            return _subagents(days)
         else:
-            return {"success": False, "error": f"Unknown operation: {operation}. Use: specialists, tools, sessions, resets, files, insights"}
+            return {"success": False, "error": f"Unknown operation: {operation}. Use: specialists, tools, sessions, resets, files, insights, subagents"}
     except Exception as e:
         logger.error(f"analytics({operation}) failed: {e}")
         return {"success": False, "error": str(e)}
@@ -370,6 +375,52 @@ def _files(days: int) -> Dict[str, Any]:
         "days": days,
         "top_read": [{"file": r["file_path"], "count": r["count"]} for r in top_read],
         "top_written": [{"file": r["file_path"], "count": r["count"]} for r in top_written],
+    }
+
+
+def _subagents(days: int) -> Dict[str, Any]:
+    """Subagent (Task tool) usage breakdown by agent type."""
+    with get_db() as conn:
+        date_filter = f"-{days}"
+
+        rows = conn.execute("""
+            SELECT
+                detail as agent_type,
+                COUNT(*) as calls,
+                COUNT(DISTINCT session_id) as sessions,
+                MIN(called_at) as first_seen,
+                MAX(called_at) as last_seen
+            FROM tool_calls
+            WHERE tool_name = 'Task'
+              AND detail IS NOT NULL
+              AND called_at >= datetime('now', ? || ' days')
+            GROUP BY detail
+            ORDER BY calls DESC
+        """, (date_filter,)).fetchall()
+
+        total_calls = sum(r["calls"] for r in rows)
+
+        # Built-in agents (not from .claude/agents/)
+        builtin = {"Explore", "Bash", "Plan", "general-purpose", "claude-code-guide", "statusline-setup"}
+
+        agents = []
+        for r in rows:
+            agents.append({
+                "agent": r["agent_type"],
+                "calls": r["calls"],
+                "sessions": r["sessions"],
+                "pct": round(r["calls"] / total_calls * 100, 1) if total_calls > 0 else 0,
+                "first_seen": r["first_seen"],
+                "last_seen": r["last_seen"],
+                "kind": "built-in" if r["agent_type"] in builtin else "custom",
+            })
+
+    return {
+        "success": True,
+        "days": days,
+        "total_calls": total_calls,
+        "agent_count": len(agents),
+        "agents": agents,
     }
 
 

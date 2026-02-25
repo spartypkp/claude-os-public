@@ -1,23 +1,20 @@
 'use client';
 
-import { listTrash } from '@/lib/api';
+import { listTrash, moveToTrash } from '@/lib/api';
 import { useFileEvents } from '@/hooks/useFileEvents';
 import { useWindowStore } from '@/store/windowStore';
-import { useDroppable } from '@dnd-kit/core';
 import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 interface TrashIconProps {
 	onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export function TrashIcon({ onContextMenu }: TrashIconProps) {
-	const { isOver, setNodeRef } = useDroppable({
-		id: 'trash-drop-zone',
-	});
-
 	const [trashCount, setTrashCount] = useState(0);
-	const { darkMode, openAppWindow } = useWindowStore();
+	const [isDragOver, setIsDragOver] = useState(false);
+	const { openAppWindow } = useWindowStore();
 
 	// Load trash count
 	const loadTrashCount = useCallback(async () => {
@@ -34,8 +31,7 @@ export function TrashIcon({ onContextMenu }: TrashIconProps) {
 		loadTrashCount();
 	}, [loadTrashCount]);
 
-	// Jan 2026: Use SSE file events instead of polling
-	// Refresh trash count when files are deleted (moved to trash)
+	// Use SSE file events for trash count refresh
 	useFileEvents({
 		onDeleted: loadTrashCount,
 	});
@@ -50,39 +46,92 @@ export function TrashIcon({ onContextMenu }: TrashIconProps) {
 	}, [loadTrashCount]);
 
 	const handleDoubleClick = useCallback(() => {
-		// Open Finder to Trash view (or a trash window)
 		openAppWindow('finder');
 	}, [openAppWindow]);
+
+	// Native HTML5 drag/drop handlers
+	const handleDragOver = useCallback((e: React.DragEvent) => {
+		if (
+			e.dataTransfer.types.includes('application/claude-file') ||
+			e.dataTransfer.types.includes('application/claude-files') ||
+			e.dataTransfer.types.includes('text/plain')
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			e.dataTransfer.dropEffect = 'move';
+			setIsDragOver(true);
+		}
+	}, []);
+
+	const handleDragLeave = useCallback(() => {
+		setIsDragOver(false);
+	}, []);
+
+	const handleDrop = useCallback(async (e: React.DragEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsDragOver(false);
+
+		// Multi-file trash
+		const multiPaths = e.dataTransfer.getData('application/claude-files');
+		if (multiPaths) {
+			try {
+				const paths: string[] = JSON.parse(multiPaths);
+				for (const p of paths) {
+					await moveToTrash(p);
+				}
+				window.dispatchEvent(new CustomEvent('trash-updated'));
+				toast.success(paths.length === 1 ? 'Moved to Trash' : `Moved ${paths.length} items to Trash`);
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to move to trash');
+			}
+			return;
+		}
+
+		// Single file trash
+		const sourcePath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+		if (sourcePath) {
+			try {
+				await moveToTrash(sourcePath);
+				window.dispatchEvent(new CustomEvent('trash-updated'));
+				toast.success('Moved to Trash');
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Failed to move to trash');
+			}
+		}
+	}, []);
 
 	const isEmpty = trashCount === 0;
 
 	return (
 		<div
-			ref={setNodeRef}
 			className={`
 				absolute bottom-4 right-4 z-50
 				flex flex-col items-center justify-center
 				w-[80px] h-[90px] p-2 rounded-lg cursor-pointer
 				transition-all duration-200
-				${isOver
+				${isDragOver
 					? 'bg-red-500/30 ring-2 ring-red-500 scale-110'
 					: 'hover:bg-gray-200/30 dark:hover:bg-white/5'
 				}
 			`}
 			onDoubleClick={handleDoubleClick}
 			onContextMenu={onContextMenu}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
 		>
 			{/* Trash Icon */}
 			<div className={`
 				w-14 h-14 flex items-center justify-center
 				transition-all duration-200
-				${isOver ? 'scale-110' : ''}
+				${isDragOver ? 'scale-110' : ''}
 			`}>
 				<Trash2
 					className={`
 						w-12 h-12 drop-shadow-lg
 						transition-colors duration-200
-						${isOver
+						${isDragOver
 							? 'text-red-500'
 							: isEmpty
 								? 'text-gray-400 dark:text-gray-500'
@@ -96,7 +145,7 @@ export function TrashIcon({ onContextMenu }: TrashIconProps) {
 
 			{/* Label */}
 			<span
-				className={`mt-1.5 text-[11px] text-center leading-tight font-medium ${isOver ? 'text-red-400' : 'text-black'}`}
+				className={`mt-1.5 text-[11px] text-center leading-tight font-medium ${isDragOver ? 'text-red-400' : 'text-black'}`}
 			>
 				Trash{trashCount > 0 ? ` (${trashCount})` : ''}
 			</span>
@@ -105,4 +154,3 @@ export function TrashIcon({ onContextMenu }: TrashIconProps) {
 }
 
 export default TrashIcon;
-

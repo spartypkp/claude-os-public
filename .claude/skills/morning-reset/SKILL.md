@@ -15,16 +15,16 @@ description: Daily reset - archive yesterday, consolidate memory, prepare mornin
 
 Without memory consolidation, you are a stranger every day.
 
-The user's executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity. Check IDENTITY.md for any cognitive patterns (ADHD, etc.) that shape how to structure the morning brief.
+The user's executive function — remembering what matters, tracking open loops, detecting patterns — is externalized into this system. When you wake up each morning, you see TODAY.md and MEMORY.md. Those files ARE the user's continuity.
 
 If those files are wrong, the system fails.
 
-The morning brief gets the user working in under 2 minutes. It serves their different temporal selves:
+The morning brief gets the user working in under 2 minutes. The brief serves a parliament:
 
-- **Morning Self** wants minimum decisions, one screen, "just tell me what to do"
-- **Evening Self** wants to look back and see they worked on what mattered
-- **Future Self** wants every morning to have prepared them
-- **Engaged Self** wants Claude opinionated, not asking "what would you like?"
+- **Morning-self** wants minimum decisions, one screen, "just tell me what to do"
+- **Evening-self** wants to look back and see they worked on what mattered
+- **Interview-Day-self** wants every morning to have prepared them
+- **System-Builder-self** wants Claude opinionated, not asking "what would you like?"
 
 This is the difference between being **a partner who learns** vs **a tool that forgets**.
 
@@ -91,58 +91,143 @@ team("spawn",
 
 ### Phase 2.5: Email Triage Sweep
 
-Check the email triage queue before writing the brief:
+**Read the morning brief draft first.** The file at `.engine/data/morning-brief-draft.md` has been accumulating content overnight as the email pipeline classified emails. It has two pre-assembled sections:
+- **Triage** — action_needed and heads_up emails with summaries and suggested actions
+- **Digests** — extracted newsletter content (AI News, Bloomberg, etc.)
 
+This is your starting point. The draft was built incrementally — no need to reconstruct everything from scratch.
+
+**Then verify against live data:**
 ```python
 email("triage", limit=20)
 ```
 
-Process unhandled items: action_needed items become brief bullets or priorities, heads_up items get mentioned in the brief, fyi/noise get marked handled. Use `email("handle", message_id=..., account=...)` to clear processed items. This ensures the morning brief reflects overnight email activity.
+Cross-check the draft against the triage queue. Handle items as you go: action_needed items become brief bullets or priorities, heads_up items get mentioned in the brief, fyi/noise get marked handled. Use `email("handle", message_id=..., account=...)` to clear processed items.
 
-### Phase 3: Prepare Morning Brief
+**Check for newsletter digests:**
+```python
+email("digests", hours=18)
+```
 
-Read context:
+The draft already has these rendered, but digests MCP gives you the raw structured data if you need it.
+
+### Phase 3: Build the Daily Schedule
+
+This is the core upgrade. Chief doesn't just set priorities — Chief builds an opinionated, time-blocked schedule and creates real calendar events.
+
+**Read context:**
 - `Desktop/memory-audit-YYYY-MM-DD.md` (Curator's summary of changes)
 - `Desktop/MEMORY.md` (updated by Curator)
 - `Desktop/TODAY.md` (context and open loops populated by Curator)
-- Calendar (today's events)
+- Calendar (today's existing events — interviews, calls, meetings)
 - Priorities (today's priorities)
 - Email triage results (from Phase 2.5)
+
+**Step 1: Identify fixed anchors.**
+Check calendar for interviews, calls, meetings. These are immovable — schedule around them.
+
+For any event with a named attendee (interview, HM call, networking), run entity-search
+to get full context before writing the brief. Inline results feed directly into the
+Active Threads section and any meeting-specific prep notes.
+
+**Step 2: Determine today's work.**
+From priorities, open loops, and active threads — what are the 3-5 things that should happen today? Be opinionated. Not everything in Open Loops is today's work. Pick what matters.
+
+**Step 3: Build time blocks.**
+
+Scheduling constraints (read from IDENTITY.md or MEMORY.md for the user's specific preferences):
+- **Core productive hours** are defined in MEMORY.md. Schedule within this window.
+- **Peak focus window** is typically morning. Place the hardest, most intense work here.
+- **Lighter intensity** for afternoons. Research, review, lighter prep.
+- **60 minutes max** per block. Hard cuts between blocks.
+- **Interleave task types.** Never stack two blocks of the same type back-to-back. Alternate: code → research → applications → drill. Mixing intensity is also good.
+- **Morning stays open** until productive hours begin. Don't schedule work blocks before the user's typical start time.
+- **Evening only if dynamically needed** (event prep, deadline). Not by default.
+
+Scheduling algorithm:
+1. Place fixed anchors (interviews, calls)
+2. Place the hardest/most important task in the 10-11 AM slot (peak energy, fresh start)
+3. Interleave remaining tasks by type and intensity through 5 PM
+4. If interview prep is active, thread daily non-negotiables from TRAINING-PLAN (Feynman 20min, Anki 15min, Speedrun 20min) — these can be shorter blocks between longer ones
+5. Leave the last block (4-5 PM) lighter or as overflow/dynamic time
+
+**Step 4: Create calendar events.**
+Use `calendar("create", ...)` for each time block. Clean, simple naming — "Application Sprint", "Error Handling Drill", "Technical Reading". No brackets or category prefixes.
+
+```python
+calendar("create", title="Application Sprint",
+         start_time="2026-02-23T10:00:00",
+         end_time="2026-02-23T11:00:00")
+```
+
+Create all events before writing the brief. The calendar auto-injects into TODAY.md's schedule section, so the user sees it there and in the Calendar app.
+
+---
+
+### Phase 4: Write Morning Brief
+
+**The morning brief draft at `.engine/data/morning-brief-draft.md` has been accumulating content overnight.** Read it first. Your job is editorial, not assembly:
+
+- **Triage section** is pre-built — you already processed it in Phase 2.5. Pull highlights into the brief.
+- **Digests section** has newsletter extracts — pull anything worth mentioning (top headlines, market moves, relevant AI news).
+- **Add what only you can:** BLUF, schedule, priorities, opinionated suggestion.
+- **Remove** anything stale or already handled.
+
+If the draft is empty or doesn't exist, fall back to `email("triage")` and `email("digests")` directly.
 
 Write brief to `Desktop/morning-brief.md`:
 
 **BLUF first.** The single most critical thing today, in 1-2 sentences. Not "good morning," not context-setting — the thing that matters.
 
-**Then 3-4 sections max:**
-- Attack Strategy (3 priorities max, each with first action)
-- Schedule (only events needing prep, skip routine)
-- Overnight (outcomes only, 2-3 bullets)
-- Active Threads (what's waiting, who you're waiting on)
+**Then sections:**
+- **Schedule** — The time-blocked plan. Show the grid with times + task names. This is the centerpiece. Brief rationale for the ordering (why X is in peak hours, why Y is afternoon).
+- **Active Threads** (what's waiting, who you're waiting on)
+- **News & Intel** (from newsletter digests — top headlines, anything worth knowing. Only include if there were digests overnight.)
+- **Overnight** (outcomes only, 2-3 bullets — only if notable)
 
 **End with ONE opinionated suggestion.** Not "what would you like?" but "I'd start with X. Go?"
 
+The schedule is a suggestion. The user can react ("swap X and Y", "drop the 2pm block", "add Z"). When they do, Chief updates the calendar events immediately via `calendar("update", ...)` or `calendar("delete", ...)` + `calendar("create", ...)`.
+
 **Quality checks before proceeding:**
 - [ ] BLUF is first — most critical thing in opening sentence
-- [ ] Fits on one screen (no scrolling)
+- [ ] Schedule has concrete time blocks with clean names
+- [ ] Hardest work is in 10-2 peak hours
+- [ ] Task types are interleaved (not two coding blocks back-to-back)
+- [ ] Calendar events created for every block
 - [ ] Hard thing is surfaced, not buried (parliament test)
+- [ ] Fits on one screen (no scrolling)
 - [ ] Ends with ONE action, not options
-- [ ] 60 seconds to read
 
 ---
 
-### Phase 5: Deliver Brief
+### Phase 5: Deliver Brief & Clear Draft
 
-Send `Desktop/morning-brief.md` to Telegram when the user is likely awake (after 8 AM).
+Send `Desktop/morning-brief.md` to Telegram when the user is likely awake (check their typical wake time in MEMORY.md).
 
-Use the email MCP tool to draft and send:
 ```python
-# Read brief content
-with open('Desktop/morning-brief.md') as f:
-    brief_content = f.read()
-
-# Send via Telegram (implementation depends on available tools)
-# Use appropriate messaging tool to deliver to the user
+telegram("send", text=brief_content)
 ```
+
+**After the brief is sent, clear the morning brief draft** so it starts fresh for the next day:
+
+```bash
+rm -f .engine/data/morning-brief-draft.md
+```
+
+The draft will be recreated automatically when the next email gets classified. Don't clear it before the brief is written — that's the whole point of the draft existing.
+
+---
+
+### Mid-Day Re-Shuffling
+
+The schedule isn't set in stone. Chief proactively re-shuffles when:
+- The user finishes something early
+- A new interview or call gets scheduled
+- The user overrides a block ("I'm not doing X, let's do Y instead")
+- Something urgent comes in
+
+When re-shuffling: update calendar events, mention the change briefly. Don't re-write the whole brief — just adjust the calendar and tell the user what moved.
 
 ---
 
@@ -176,7 +261,7 @@ If system was offline for multiple days:
 
 **Don't manufacture memories.** If you don't know, you don't know. Gaps are fine.
 
-**Self vs Parliament.** Surface the hard thing, even if Morning Self doesn't love it. Evening Self and Future Self need honesty more than Morning Self needs comfort.
+**Morning-self vs Parliament.** Surface the hard thing, even if they don't love it. Evening-self and Future-self need honesty more than Morning-self needs comfort.
 
 ---
 
@@ -187,9 +272,11 @@ If system was offline for multiple days:
 - [ ] Curator's memory-audit summary reviewed
 - [ ] MEMORY.md reflects current reality (updated by Curator)
 - [ ] TODAY.md has context and open loops (populated by Curator)
-- [ ] Morning brief written (BLUF first, one opinionated suggestion)
+- [ ] Daily schedule built — time blocks with interleaved task types, peak work in 10-2
+- [ ] Calendar events created for every time block
+- [ ] Morning brief written (BLUF first, schedule grid, one opinionated suggestion)
 - [ ] Brief delivered to Telegram
-- [ ] Git committed (TODAY.md, MEMORY.md, memory-audit, logs/)
+- [ ] Git committed (TODAY.md, MEMORY.md, memory-audit)
 - [ ] <30 minutes total
 
 ---

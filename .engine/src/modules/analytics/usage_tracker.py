@@ -157,17 +157,12 @@ class UsageTracker:
             # Wait for Claude to start
             await asyncio.sleep(4)
 
-            # Send /usage command - use -l flag to send literally (avoids autocomplete)
+            # Send /usage command + Enter atomically (single tmux invocation)
             subprocess.run(
-                ['tmux', 'send-keys', '-t', f'life:{window_name}', '-l', '/usage'],
-                check=True,
-                timeout=5
-            )
-
-            # Send Enter to execute
-            await asyncio.sleep(0.5)
-            subprocess.run(
-                ['tmux', 'send-keys', '-t', f'life:{window_name}', 'Enter'],
+                ['tmux',
+                 'send-keys', '-t', f'life:{window_name}', '-l', '/usage',
+                 ';',
+                 'send-keys', '-t', f'life:{window_name}', 'Enter'],
                 check=True,
                 timeout=5
             )

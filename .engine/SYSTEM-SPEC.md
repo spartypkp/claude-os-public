@@ -40,8 +40,8 @@ This is the **automation layer** that makes the life management system work invi
 │   │   ▼                 ▼                 ▼                         │   │
 │   │ ┌─────────┐  ┌─────────────┐  ┌─────────────┐                  │   │
 │   │ │  Apps   │  │   Custom    │  │ Background  │                  │   │
-│   │ │contacts │  │  job_search │  │   Loops     │                  │   │
-│   │ │priority │  │             │  │watcher/exec │                  │   │
+│   │ │contacts │  │   custom    │  │   Loops     │                  │   │
+│   │ │priority │  │    apps     │  │watcher/exec │                  │   │
 │   │ └─────────┘  └─────────────┘  └─────────────┘                  │   │
 │   │                     │                                            │   │
 │   │          ┌──────────┼──────────┐                                │   │
@@ -80,9 +80,7 @@ This is the **automation layer** that makes the life management system work invi
 │   │   └── priorities/       # Priority management app (same structure)
 │   │
 │   ├── custom/               # CUSTOM APPLICATIONS
-│   │   └── job_search/       # Job search app
-│   │       ├── __init__.py   # JobSearchApp(AppPlugin)
-│   │       └── tools.py      # MCP tools (mock, dsa, leetcode)
+│   │   └── (your apps)       # Domain-specific apps built on AppPlugin
 │   │
 │   ├── api/                  # Legacy API routes (being migrated to apps/)
 │   ├── life_mcp/             # MCP server → see life_mcp/SYSTEM-SPEC.md
@@ -158,7 +156,6 @@ Custom Apps only load if matching `Desktop/*/APP-SPEC.md` exists.
 | **contacts** | Core | `apps/contacts/` | HTTP API, MCP tool, service |
 | **priorities** | Core | `apps/priorities/` | HTTP API, MCP tool, service |
 | **settings** | Core | `apps/settings/` | HTTP API (system config, model config) |
-| **job-search** | Custom | `custom/job_search/` | MCP tools only |
 
 ---
 
@@ -269,14 +266,14 @@ Claude's primary interface. Two servers available:
 
 | Server | Purpose |
 |--------|---------|
-| `life` | Workers, sessions, contacts, priorities, timers, job search tools |
+| `life` | Workers, sessions, contacts, priorities, timers, custom app tools |
 | `apple` | Calendar, Messages, Mail (pyapple-mcp) |
 
 The MCP server (`life_mcp/server.py`) composes tools from:
 - `tools/core.py` — Session/worker management
 - `tools/life.py` — Contact, priority, timer, log, remind
 - `tools/system.py` — Service management, night mode
-- `custom/job_search/tools.py` — Mock, DSA, LeetCode tracking
+- `custom/*/tools.py` — Custom application MCP tools
 
 See `src/life_mcp/SYSTEM-SPEC.md` for tool details.
 
@@ -680,7 +677,7 @@ See `Workspace/specs/app-architecture.md` for detailed patterns.
 ### Architecture Changes (2026-01-06)
 - **App Plugin Architecture** - Core, AppPlugin, AppManifest classes added
 - **apps/ directory** - Core applications moved here (contacts, priorities)
-- **custom/ directory** - Custom applications (job_search)
+- **custom/ directory** - Custom applications (domain-specific)
 - **Auto-discovery** - `core/loader.py` discovers and loads all apps
 
 ### Settings & Model Configuration (2026-01-06)

@@ -478,8 +478,8 @@ async def file_analytics(days: int = 30, limit: int = 30):
                 path = row["file_path"]
                 # Extract directory: keep first 2 meaningful segments after repo root
                 parts = path.split('/')
-                # Find meaningful directory (skip base repo path segments)
-                meaningful = [p for p in parts if p and p not in ('Users', 'claude-os')]
+                # Find meaningful directory (skip $HOME/claude-os/)
+                meaningful = [p for p in parts if p and p not in ('Users', 's', 'claude-os')]
                 dir_key = '/'.join(meaningful[:2]) if len(meaningful) >= 2 else (meaningful[0] if meaningful else 'root')
                 if row["tool_name"] == 'Read':
                     dir_reads[dir_key] += 1

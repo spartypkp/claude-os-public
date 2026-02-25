@@ -47,7 +47,7 @@ def day(
         Object with success status and operation-specific data
 
     Examples:
-        day("log", description="Morning check-in with Will")
+        day("log", description="Morning check-in with user")
         day("log", description="Completed API refactor, 3 endpoints updated")
         day("priority", content="Finish MCP consolidation", level="critical")
         day("complete", id="abc12345")

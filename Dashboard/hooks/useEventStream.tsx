@@ -21,7 +21,7 @@
 
 import { eventToQueryKeys } from '@/lib/queryClient';
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { API_BASE } from '@/lib/api';
 
@@ -57,6 +57,7 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const reconnectAttempts = useRef(0);
+	const connectedRef = useRef(false);
 	const isVisibleRef = useRef(true);
 
 	const connect = () => {
@@ -72,12 +73,21 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 		eventSourceRef.current = eventSource;
 
 		eventSource.onopen = () => {
+			const wasDisconnected = !connectedRef.current;
 			setConnected(true);
+			connectedRef.current = true;
 			reconnectAttempts.current = 0;
+
+			// If reconnecting after a disconnect, invalidate all queries
+			// (backend is back, data may be stale)
+			if (wasDisconnected) {
+				queryClient.invalidateQueries();
+			}
 		};
 
 		eventSource.onerror = () => {
 			setConnected(false);
+			connectedRef.current = false;
 			eventSource.close();
 
 			// Exponential backoff reconnect
@@ -119,7 +129,7 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 			'mission.created', 'mission.updated', 'mission.deleted', 'mission.started', 'mission.completed',
 			'file.created', 'file.modified', 'file.deleted', 'file.moved',
 			'email.sent', 'email.queued', 'email.cancelled', 'email.read',
-			'email.flagged', 'email.deleted', 'email.triaged',
+			'email.flagged', 'email.deleted', 'email.triaged', 'email.classified',
 			'calendar.created', 'calendar.updated', 'calendar.deleted',
 			'contact.created', 'contact.updated', 'contact.deleted',
 			'message.sent', 'message.received',
@@ -194,8 +204,10 @@ export function EventStreamProvider({ children }: EventStreamProviderProps) {
 		};
 	}, []);
 
+	const value = useMemo(() => ({ connected, lastEvent, eventCount, reconnect }), [connected, lastEvent, eventCount]);
+
 	return (
-		<EventStreamContext.Provider value={{ connected, lastEvent, eventCount, reconnect }}>
+		<EventStreamContext.Provider value={value}>
 			{children}
 		</EventStreamContext.Provider>
 	);

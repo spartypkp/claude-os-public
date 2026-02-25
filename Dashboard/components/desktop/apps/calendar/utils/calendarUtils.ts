@@ -84,14 +84,14 @@ export const EVENT_COLORS: Record<string, { bg: string; border: string; text: st
 
 // Calendar color palette using CSS-variable-compatible classes
 export const CALENDAR_COLOR_PALETTE: CalendarColor[] = [
-  { name: 'blue', bg: 'bg-[#3b82f6]', text: 'text-white', dot: 'bg-[#3b82f6]' },
+  { name: 'blue', bg: 'bg-[var(--color-primary)]', text: 'text-white', dot: 'bg-[var(--color-primary)]' },
   { name: 'green', bg: 'bg-[#10b981]', text: 'text-white', dot: 'bg-[#10b981]' },
   { name: 'orange', bg: 'bg-[#f97316]', text: 'text-white', dot: 'bg-[#f97316]' },
-  { name: 'purple', bg: 'bg-[#8b5cf6]', text: 'text-white', dot: 'bg-[#8b5cf6]' },
-  { name: 'red', bg: 'bg-[#ef4444]', text: 'text-white', dot: 'bg-[#ef4444]' },
+  { name: 'purple', bg: 'bg-[var(--color-info)]', text: 'text-white', dot: 'bg-[var(--color-info)]' },
+  { name: 'red', bg: 'bg-[var(--color-error)]', text: 'text-white', dot: 'bg-[var(--color-error)]' },
   { name: 'cyan', bg: 'bg-[#06b6d4]', text: 'text-white', dot: 'bg-[#06b6d4]' },
   { name: 'pink', bg: 'bg-[#ec4899]', text: 'text-white', dot: 'bg-[#ec4899]' },
-  { name: 'yellow', bg: 'bg-[#f59e0b]', text: 'text-black', dot: 'bg-[#f59e0b]' },
+  { name: 'yellow', bg: 'bg-[var(--color-warning)]', text: 'text-black', dot: 'bg-[var(--color-warning)]' },
   { name: 'teal', bg: 'bg-[#14b8a6]', text: 'text-white', dot: 'bg-[#14b8a6]' },
   { name: 'indigo', bg: 'bg-[#6366f1]', text: 'text-white', dot: 'bg-[#6366f1]' },
 ];

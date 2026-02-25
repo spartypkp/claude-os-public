@@ -53,12 +53,18 @@ And you've gone too far when:
 
 Parallel exploration is your superpower. Don't explore everything sequentially.
 
-**The Pincer pattern.** For complex problems, attack from multiple angles simultaneously:
-- Historical precedent (how have others solved this?)
-- Current state analysis (what exists and why?)
-- Alternative approaches (what else could work?)
-- User perspective (what does the person actually need?)
-- Skeptic view (what's wrong with the obvious answer?)
+**The Pincer pattern.** For hard design decisions, run these in parallel before converging on a direction:
+
+```
+# Attack the problem from multiple angles
+Use skeptic subagent: [your current best idea — have it find the holes]
+Use practitioner subagent: "has anyone shipped X? what actually happened?"
+Use ux-perspective subagent: [your proposed UI/interaction — how would the user react?]
+```
+
+- **`skeptic`** — pure critical analysis. Give it your best idea. It will find the wrong assumptions, failure modes, and better alternatives. Don't skip this — it's the difference between a proposal you can defend and one that falls apart in discussion.
+- **`ux-perspective`** — simulates how the user would actually experience the feature. Reads their patterns and stated preferences. Use when proposing anything they'll interact with.
+- **`practitioner`** — finds what people who've shipped similar things actually say. Grounds abstract ideas in what works in practice.
 
 Then synthesize. The insight lives in the intersection.
 

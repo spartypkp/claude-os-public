@@ -50,6 +50,13 @@ export interface TranscriptEvent {
   message?: string;
   error?: string;
 
+  // For tool_result events from Task tool
+  agentId?: string;
+
+  // For queued messages (sent while Claude was mid-turn)
+  queued?: boolean;
+  replaces_queued?: boolean;
+
   // For session_boundary events
   session_id?: string;
   role?: string;
@@ -143,6 +150,8 @@ interface ConversationCache {
 interface UseConversationOptions {
   includeThinking?: boolean;
   hours?: number | null;
+  /** Limit initial fetch to the N most recent sessions. Overrides hours when set. */
+  limitSessions?: number;
 }
 
 // ============================================================================
@@ -150,13 +159,22 @@ interface UseConversationOptions {
 // ============================================================================
 
 const conversationCaches = new Map<string, ConversationCache>();
+const MAX_CACHED_CONVERSATIONS = 20;
 
 function getCache(conversationId: string): ConversationCache | undefined {
   return conversationCaches.get(conversationId);
 }
 
 function setCache(conversationId: string, cache: ConversationCache): void {
+  // LRU eviction: delete and re-insert to move to end (Map preserves insertion order)
+  conversationCaches.delete(conversationId);
   conversationCaches.set(conversationId, cache);
+
+  // Evict oldest entries if over limit
+  if (conversationCaches.size > MAX_CACHED_CONVERSATIONS) {
+    const oldest = conversationCaches.keys().next().value;
+    if (oldest) conversationCaches.delete(oldest);
+  }
 }
 
 function appendToCache(conversationId: string, event: TranscriptEvent): void {
@@ -219,7 +237,7 @@ export function useConversation(
   const reconnectAttemptsRef = useRef(0);
   const conversationIdRef = useRef<string | null>(null);
 
-  const MAX_RECONNECT_ATTEMPTS = 5;
+  const BACKOFF_RESET_THRESHOLD = 5; // After this many attempts, switch to slow polling
 
   // Sync events from cache
   useEffect(() => {
@@ -239,7 +257,8 @@ export function useConversation(
     try {
       const hoursParam = options?.hours !== undefined ? options.hours : 24;
       const hoursQuery = hoursParam !== null ? `&hours=${hoursParam}` : '';
-      const url = `${API_BASE}/api/sessions/conversation/${convId}/transcript/history?include_thinking=${options?.includeThinking ?? true}${hoursQuery}`;
+      const limitQuery = options?.limitSessions ? `&limit_sessions=${options.limitSessions}` : '';
+      const url = `${API_BASE}/api/sessions/conversation/${convId}/transcript/history?include_thinking=${options?.includeThinking ?? true}${limitQuery || hoursQuery}`;
 
       const res = await fetch(url);
       if (!res.ok) {
@@ -273,7 +292,7 @@ export function useConversation(
     } finally {
       setIsLoading(false);
     }
-  }, [options?.includeThinking, options?.hours]);
+  }, [options?.includeThinking, options?.hours, options?.limitSessions]);
 
   // Fetch conversation status (REST)
   const fetchStatus = useCallback(async (convId: string) => {
@@ -374,9 +393,9 @@ export function useConversation(
     // Cursor-based resumption: stream events after this UUID
     if (afterUuid) {
       params.set('after_uuid', afterUuid);
-      console.log(`[SSE] Connecting with cursor after UUID ${afterUuid.slice(0, 8)}`);
+      // cursor-based resumption
     } else {
-      console.log('[SSE] Connecting from end (new events only)');
+      // connecting from end
     }
 
     const url = `${API_BASE}/api/sessions/conversation/${convId}/stream?${params}`;
@@ -392,12 +411,19 @@ export function useConversation(
             setIsConnected(true);
             setError(null);
             reconnectAttemptsRef.current = 0;
-            console.log('[useConversation] Connected to conversation stream');
+            // connected
             break;
 
           case 'transcript':
             if (data.event && convId === conversationIdRef.current) {
               setEvents(prev => {
+                // Dequeue update: replace queued message with non-queued version in-place
+                if (data.event.replaces_queued && data.event.uuid) {
+                  return prev.map(e =>
+                    e.uuid === data.event.uuid ? { ...e, queued: undefined } : e
+                  );
+                }
+
                 const isDuplicate = data.event.uuid && prev.some(e => e.uuid === data.event.uuid);
 
                 if (isDuplicate) {
@@ -409,6 +435,15 @@ export function useConversation(
                 if (data.event.uuid) {
                   setLastEventUuid(data.event.uuid);
                 }
+
+                // When a real user_message arrives, remove any queued message with same content
+                if (data.event.type === 'user_message' && !data.event.queued && data.event.content) {
+                  const filtered = prev.filter(e =>
+                    !(e.type === 'user_message' && e.queued && e.content === data.event.content)
+                  );
+                  return [...filtered, data.event];
+                }
+
                 return [...prev, data.event];
               });
             }
@@ -501,7 +536,7 @@ export function useConversation(
             break;
 
           case 'conversation_ended':
-            console.log('[useConversation] Conversation ended');
+            // conversation ended
             setActiveSessionId(null);
             setActivity({
               isThinking: false,
@@ -535,20 +570,20 @@ export function useConversation(
       setIsConnected(false);
       es.close();
 
-      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
-        reconnectAttemptsRef.current++;
+      // Exponential backoff up to threshold, then slow poll at 30s forever
+      const attempt = reconnectAttemptsRef.current;
+      const delay = attempt < BACKOFF_RESET_THRESHOLD
+        ? Math.min(1000 * Math.pow(2, attempt), 10000)
+        : 30000;
+      reconnectAttemptsRef.current++;
 
-        console.log(`[useConversation] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+      // reconnecting with backoff
 
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (conversationIdRef.current === convId) {
-            connectSSE(convId);
-          }
-        }, delay);
-      } else {
-        setError('Connection lost. Please refresh.');
-      }
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (conversationIdRef.current === convId) {
+          connectSSE(convId);
+        }
+      }, delay);
     };
   }, [options?.includeThinking]);
 
@@ -578,18 +613,21 @@ export function useConversation(
 
       let resumeUuid: string | null = null;
 
-      // If no cache, fetch history and get last UUID
       if (!existingCache) {
+        // No cache — fetch history (shows loading spinner)
         await fetchHistory(conversationId);
-        // Get last UUID from the history we just fetched
         const cache = getCache(conversationId);
         resumeUuid = cache?.lastEventUuid || null;
       } else {
-        // Use cached events and resume from last UUID
+        // Show cached events immediately for responsive switching
         setEvents(existingCache.events);
-        resumeUuid = existingCache.lastEventUuid;
-        setLastEventUuid(resumeUuid);
-        console.log(`[CACHE] Resuming from cached state (${existingCache.events.length} events, last UUID: ${resumeUuid?.slice(0,8)})`);
+        // Always re-fetch history to catch missed events (session boundaries,
+        // resets, mode transitions) that occurred while this conversation's
+        // SSE was disconnected. The REST history endpoint rebuilds the full
+        // picture including boundary markers between sessions.
+        await fetchHistory(conversationId);
+        const freshCache = getCache(conversationId);
+        resumeUuid = freshCache?.lastEventUuid || null;
       }
 
       // Connect to SSE stream with cursor-based resumption

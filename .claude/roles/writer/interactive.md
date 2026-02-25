@@ -120,7 +120,7 @@ Don't block writing for research. Spawn subagents:
 ```
 # Background fact-checking while drafting
 Use the web-research subagent to verify claim about market size
-Use the context-find subagent to find existing docs on this topic
+Use the Explore subagent to find existing docs on this topic
 ```
 
 Continue drafting while subagents research in parallel.

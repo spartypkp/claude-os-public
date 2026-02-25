@@ -4,6 +4,11 @@ Agentic classifier using Claude Sonnet with full MCP tool access.
 The agent investigates each email with taste — matching effort to signal.
 Produces personalized summaries for the user and intel briefings for Chief.
 Proactively enriches contacts and notifies Chief of action-needed items.
+
+Supports:
+- Filesystem-based classifier prompt (Desktop/email/classifier-prompt.md)
+- Three-tier sender rules (always/never/suggest) with dynamic injection
+- Content extraction for newsletters/digests
 """
 
 from __future__ import annotations
@@ -16,167 +21,26 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
-CLASSIFIER_PROMPT = """You are an intelligence analyst embedded in Claude OS — a personal AI system
-that manages the user's life. You brief Chief (the orchestrator) on incoming email
-so Chief can serve the user better.
+# Default prompt used when filesystem prompt is missing
+_DEFAULT_PROMPT_PATH = Path(__file__).resolve().parents[4] / "Desktop" / "email" / "classifier-prompt.md"
 
-You have the same tools and context as any Claude specialist. You know the user's
-priorities (TODAY.md), their life context (CLAUDE.md), their contacts, calendar,
-and full email history. Use whatever helps. Skip what doesn't.
-
-## Your Email
+# Fallback hardcoded prompt (only if file doesn't exist)
+_FALLBACK_PROMPT = """You are an email classifier for Claude OS. Classify this email.
 
 **From:** {sender}
 **Subject:** {subject}
-**Received:** {date}
 **Message ID:** {message_id}
 **Account:** {account_id}
 
 {content_section}
-{previous_emails_section}
-{thread_section}
 
-## What To Do
-
-### 1. Assess — Match Effort to the Email
-
-Not every email deserves investigation. Match your effort:
-
-- **Obvious noise** (marketing blast, mass send, unsubscribe footer): Classify
-  immediately. Don't waste a tool call. 2 seconds.
-- **Automated but potentially relevant** (GitHub notification, bank alert,
-  calendar invite): Quick assessment. Is this routine or does it signal
-  something? 10 seconds.
-- **Human sender, unclear context**: Investigate. Who is this person? Have they
-  emailed before? Are they connected to anything in the user's life? 30 seconds.
-- **High-signal email** (known contact, interview-related, financial, family):
-  Go deep. Check calendar, read previous emails, understand the full picture.
-  Take as long as you need.
-
-### 2. Investigate — Use Your Tools
-
-You have full MCP access. Use whatever helps you understand this email.
-
-**Contacts:**
-- `contact("search", query="sender name or email")` — Is this person known?
-- If the sender is a real person and IS in contacts: log this interaction with
-  `contact("history", identifier="...", entry="[date]: Emailed about [topic]")`
-- If the sender is a real person and NOT in contacts but seems tied to an
-  existing contact (e.g., a brother's personal email, a recruiter's alternate
-  address): try to match them. Use `contact("enrich", ...)` to add the email.
-- If the sender is a new person who matters (recruiter, interviewer, business
-  contact, friend-of-friend): create them with `contact("create", ...)`.
-- Automated senders: don't create contacts.
-
-**Previous emails:**
-- Some previous emails from this sender are included above when available.
-- Use `email("search", query="...")` to find related emails the pre-fetch
-  missed. Think creatively:
-  - The sender's name (they might email from multiple addresses)
-  - The company name (automated email from scheduling service but the real
-    context is a job interview)
-  - A person mentioned in the email body
-  - A project or topic referenced in the subject
-- Use `email("read", message_id="...")` to read full content of a related
-  email when the snippet isn't enough.
-
-**Calendar:**
-- `calendar("list", from_date="...", to_date="...")` — Is there a meeting
-  with this person? An event related to this email's topic? Check the next
-  week for relevant events.
-
-**Job pipeline:**
-- `opportunity("list")` or `opportunity("get", slug="...")` — Is the sender's
-  company in the user's job search pipeline? What stage?
-
-**File system:**
-- Read files on Desktop if they might provide context. If the email mentions
-  a project, check `Desktop/projects/` for relevant PROJECT.md files.
-
-**Today's context:**
-- You already have TODAY.md loaded. Use it. Reference today's priorities
-  when relevant.
-
-### 3. Classify — Use Your Taste
-
-Call `email("classify", ...)` with your assessment. Three fields matter:
-
-**category** — One of four levels:
-- `action_needed` — The user should read this now and probably do something. Reply,
-  decide, act. Time-sensitive or from someone who matters and expects a response.
-- `heads_up` — The user should know about this. Interesting, relevant to their life,
-  worth reading soon. But no action required right now.
-- `fyi` — Read whenever. Not urgent, not particularly interesting, but passed
-  the noise filter. Background info, routine updates.
-- `noise` — Spam, marketing, mass sends, cold outreach. Hidden by default.
-
-**summary** — One line for the user. Conversational, addressed to them personally.
-Tell them what this is and why they might care. Reference what you know about their
-life when relevant. Dynamic length.
-
-Not this: "Email from Kai Zhang regarding interview scheduling."
-This: "Kai confirmed your interview tomorrow at 10 AM. Meet link attached."
-
-Not this: "GitHub notification about repository release."
-This: "New Claude Code release. Nothing you need to do."
-
-**display_name** — The human-readable sender identity for the inbox UI. The raw
-"From" field often says "no-reply" or a service name. You know better.
-
-Examples:
-- From "no-reply@ashbyhq.com" about a Modal rejection → `"Modal (via Ashby)"`
-- From "notifications@github.com" about a PR review → `"GitHub"`
-- From "kai.zhang@juicebox.ai" → `"Kai Zhang"` (just use their name)
-- From "noreply@linkedin.com" about a recruiter message → `"LinkedIn"`
-- From "support@chase.com" about a deposit → `"Chase"`
-
-Rule: If it's a human, use their name. If it's automated, use the company or
-service name. If it's an ATS/platform sending on behalf of a company, use
-`"Company (via Platform)"`.
-
-**reasoning** — This becomes the briefing for Chief. Pour everything you learned
-here. Situation, sender context, relationship history, what the email wants,
-what the user should probably do, and how Chief can proactively help.
-
-If Chief reads ONLY this field, Chief should be able to have a fully informed
-conversation with the user about this email.
-
-### 4. Suggest Actions
-
-For action_needed and heads_up emails, include `suggested_actions` — clear,
-actionable next steps that Chief can execute. Each action on a separate line.
-Don't suggest actions for noise or obvious FYI.
-
-**Examples:**
-- "Close Modal in pipeline — rejected after application"
-- "Add to calendar: Perplexity HM Interview, Fri Feb 27, 10-10:30am PT"
-- "Reply with availability (no Tuesdays)"
-- "Update pipeline stage to interviewing"
-- "Create contact for James Liounis (Perplexity)"
-
-Actions should be specific and executable. Chief reads these and acts on them.
-
-### 5. Be Proactive
-
-While investigating, maintain the contact database:
-- Log interactions for known contacts
-- Create contacts for new people who matter
-- Tie alternate email addresses to existing contacts
-
-You're not just labeling email. You're an analyst who happens to be reading
-email. Act like it.
-
-## Submit
-
-When done, you MUST call:
-email("classify", message_id="{message_id}", account="{account_id}", category="...", summary="...", display_name="...", reasoning="...", suggested_actions="action1\naction2")
+Call email("classify", message_id="{message_id}", account="{account_id}", category="...", summary="...", display_name="...", reasoning="...")
 """
-
 
 # Regex to detect thread subjects (Re:/RE:/Fwd:/FW:)
 _THREAD_PREFIX_RE = re.compile(r'^(?:Re|RE|Fwd|FW|Fw|re):\s*', re.IGNORECASE)
@@ -186,8 +50,8 @@ class EmailPipeline:
     """Background email classification pipeline.
 
     Polls for unclassified emails, pre-fetches sender history,
-    runs each through an agentic classifier that investigates and
-    writes classifications via MCP tool call.
+    matches sender rules, and runs each through an agentic classifier
+    that investigates and writes classifications via MCP tool call.
     """
 
     MAX_WORKERS = 3  # Concurrent classification agents
@@ -198,6 +62,208 @@ class EmailPipeline:
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._semaphore = asyncio.Semaphore(self.MAX_WORKERS)
+
+        # Prompt cache
+        self._prompt_cache: Optional[str] = None
+        self._prompt_mtime: float = 0.0
+
+    # ── Prompt loading ──────────────────────────────────────────────
+
+    def _load_prompt(self) -> str:
+        """Load classifier prompt from filesystem with mtime cache.
+
+        Reads Desktop/email/classifier-prompt.md. Caches content and
+        reloads only when file is modified. Falls back to hardcoded
+        default if file doesn't exist.
+        """
+        prompt_path = _DEFAULT_PROMPT_PATH
+
+        try:
+            stat = prompt_path.stat()
+            if self._prompt_cache and stat.st_mtime == self._prompt_mtime:
+                return self._prompt_cache
+
+            self._prompt_cache = prompt_path.read_text()
+            self._prompt_mtime = stat.st_mtime
+            logger.info(f"Loaded classifier prompt from {prompt_path}")
+            return self._prompt_cache
+        except FileNotFoundError:
+            logger.warning(f"Classifier prompt not found at {prompt_path}, using fallback")
+            return _FALLBACK_PROMPT
+
+    def _get_prompt_version(self) -> str:
+        """Get current prompt file mtime as version string."""
+        try:
+            return str(_DEFAULT_PROMPT_PATH.stat().st_mtime)
+        except FileNotFoundError:
+            return "fallback"
+
+    # ── Sender rules ────────────────────────────────────────────────
+
+    def _extract_sender_email(self, sender: str) -> str:
+        """Extract email address from sender string like 'Name <email>'."""
+        match = re.search(r'<(.+?)>', sender)
+        return match.group(1) if match else sender
+
+    def _extract_sender_domain(self, sender_email: str) -> str:
+        """Extract domain from email address."""
+        parts = sender_email.split("@")
+        return parts[1].lower() if len(parts) == 2 else ""
+
+    def _match_rules(self, sender: str) -> List[Dict[str, Any]]:
+        """Find all enabled sender rules matching this sender.
+
+        Returns rules sorted by specificity: sender > domain,
+        then by rule type priority: always > never > suggest.
+        """
+        sender_email = self._extract_sender_email(sender).lower()
+        sender_domain = self._extract_sender_domain(sender_email)
+
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT id, match_type, match_value, rule_type, category,
+                          instructions, extract_content
+                   FROM email_sender_rules
+                   WHERE enabled = 1
+                   ORDER BY
+                       CASE match_type WHEN 'sender' THEN 0 ELSE 1 END,
+                       CASE rule_type WHEN 'always' THEN 0 WHEN 'never' THEN 1 ELSE 2 END
+                """,
+            ).fetchall()
+
+            matched = []
+            for row in rows:
+                match_type = row["match_type"]
+                match_value = row["match_value"].lower()
+
+                if match_type == "sender" and sender_email == match_value:
+                    matched.append(dict(row))
+                elif match_type == "domain" and sender_domain == match_value:
+                    matched.append(dict(row))
+
+            return matched
+        finally:
+            conn.close()
+
+    def _increment_rule_applied(self, rule_id: str) -> None:
+        """Increment the times_applied counter for a rule."""
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                "UPDATE email_sender_rules SET times_applied = times_applied + 1, updated_at = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), rule_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _build_rules_section(self, rules: List[Dict[str, Any]]) -> str:
+        """Build the rules section to inject into the prompt."""
+        if not rules:
+            return ""
+
+        lines = ["## Sender-Specific Instructions", ""]
+        lines.append("The following rules apply to this sender. Follow them.")
+        lines.append("")
+
+        for rule in rules:
+            rule_type = rule["rule_type"]
+            category = rule["category"]
+            instructions = rule.get("instructions") or ""
+
+            if rule_type == "always":
+                lines.append(f"**REQUIRED:** Classify this email as `{category}`. This is non-negotiable.")
+            elif rule_type == "never":
+                lines.append(f"**FORBIDDEN:** Do NOT classify this email as `{category}`. Choose a different category.")
+            elif rule_type == "suggest":
+                lines.append(f"**Suggestion:** This sender's emails typically belong in `{category}`. Use your judgment.")
+
+            if instructions:
+                lines.append(f"\n{instructions}")
+            lines.append("")
+
+        # Check for content extraction
+        extract_rules = [r for r in rules if r.get("extract_content")]
+        if extract_rules:
+            instructions_text = ""
+            for r in extract_rules:
+                if r.get("instructions"):
+                    instructions_text += r["instructions"] + "\n"
+
+            lines.append("## Content Extraction Required")
+            lines.append("")
+            lines.append("This email matches a content extraction rule. In addition to classifying,")
+            lines.append("you MUST extract the key content from this email.")
+            lines.append("")
+            lines.append("Include the `extracted_content` parameter in your email(\"classify\", ...) call.")
+            lines.append("Format each item as: **Headline** — 1-2 sentence summary.")
+            lines.append("")
+            if instructions_text:
+                lines.append(instructions_text)
+
+        return "\n".join(lines)
+
+    def _auto_classify(
+        self, msg_id: str, acct_id: str, category: str, rule_id: str,
+        sender: str, subject: str, snippet: str, received_at: str
+    ) -> None:
+        """Instant classification for always-rules without instructions.
+
+        Skips the Sonnet agent entirely. Used for known spam domains
+        and other cases where investigation adds no value.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Build a simple display_name from sender
+        display_name = sender
+        if "<" in sender:
+            display_name = sender.split("<")[0].strip().strip('"')
+        if not display_name or display_name == sender:
+            domain = self._extract_sender_domain(self._extract_sender_email(sender))
+            display_name = domain.split(".")[0].capitalize() if domain else "Unknown"
+
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO email_classifications
+                   (id, email_message_id, account_id, category, summary,
+                    briefing, display_name, sender, subject, preview,
+                    processing_time_ms, received_at, classified_at,
+                    handled, rule_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()), msg_id, acct_id, category,
+                    subject or "(no subject)",  # Use subject as summary
+                    f"Auto-classified by sender rule. No agent investigation.",
+                    display_name, sender, subject, snippet,
+                    0, received_at, now,
+                    1 if category == "noise" else 0,
+                    rule_id,
+                ),
+            )
+            conn.execute(
+                "UPDATE email_metadata SET classified = 1, last_updated_at = ? WHERE email_message_id = ? AND account_id = ?",
+                (now, msg_id, acct_id),
+            )
+            conn.commit()
+            logger.info(f"Auto-classified {msg_id} as {category} (rule {rule_id})")
+        finally:
+            conn.close()
+
+        # Mark as read in Apple Mail (noise is auto-handled, no need to see it)
+        try:
+            from .service import EmailService
+            from core.storage import SystemStorage
+            storage = SystemStorage(self._db_path)
+            svc = EmailService(storage)
+            svc.mark_as_read(msg_id, "INBOX", acct_id)
+        except Exception:
+            pass  # Non-critical
+
+        self._increment_rule_applied(rule_id)
+
+    # ── Core pipeline ───────────────────────────────────────────────
 
     async def start(self, stop_event: asyncio.Event = None):
         """Start the classification polling loop."""
@@ -251,28 +317,12 @@ class EmailPipeline:
         conn.execute("PRAGMA busy_timeout=5000;")
         return conn
 
-    async def _ensure_initialized(self):
-        """Phase 1: Initial setup — runs once per database.
-
-        Marks all current inbox emails as 'seen' (classified=1) so the
-        pipeline never tries to classify historical email. This establishes
-        a baseline: everything currently in the inbox is considered processed.
-
-        After this, only genuinely new emails (new message IDs that appear
-        in future polls) will get classified=0 and enter the queue.
+    def _ensure_initialized_sync(self):
+        """Sync: mark existing inbox as seen. Runs in thread to avoid
+        blocking the event loop with Apple Mail AppleScript calls.
         """
         conn = self._get_conn()
         try:
-            # Ensure _migrations table exists (pipeline may start before run_migrations)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS _migrations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    applied_at TEXT NOT NULL
-                )
-            """)
-            conn.commit()
-
             # Check if we've already initialized
             row = conn.execute(
                 "SELECT 1 FROM _migrations WHERE name = 'email_pipeline_initialized'"
@@ -328,12 +378,13 @@ class EmailPipeline:
         finally:
             conn.close()
 
-    async def _discover_new_emails(self):
-        """Phase 2: Discover new emails each poll cycle.
+    async def _ensure_initialized(self):
+        """Phase 1: Initial setup. Runs in thread to avoid blocking event loop."""
+        await asyncio.to_thread(self._ensure_initialized_sync)
 
-        Fetches recent emails (regardless of read status) and INSERTs them.
-        INSERT OR IGNORE means only genuinely new message IDs get added
-        with classified=0 — everything already tracked is skipped.
+    def _discover_new_emails_sync(self):
+        """Sync: discover new emails via Apple Mail. Runs in thread to avoid
+        blocking the event loop with AppleScript calls every poll cycle.
         """
         from .service import EmailService
         from core.storage import SystemStorage
@@ -391,6 +442,10 @@ class EmailPipeline:
         finally:
             conn.close()
 
+    async def _discover_new_emails(self):
+        """Phase 2: Discover new emails. Runs in thread to avoid blocking event loop."""
+        await asyncio.to_thread(self._discover_new_emails_sync)
+
     def _get_previous_emails(self, sender: str, account_id: str, limit: int = 5) -> List[Dict[str, str]]:
         """Pre-fetch recent emails from the same sender."""
         try:
@@ -400,11 +455,7 @@ class EmailPipeline:
             storage = SystemStorage(self._db_path)
             svc = EmailService(storage)
 
-            # Extract email address from sender string
-            sender_email = sender
-            match = re.search(r'<(.+?)>', sender)
-            if match:
-                sender_email = match.group(1)
+            sender_email = self._extract_sender_email(sender)
 
             results = svc.search_messages(
                 sender_email, "INBOX", account_id, limit=limit + 1
@@ -543,7 +594,7 @@ class EmailPipeline:
             svc = EmailService(storage)
 
             try:
-                msg = svc.get_message(msg_id, "INBOX", acct_id)
+                msg = await asyncio.to_thread(svc.get_message, msg_id, "INBOX", acct_id)
 
                 if not msg:
                     conn = self._get_conn()
@@ -557,7 +608,32 @@ class EmailPipeline:
                         conn.close()
                     return
 
-                # Build content section
+                # ── Match sender rules ──────────────────────────────
+                matched_rules = self._match_rules(msg.sender or "")
+                always_rules = [r for r in matched_rules if r["rule_type"] == "always"]
+
+                # Fast path: always rule with no instructions → skip agent
+                if always_rules:
+                    first_always = always_rules[0]
+                    if not first_always.get("instructions") and not first_always.get("extract_content"):
+                        self._auto_classify(
+                            msg_id, acct_id, first_always["category"],
+                            first_always["id"], msg.sender or "Unknown",
+                            msg.subject, msg.snippet, msg.date_received,
+                        )
+                        # Mark metadata
+                        conn = self._get_conn()
+                        try:
+                            conn.execute(
+                                "UPDATE email_metadata SET classified = 1, last_updated_at = ? WHERE email_message_id = ? AND account_id = ?",
+                                (datetime.now(timezone.utc).isoformat(), msg_id, acct_id),
+                            )
+                            conn.commit()
+                        finally:
+                            conn.close()
+                        return
+
+                # ── Build prompt ────────────────────────────────────
                 content_section = ""
                 body = msg.content or msg.html_content or ""
                 if body:
@@ -566,9 +642,9 @@ class EmailPipeline:
                         truncated += "\n... [truncated]"
                     content_section = f"**Body:**\n{truncated}"
 
-                # Pre-fetch previous emails from sender
-                previous_emails = self._get_previous_emails(
-                    msg.sender or "", acct_id, limit=5
+                # Pre-fetch previous emails from sender (threaded — Apple Mail call)
+                previous_emails = await asyncio.to_thread(
+                    self._get_previous_emails, msg.sender or "", acct_id, 5
                 )
                 previous_emails_section = ""
                 if previous_emails:
@@ -579,8 +655,10 @@ class EmailPipeline:
                         )
                     previous_emails_section = "\n".join(lines) + "\n"
 
-                # Thread context for Re:/Fwd: emails
-                thread_context = self._get_thread_context(msg.subject, acct_id)
+                # Thread context for Re:/Fwd: emails (threaded — Apple Mail call)
+                thread_context = await asyncio.to_thread(
+                    self._get_thread_context, msg.subject, acct_id
+                )
                 thread_section = ""
                 if thread_context:
                     lines = ["## Thread Context (previous messages in this conversation)"]
@@ -591,15 +669,24 @@ class EmailPipeline:
                         )
                     thread_section = "\n".join(lines) + "\n"
 
-                prompt = CLASSIFIER_PROMPT.format(
+                # Build rules section
+                rules_section = self._build_rules_section(matched_rules)
+
+                # Load prompt from filesystem
+                prompt_template = self._load_prompt()
+
+                now_pt = datetime.now(timezone(timedelta(hours=-8)))
+                prompt = prompt_template.format(
+                    current_datetime=now_pt.strftime("%A, %B %d, %Y, %I:%M %p PT"),
                     sender=msg.sender or "Unknown",
                     subject=msg.subject or "(no subject)",
-                    date=datetime.now(timezone(timedelta(hours=-8))).strftime("%Y-%m-%d %I:%M %p PT"),
+                    date=now_pt.strftime("%Y-%m-%d %I:%M %p PT"),
                     message_id=msg_id,
                     account_id=acct_id,
                     content_section=content_section,
                     previous_emails_section=previous_emails_section,
                     thread_section=thread_section,
+                    rules_section=rules_section,
                 )
 
                 # Run the agent
@@ -618,14 +705,30 @@ class EmailPipeline:
                     if result:
                         category = result["category"]
 
-                        # Backfill context snapshot + timing
+                        # Enforce never-rules: if agent picked a forbidden category, override
+                        never_rules = [r for r in matched_rules if r["rule_type"] == "never"]
+                        for nr in never_rules:
+                            if category == nr["category"]:
+                                # Override to fyi as safe default
+                                category = "fyi"
+                                conn.execute(
+                                    "UPDATE email_classifications SET category = ? WHERE email_message_id = ? AND account_id = ?",
+                                    (category, msg_id, acct_id),
+                                )
+                                logger.info(f"Never-rule override: {msg_id} changed from {nr['category']} to fyi")
+                                break
+
+                        # Track which rule was applied
+                        rule_id = matched_rules[0]["id"] if matched_rules else None
+
+                        # Backfill context snapshot + timing + rule_id
                         conn.execute(
                             """UPDATE email_classifications
                                SET sender = ?, subject = ?, preview = ?, processing_time_ms = ?,
-                                   received_at = ?
+                                   received_at = ?, rule_id = ?
                                WHERE email_message_id = ? AND account_id = ?""",
                             (msg.sender, msg.subject, msg.snippet, elapsed_ms,
-                             msg.date_received, msg_id, acct_id),
+                             msg.date_received, rule_id, msg_id, acct_id),
                         )
                         conn.commit()
 
@@ -634,6 +737,10 @@ class EmailPipeline:
                             f"({elapsed_ms}ms) — {(result['summary'] or '')[:60]}"
                         )
 
+                        # Increment rule counters
+                        for rule in matched_rules:
+                            self._increment_rule_applied(rule["id"])
+
                         # Notify Chief
                         self._notify_chief(
                             category,
@@ -641,6 +748,13 @@ class EmailPipeline:
                             result["summary"] or "",
                             result["briefing"] or "",
                         )
+
+                        # Update morning brief draft
+                        try:
+                            from .brief_draft import update_draft
+                            update_draft(str(self._db_path))
+                        except Exception:
+                            pass  # Non-critical
                     else:
                         # Agent didn't classify — write fyi fallback
                         logger.warning(f"Agent did not classify {msg_id} — defaulting to fyi")

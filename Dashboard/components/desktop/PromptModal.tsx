@@ -80,7 +80,7 @@ export function PromptModal({
 						className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-white/20 
 							bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white
 							placeholder-gray-400 dark:placeholder-gray-500
-							focus:outline-none focus:ring-2 focus:ring-[#DA7756] focus:border-transparent
+							focus:outline-none focus:ring-2 focus:ring-[var(--color-claude)] focus:border-transparent
 							transition-all"
 						autoFocus
 					/>
@@ -104,7 +104,7 @@ export function PromptModal({
 						onClick={handleSubmit}
 						disabled={!value.trim()}
 						className="px-4 py-1.5 text-sm font-medium rounded-lg
-							bg-[#DA7756] text-white
+							bg-[var(--color-claude)] text-white
 							hover:bg-[#c66a4d] disabled:opacity-50 disabled:cursor-not-allowed
 							transition-colors"
 					>

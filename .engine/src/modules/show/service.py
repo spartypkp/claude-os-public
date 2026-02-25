@@ -55,10 +55,14 @@ def _resolve_chat_id(target: str) -> Optional[int]:
         Chat ID or None if not configured
     """
     if target == "group":
-        chat_id_str = os.getenv("TELEGRAM_GROUP_CHAT_ID")
-        if not chat_id_str:
+        raw = os.getenv("TELEGRAM_GROUP_CHAT_IDS", "")
+        if not raw:
             return None
-        return int(chat_id_str)
+        # Use first configured group as default
+        first_id = raw.split(",")[0].strip()
+        if not first_id:
+            return None
+        return int(first_id)
     else:
         # "owner" or "auto" both resolve to owner
         user_id_str = os.getenv("TELEGRAM_USER_ID")
@@ -201,7 +205,7 @@ class ShowService:
             # Resolve target to chat_id
             chat_id = _resolve_chat_id(target)
             if chat_id is None:
-                target_desc = "TELEGRAM_GROUP_CHAT_ID" if target == "group" else "TELEGRAM_USER_ID"
+                target_desc = "TELEGRAM_GROUP_CHAT_IDS" if target == "group" else "TELEGRAM_USER_ID"
                 return {"success": False, "error": f"{target_desc} not configured in .env"}
 
             target_name = "group" if target == "group" else "owner"

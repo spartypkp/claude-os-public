@@ -6,8 +6,13 @@
  */
 import {
 	Activity,
+	Archive,
+	BarChart3,
+	Briefcase,
 	Calendar,
 	CheckCircle,
+	Chrome,
+	Clock,
 	Contact,
 	Download,
 	Eye,
@@ -17,15 +22,18 @@ import {
 	Folder,
 	Globe,
 	ListChecks,
+	ListTodo,
 	Mail,
 	MessageCircleQuestion,
 	MessageCircleReply,
 	MessageSquare,
 	Network,
-
+	PawPrint,
 	PenLine,
 	RefreshCw,
 	Search,
+	Send,
+	Square,
 	Star,
 	Terminal,
 	Workflow,
@@ -255,7 +263,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	// ─── Claude Code: Tasks & Meta ──────────────────────────────────────────
 	Task: {
 		icon: Zap,
-		color: '#8b5cf6',
+		color: 'var(--color-info)', // AGENT_COLOR
 		category: 'tool',
 		getOneLiner: (input) => {
 			const agentType = input.raw?.subagent_type ? String(input.raw.subagent_type) : '';
@@ -268,90 +276,99 @@ const toolConfigs: Record<string, ToolConfig> = {
 		showToolName: false,
 	},
 	TaskOutput: {
-		icon: Zap,
-		color: '#8b5cf6',
+		icon: Download,
+		color: '#64748b',
 		category: 'tool',
 		getOneLiner: (input) => {
 			const id = input.raw?.task_id ? String(input.raw.task_id).slice(0, 8) : '';
-			return id ? `output ${id}` : 'task output';
+			const isBlocking = input.raw?.block !== false;
+			if (id) return isBlocking ? `await ${id}` : `read ${id}`;
+			return 'task output';
 		},
-		showToolName: true,
-		chipLabel: 'TASK',
+		showToolName: false,
 	},
 	TaskStop: {
-		icon: Zap,
+		icon: Square,
 		color: 'var(--color-error)',
 		category: 'tool',
 		getOneLiner: (input) => {
 			const id = input.raw?.task_id ? String(input.raw.task_id).slice(0, 8) : '';
 			return id ? `stop ${id}` : 'stop task';
 		},
-		showToolName: true,
-		chipLabel: 'TASK',
+		showToolName: false,
 	},
+	// ─── Task Management (Todo List) ────────────────────────────────────────
+	// These are checklist/todo operations — NOT agent spawning.
+	// The "Task" prefix is Claude Code's naming, not ours.
 	TodoWrite: {
-		icon: ListChecks,
-		color: 'var(--color-primary)',
+		icon: ListTodo,
+		color: '#10b981',
 		category: 'tool',
+		chipLabel: 'todo',
 		getOneLiner: (input) => {
 			const todos = input.raw?.todos;
 			if (Array.isArray(todos)) {
 				const active = todos.filter((t: { status?: string }) => t.status === 'in_progress').length;
-				return active > 0 ? `${todos.length} tasks (${active} active)` : `${todos.length} tasks`;
+				return active > 0 ? `${todos.length} items (${active} active)` : `${todos.length} items`;
 			}
-			return 'update tasks';
+			return 'update list';
 		},
-		showToolName: false,
+		showToolName: true,
 	},
 	TaskCreate: {
-		icon: ListChecks,
-		color: 'var(--color-primary)',
+		icon: ListTodo,
+		color: '#10b981',
 		category: 'tool',
+		chipLabel: 'todo',
 		getOneLiner: (input) => {
 			const subject = input.raw?.subject ? String(input.raw.subject) : '';
-			return subject ? `+ ${truncate(subject, 42)}` : 'create task';
+			return subject ? `+ ${truncate(subject, 42)}` : 'add item';
 		},
-		showToolName: false,
+		showToolName: true,
 	},
 	TaskUpdate: {
-		icon: ListChecks,
-		color: 'var(--color-primary)',
+		icon: ListTodo,
+		color: '#10b981',
 		category: 'tool',
+		chipLabel: 'todo',
 		getOneLiner: (input) => {
 			const status = input.raw?.status ? String(input.raw.status) : '';
 			const id = input.raw?.taskId ? String(input.raw.taskId) : '';
 			const subject = input.raw?.subject ? String(input.raw.subject) : '';
-			if (status === 'completed') return id ? `#${id} → done` : 'task done';
-			if (status === 'in_progress') return id ? `#${id} → active` : 'task started';
-			if (status === 'deleted') return id ? `#${id} → deleted` : 'task deleted';
+			if (status === 'completed') return id ? `#${id} → done` : 'done';
+			if (status === 'in_progress') return id ? `#${id} → active` : 'started';
+			if (status === 'deleted') return id ? `#${id} → deleted` : 'deleted';
 			if (subject) return id ? `#${id} ${truncate(subject, 30)}` : truncate(subject, 35);
-			return id ? `update #${id}` : 'update task';
+			return id ? `update #${id}` : 'update';
 		},
-		showToolName: false,
+		showToolName: true,
 	},
 	TaskList: {
-		icon: ListChecks,
-		color: 'var(--color-primary)',
+		icon: ListTodo,
+		color: '#10b981',
 		category: 'tool',
-		getOneLiner: () => 'list tasks',
-		showToolName: false,
+		chipLabel: 'todo',
+		getOneLiner: () => 'list',
+		showToolName: true,
 	},
 	TaskGet: {
-		icon: ListChecks,
-		color: 'var(--color-primary)',
+		icon: ListTodo,
+		color: '#10b981',
 		category: 'tool',
+		chipLabel: 'todo',
 		getOneLiner: (input) => {
 			const id = input.raw?.taskId ? `#${input.raw.taskId}` : '';
-			return id ? `get ${id}` : 'get task';
+			return id ? `get ${id}` : 'get';
 		},
-		showToolName: false,
+		showToolName: true,
 	},
 
 	// ─── Claude Code: Interactive / System Events ───────────────────────────
 	AskUserQuestion: {
 		icon: MessageCircleQuestion,
 		color: 'var(--color-warning)',
-		category: 'system',
+		category: 'interactive',
+		chipLabel: 'QUESTION',
 		getOneLiner: (input) => {
 			const questions = input.raw?.questions;
 			if (Array.isArray(questions) && questions.length > 0) {
@@ -360,18 +377,18 @@ const toolConfigs: Record<string, ToolConfig> = {
 			}
 			return 'Question for you';
 		},
-		showToolName: false,
+		showToolName: true,
 	},
 	EnterPlanMode: {
 		icon: Workflow,
-		color: '#8b5cf6',
+		color: 'var(--color-info)',
 		category: 'system',
 		getOneLiner: () => 'Entering plan mode',
 		showToolName: false,
 	},
 	ExitPlanMode: {
 		icon: Workflow,
-		color: '#22c55e',
+		color: 'var(--color-success)',
 		category: 'system',
 		getOneLiner: () => 'Plan ready for review',
 		showToolName: false,
@@ -385,6 +402,48 @@ const toolConfigs: Record<string, ToolConfig> = {
 			return skill ? `/${skill}` : '/skill';
 		},
 		showToolName: false,
+	},
+
+	// ─── Claude Code: MCP Management ───────────────────────────────────────
+	ToolSearch: {
+		icon: Search,
+		color: 'var(--color-info)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'MCP',
+		getOneLiner: (input) => {
+			const query = input.raw?.query ? String(input.raw.query) : '';
+			return query ? `search "${truncate(query, 30)}"` : 'search tools';
+		},
+	},
+	ListMcpResourcesTool: {
+		icon: ListChecks,
+		color: 'var(--color-info)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'MCP',
+		getOneLiner: (input) => {
+			const server = input.raw?.server ? String(input.raw.server) : '';
+			return server ? `resources · ${server}` : 'list resources';
+		},
+	},
+	ReadMcpResourceTool: {
+		icon: FileText,
+		color: 'var(--color-info)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'MCP',
+		getOneLiner: (input) => {
+			const uri = input.raw?.uri ? String(input.raw.uri) : '';
+			const server = input.raw?.server ? String(input.raw.server) : '';
+			if (uri) {
+				// Show the last meaningful segment of the URI
+				const parts = uri.split('/').filter(Boolean);
+				const last = parts[parts.length - 1] || uri;
+				return server ? `${server} · ${truncate(last, 25)}` : truncate(last, 35);
+			}
+			return server ? `read · ${server}` : 'read resource';
+		},
 	},
 
 	// ─── MCP Life: System Events ────────────────────────────────────────────
@@ -401,7 +460,8 @@ const toolConfigs: Record<string, ToolConfig> = {
 	day: {
 		icon: PenLine,
 		color: '#64748b',
-		category: 'system',
+		category: 'tool',
+		showToolName: true,
 		getOneLiner: (input) => {
 			const op = input.operation || '';
 			if (op === 'log') {
@@ -418,7 +478,6 @@ const toolConfigs: Record<string, ToolConfig> = {
 			if (op === 'priorities') return 'list priorities';
 			return op || 'day';
 		},
-		showToolName: true,
 	},
 	// Legacy: kept for old transcript rendering
 	timeline: {
@@ -443,7 +502,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	},
 	done: {
 		icon: CheckCircle,
-		color: '#22c55e',
+		color: 'var(--color-success)',
 		category: 'system',
 		getOneLiner: (input) => {
 			const summary = input.raw?.summary ? String(input.raw.summary) : '';
@@ -466,7 +525,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	// Legacy: kept for old transcript rendering (now telegram("show"))
 	show: {
 		icon: Eye,
-		color: '#3b82f6',
+		color: 'var(--color-primary)',
 		category: 'system',
 		getOneLiner: (input) => {
 			const what = input.raw?.what ? String(input.raw.what) : '';
@@ -478,7 +537,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	// ─── MCP Life: Team / Orchestration ─────────────────────────────────────
 	team: {
 		icon: Network,
-		color: '#8b5cf6',
+		color: 'var(--color-claude)',
 		category: 'system',
 		showToolName: true,
 		getOneLiner: (input, result) => {
@@ -541,7 +600,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	// ─── MCP Life: Data Tools ───────────────────────────────────────────────
 	contact: {
 		icon: Contact,
-		color: '#06b6d4',
+		color: 'var(--color-success)',
 		category: 'tool',
 		showToolName: true,
 		getOneLiner: (input) => {
@@ -561,7 +620,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	},
 	priority: {
 		icon: Star,
-		color: '#f59e0b',
+		color: 'var(--color-warning)',
 		category: 'tool',
 		showToolName: true,
 		getOneLiner: (input, result) => {
@@ -583,7 +642,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	},
 	calendar: {
 		icon: Calendar,
-		color: '#3b82f6',
+		color: 'var(--color-error)',
 		category: 'tool',
 		showToolName: true,
 		getOneLiner: (input) => {
@@ -611,10 +670,10 @@ const toolConfigs: Record<string, ToolConfig> = {
 	},
 	email: {
 		icon: Mail,
-		color: '#ef4444',
+		color: 'var(--color-primary)',
 		category: 'tool',
 		showToolName: true,
-		getOneLiner: (input) => {
+		getOneLiner: (input, result) => {
 			const op = input.raw?.operation || '';
 			if (op === 'search') {
 				const q = input.raw?.query ? String(input.raw.query) : '';
@@ -626,6 +685,14 @@ const toolConfigs: Record<string, ToolConfig> = {
 				if (to && subject) return `${op} → ${truncate(subject, 25)}`;
 				return to ? `${op} → ${to}` : String(op);
 			}
+			if (op === 'triage') {
+				const count = (() => {
+					if (!result?.data || typeof result.data !== 'object') return 0;
+					const d = result.data as Record<string, unknown>;
+					return typeof d.unhandled === 'number' ? d.unhandled : 0;
+				})();
+				return count > 0 ? `triage · ${count} unhandled` : 'triage';
+			}
 			if (op === 'unread') {
 				const account = input.raw?.account ? String(input.raw.account) : '';
 				return account ? `unread · ${account.split('@')[0]}` : 'check unread';
@@ -634,6 +701,13 @@ const toolConfigs: Record<string, ToolConfig> = {
 				const msgId = input.raw?.message_id ? String(input.raw.message_id).slice(0, 8) : '';
 				return msgId ? `read ${msgId}` : 'read email';
 			}
+			if (op === 'classify') {
+				const category = input.raw?.category ? String(input.raw.category) : '';
+				const displayName = input.raw?.display_name ? String(input.raw.display_name) : '';
+				if (displayName) return `classify · ${truncate(displayName, 25)}`;
+				return category ? `classify · ${category}` : 'classify';
+			}
+			if (op === 'handle') return 'mark handled';
 			if (op === 'accounts') return 'list accounts';
 			if (op === 'discover') return 'discover accounts';
 			return String(op) || 'manage';
@@ -641,7 +715,7 @@ const toolConfigs: Record<string, ToolConfig> = {
 	},
 	messages: {
 		icon: MessageSquare,
-		color: '#22c55e',
+		color: 'var(--color-claude)',
 		category: 'tool',
 		showToolName: true,
 		getOneLiner: (input) => {
@@ -655,6 +729,466 @@ const toolConfigs: Record<string, ToolConfig> = {
 			return phone ? `${op} ${phone}` : String(op);
 		},
 	},
+	opportunity: {
+		icon: Briefcase,
+		color: 'var(--color-info)',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.operation || '';
+			const name = input.raw?.name ? String(input.raw.name) : '';
+			const slug = input.raw?.slug ? String(input.raw.slug) : '';
+			const company = input.raw?.company ? String(input.raw.company) : '';
+			if (op === 'list') {
+				const tier = input.raw?.tier ? String(input.raw.tier) : '';
+				const stage = input.raw?.stage ? String(input.raw.stage) : '';
+				if (tier) return `${tier}-tier pipeline`;
+				if (stage) return `${stage} pipeline`;
+				return 'list pipeline';
+			}
+			if (op === 'get') return slug || 'get details';
+			if (op === 'create') return company ? `+ ${truncate(company, 30)}` : 'create';
+			if (op === 'close') return slug ? `close ${slug}` : 'close';
+			if (op === 'add_event') return slug ? `event → ${slug}` : 'add event';
+			if (op === 'add_contact') return slug ? `contact → ${slug}` : 'add contact';
+			if (name) return `${op} ${truncate(name, 35)}`;
+			if (slug) return `${op} ${truncate(slug, 35)}`;
+			if (op === 'sync') return 'sync pipeline';
+			return op || 'manage';
+		},
+	},
+	pet: {
+		icon: PawPrint,
+		color: 'var(--color-warning)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'EMBER',
+		getOneLiner: (input) => {
+			const op = input.operation || '';
+			if (op === 'note' && input.raw?.message) return `note: ${truncate(String(input.raw.message), 30)}`;
+			if (op === 'status') return 'check on Ember';
+			if (op === 'feed') return 'feed Ember';
+			if (op === 'play') return 'play with Ember';
+			if (op === 'history') return 'Ember history';
+			return op || 'check';
+		},
+	},
+	telegram: {
+		icon: Send,
+		color: 'var(--color-primary)',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.raw?.operation || '';
+			const target = input.raw?.target ? String(input.raw.target) : '';
+			if (op === 'send') {
+				const text = input.raw?.text ? String(input.raw.text) : '';
+				const dest = target || 'owner';
+				return text ? `→ ${dest}: ${truncate(text, 25)}` : `send → ${dest}`;
+			}
+			if (op === 'read') return target ? `read ${target}` : 'read';
+			if (op === 'show') {
+				const what = input.raw?.what ? String(input.raw.what) : '';
+				return what ? `show ${truncate(what, 25)}` : 'show';
+			}
+			if (op === 'info') return 'info';
+			return String(op) || 'message';
+		},
+	},
+	schedule: {
+		icon: Clock,
+		color: '#8b5cf6',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.raw?.operation || '';
+			if (op === 'add') {
+				const expr = input.raw?.expression ? String(input.raw.expression) : '';
+				const payload = input.raw?.payload ? String(input.raw.payload) : '';
+				// Show payload for reminders, expression for cron
+				if (payload) return `+ ${truncate(payload, 35)}`;
+				if (expr) return `+ ${truncate(expr, 35)}`;
+				return 'add entry';
+			}
+			if (op === 'list') return 'list entries';
+			if (op === 'remove') return 'remove entry';
+			if (op === 'enable') return 'enable entry';
+			if (op === 'disable') return 'disable entry';
+			if (op === 'history') return 'run history';
+			return String(op) || 'manage';
+		},
+	},
+	analytics: {
+		icon: BarChart3,
+		color: 'var(--color-info)',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.raw?.operation || '';
+			const days = input.raw?.days ? `${input.raw.days}d` : '';
+			if (op === 'specialists') return days ? `specialists · ${days}` : 'specialists';
+			if (op === 'tools') return days ? `tools · ${days}` : 'tools';
+			if (op === 'sessions') return days ? `sessions · ${days}` : 'sessions';
+			if (op === 'resets') return days ? `resets · ${days}` : 'resets';
+			if (op === 'files') return days ? `files · ${days}` : 'files';
+			if (op === 'insights') return 'insights';
+			if (op === 'subagents') return days ? `subagents · ${days}` : 'subagents';
+			return String(op) || 'analytics';
+		},
+	},
+	lineage: {
+		icon: Archive,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.raw?.operation || '';
+			if (op === 'search') {
+				const q = input.raw?.query ? String(input.raw.query) : '';
+				return q ? `"${truncate(q, 30)}"` : 'search';
+			}
+			if (op === 'read') {
+				const filename = input.raw?.filename ? String(input.raw.filename) : '';
+				return filename ? truncate(filename, 30) : 'read entry';
+			}
+			if (op === 'list') return 'list entries';
+			return String(op) || 'archive';
+		},
+	},
+	release: {
+		icon: Zap,
+		color: 'var(--color-success)',
+		category: 'tool',
+		showToolName: true,
+		getOneLiner: (input) => {
+			const op = input.raw?.operation || '';
+			const slug = input.raw?.slug ? String(input.raw.slug) : '';
+			if (op === 'list') return 'pending features';
+			if (op === 'get') return slug || 'get feature';
+			if (op === 'mark_ready') return slug ? `ready: ${slug}` : 'mark ready';
+			if (op === 'mark_synced') return slug ? `synced: ${slug}` : 'mark synced';
+			if (op === 'history') return 'sync history';
+			if (op === 'stats') return 'stats';
+			return String(op) || 'manage';
+		},
+	},
+
+	// ─── Chrome DevTools (MCP) ──────────────────────────────────────────────
+	// Browser automation tools. Single Chrome icon, CHROME label, orange color.
+	// Tool names arrive as mcp__chrome-isolated__X → formatToolName strips to X.
+
+	navigate_page: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const type = input.raw?.type ? String(input.raw.type) : 'url';
+			if (type === 'reload') return 'reload';
+			if (type === 'back') return 'back';
+			if (type === 'forward') return 'forward';
+			const url = input.raw?.url ? String(input.raw.url) : '';
+			if (url) {
+				try {
+					const u = new URL(url);
+					const path = u.pathname !== '/' ? u.pathname : '';
+					return truncate(`${u.host}${path}`, 45);
+				} catch { return truncate(url, 45); }
+			}
+			return 'navigate';
+		},
+	},
+	new_page: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const url = input.raw?.url ? String(input.raw.url) : '';
+			if (url) {
+				try { return `new tab · ${new URL(url).host}`; } catch { return `new tab · ${truncate(url, 30)}`; }
+			}
+			return 'new tab';
+		},
+	},
+	select_page: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const id = input.raw?.pageId;
+			return id !== undefined ? `select tab ${id}` : 'select tab';
+		},
+	},
+	list_pages: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: () => 'list tabs',
+	},
+	close_page: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const id = input.raw?.pageId;
+			return id !== undefined ? `close tab ${id}` : 'close tab';
+		},
+	},
+	resize_page: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const w = input.raw?.width;
+			const h = input.raw?.height;
+			return w && h ? `resize ${w}×${h}` : 'resize';
+		},
+	},
+	click: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const uid = input.raw?.uid ? String(input.raw.uid) : '';
+			const dbl = input.raw?.dblClick ? 'dblclick' : 'click';
+			return uid ? `${dbl} ${uid}` : dbl;
+		},
+	},
+	fill: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const uid = input.raw?.uid ? String(input.raw.uid) : '';
+			const val = input.raw?.value ? truncate(String(input.raw.value), 20) : '';
+			if (uid && val) return `fill ${uid} "${val}"`;
+			if (val) return `fill "${val}"`;
+			return uid ? `fill ${uid}` : 'fill';
+		},
+	},
+	fill_form: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const els = input.raw?.elements;
+			const count = Array.isArray(els) ? els.length : 0;
+			return count > 0 ? `fill ${count} fields` : 'fill form';
+		},
+	},
+	hover: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const uid = input.raw?.uid ? String(input.raw.uid) : '';
+			return uid ? `hover ${uid}` : 'hover';
+		},
+	},
+	press_key: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const key = input.raw?.key ? String(input.raw.key) : '';
+			return key ? `press ${key}` : 'press key';
+		},
+	},
+	upload_file: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const path = input.raw?.filePath ? String(input.raw.filePath).split('/').pop() : '';
+			return path ? `upload ${truncate(path, 28)}` : 'upload';
+		},
+	},
+	drag: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const from = input.raw?.from_uid ? String(input.raw.from_uid) : '';
+			const to = input.raw?.to_uid ? String(input.raw.to_uid) : '';
+			if (from && to) return `drag ${from} → ${to}`;
+			return 'drag';
+		},
+	},
+	take_screenshot: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			if (input.raw?.uid) return `screenshot ${input.raw.uid}`;
+			if (input.raw?.fullPage) return 'screenshot full page';
+			return 'screenshot';
+		},
+	},
+	take_snapshot: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: () => 'snapshot',
+	},
+	evaluate_script: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const fn = input.raw?.function ? String(input.raw.function) : '';
+			if (fn) {
+				const match = fn.match(/\/\/\s*(.+)/);
+				if (match) return truncate(match[1], 35);
+				const clean = fn.replace(/^\s*\(?\s*\)?\s*=>\s*\{?\s*/, '').trim();
+				return truncate(clean.split('\n')[0], 35);
+			}
+			return 'eval';
+		},
+	},
+	list_network_requests: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const types = input.raw?.resourceTypes;
+			if (Array.isArray(types) && types.length > 0) return `network · ${types.join(', ')}`;
+			return 'list network';
+		},
+	},
+	get_network_request: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const id = input.raw?.reqid;
+			return id !== undefined ? `network #${id}` : 'network request';
+		},
+	},
+	list_console_messages: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const types = input.raw?.types;
+			if (Array.isArray(types) && types.length > 0) return `console · ${types.join(', ')}`;
+			return 'list console';
+		},
+	},
+	get_console_message: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const id = input.raw?.msgid;
+			return id !== undefined ? `console #${id}` : 'console message';
+		},
+	},
+	performance_start_trace: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const reload = input.raw?.reload ? ' + reload' : '';
+			return `start trace${reload}`;
+		},
+	},
+	performance_stop_trace: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: () => 'stop trace',
+	},
+	performance_analyze_insight: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const name = input.raw?.insightName ? String(input.raw.insightName) : '';
+			return name ? `insight · ${truncate(name, 28)}` : 'analyze insight';
+		},
+	},
+	handle_dialog: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const action = input.raw?.action ? String(input.raw.action) : '';
+			return action ? `dialog · ${action}` : 'dialog';
+		},
+	},
+	emulate: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const parts: string[] = [];
+			if (input.raw?.colorScheme) parts.push(String(input.raw.colorScheme));
+			if (input.raw?.viewport) parts.push('viewport');
+			if (input.raw?.networkConditions) parts.push(String(input.raw.networkConditions));
+			return parts.length > 0 ? parts.join(', ') : 'emulate';
+		},
+	},
+	wait_for: {
+		icon: Chrome,
+		color: 'var(--color-claude)',
+		category: 'tool',
+		showToolName: true,
+		chipLabel: 'CHROME',
+		getOneLiner: (input) => {
+			const text = input.raw?.text ? String(input.raw.text) : '';
+			return text ? `wait for "${truncate(text, 25)}"` : 'wait';
+		},
+	},
+
 };
 
 // =============================================================================

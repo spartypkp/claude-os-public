@@ -57,7 +57,7 @@ Read yesterday's `daily.md` and any working files in `chief/` or `conversations/
 **Look for:**
 
 **Decisions made:**
-- Example: "Focus on TargetCo prep this week"
+- Example: "Focus on interview prep this week"
 - Action: Update MEMORY.md → Active Threads
 
 **Patterns observed:**
@@ -73,8 +73,8 @@ Read yesterday's `daily.md` and any working files in `chief/` or `conversations/
 - Action: Add to MEMORY.md → Patterns → System Operations
 
 **Context accumulated:**
-- Example: "Contact helping with VC referrals"
-- Action: Update MEMORY.md → Active Threads (Job Search)
+- Example: "Contact A helping with referrals"
+- Action: Update MEMORY.md → Active Threads
 
 **Open loops created:**
 - Example: "Need to retest public release install"
@@ -137,7 +137,7 @@ Check for contradictions between files:
 - Example: MEMORY says "Usage tracker disabled" but yesterday re-enabled it
 - Action: Update to match reality
 
-**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief.
+**Fix obvious contradictions.** Flag ambiguous ones in your summary for Chief/User.
 
 ---
 
@@ -161,7 +161,17 @@ Populate TODAY.md → Open Loops section with items that matter TODAY:
 
 ---
 
-### 5. Write Audit Summary
+### 5. Spec Cleanup (5 min)
+
+Scan `Desktop/conversations/chief/` for files that look like specs (not handoffs, not tracker docs — anything ending in `-spec.md` or matching "spec" in filename). For each one 24+ hours old, check yesterday's TODAY.md timeline: if verification is logged for that work, delete the spec. This catches anything Chief missed during the day.
+
+Also check `Desktop/` root: if any `-spec.md` file has corresponding verified work in yesterday's timeline, delete it.
+
+Log all deletions as a bullet in the audit summary. If uncertain whether work shipped, leave the file and flag it in the summary.
+
+---
+
+### 6. Write Audit Summary
 
 Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 
@@ -169,27 +179,27 @@ Create `Desktop/memory-audit-YYYY-MM-DD.md`:
 # Memory Consolidation - Feb 13, 2026
 
 ## Knowledge Extracted
-- Decision: Focus on TargetCo prep this week → Active Threads updated
+- Decision: Focus on interview prep this week → Active Threads updated
 - Pattern: User defers prep when stressed → Promoted to Patterns (3rd validation)
 - Bug: reset_day.py idempotency → Added to System Backlog
-- Context: Contact helping with referrals → Job Search thread updated
+- Context: Contact A helping with referrals → Active Threads updated
 
 ## Memory Updates
-- Active Threads: Updated TargetCo prep, Job Search pipeline
-- Waiting On: Cleared "Contact feedback" (received)
+- Active Threads: Updated interview prep, job search pipeline
+- Waiting On: Cleared "pending feedback" (received)
 - System Backlog: Added reset_day.py idempotency bug
-- Patterns: Promoted "productive procrastination" (validated 3x)
+- Patterns: Promoted "productive procrastination" (validated 3 consecutive days)
 - Recent Corrections: Removed >1 week items (3 cleared)
 
 ## Carried Forward
 - Open loop: Retest public release install
 - Open loop: .env.example update (blocked by hook)
-- Context: 3 days to TargetCo screen (priority)
+- Context: 3 days to next interview (priority)
 
 ## Contradictions Found
 - None (clean cross-check)
 
-## Questions for Chief
+## Questions for Chief/User
 - None
 
 ## Summary
@@ -276,7 +286,7 @@ Chief trusts your work. Spot-checks occasionally, but defaults to accepting your
 
 **Yesterday's daily.md timeline:**
 ```
-09:00 [Chief] — User asked to work on system infrastructure instead of TargetCo prep
+09:00 [Chief] — User asked to work on system infrastructure instead of interview prep
 10:04 [Builder] — Finished localhost consolidation spec
 ```
 
@@ -346,8 +356,8 @@ Chief trusts your work. Spot-checks occasionally, but defaults to accepting your
 
 **Check MEMORY.md → Waiting On:**
 ```
-- Jordan — Xfinity takeover (cold but active)
-- Resend/Nandeep transfer — scheduled this week
+- Sam — project handoff (cold but active)
+- Resend/Alex transfer — scheduled this week
 ```
 
 **Check yesterday's daily.md:** No mention of either

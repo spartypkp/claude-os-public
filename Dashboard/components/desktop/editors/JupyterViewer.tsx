@@ -46,8 +46,7 @@ export function JupyterViewer({ filePath }: JupyterViewerProps) {
 	const [notebook, setNotebook] = useState<Notebook | null>(null);
 
 	const fileName = filePath.split('/').pop() || filePath;
-	const apiPath = filePath.startsWith('Desktop/') ? filePath.slice(8) : filePath;
-	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(apiPath)}`;
+	const downloadUrl = `${API_BASE}/api/files/raw/${encodeURIComponent(filePath)}`;
 
 	const loadFile = useCallback(async () => {
 		setLoading(true);
@@ -231,7 +230,7 @@ function CellRenderer({ cell, index, language }: CellRendererProps) {
 						borderBottom: '1px solid var(--border-subtle)',
 					}}
 				>
-					<Code2 className="w-3 h-3" style={{ color: '#3b82f6' }} />
+					<Code2 className="w-3 h-3" style={{ color: 'var(--color-primary)' }} />
 					<span style={{ color: 'var(--text-muted)' }}>
 						In [{cell.execution_count ?? ' '}]
 					</span>
@@ -259,7 +258,7 @@ function CellRenderer({ cell, index, language }: CellRendererProps) {
 								borderBottom: '1px solid var(--border-subtle)',
 							}}
 						>
-							<Play className="w-3 h-3" style={{ color: '#22c55e' }} />
+							<Play className="w-3 h-3" style={{ color: 'var(--color-success)' }} />
 							<span style={{ color: 'var(--text-muted)' }}>
 								Out [{cell.execution_count ?? ' '}]
 							</span>

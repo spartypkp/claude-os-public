@@ -236,8 +236,8 @@ end tell'''
 # =============================================================================
 
 DEFAULT_CALENDAR_SETTINGS = {
-    "default_calendar": "Willdiamond3",
-    "default_meeting_calendar": "Willdiamond3",
+    "default_calendar": "Personal",
+    "default_meeting_calendar": "Personal",
     "default_personal_calendar": "Calendar",
 }
 

@@ -1,14 +1,15 @@
 /**
  * Drag & Drop Hook
- * 
+ *
  * Handles file drag and drop for the Claude Panel.
- * External files get uploaded to Inbox, internal paths get attached directly.
+ * External files get uploaded to .engine/data/uploads/ (hidden, not on Desktop).
+ * Internal paths get attached directly.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { INBOX_PATH } from '../constants';
-import { ensureInboxFolder, uploadWithRename } from './useAttachments';
+import { finderUploadTemp } from '@/lib/api';
+import { isDesktopPath } from '@/lib/pathUtils';
 
 // =============================================================================
 // TYPES
@@ -36,12 +37,14 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 	const [isDragOver, setIsDragOver] = useState(false);
 	const dragDepthRef = useRef(0);
 
-	// Detect if drag contains files
+	// Detect if drag contains files (macOS files, internal paths, or multi-file drags)
 	const isPanelFileDrag = useCallback((e: React.DragEvent<HTMLElement>): boolean => {
 		if (e.dataTransfer.types.includes('Files')) return true;
+		if (e.dataTransfer.types.includes('application/claude-files')) return true;
+		if (e.dataTransfer.types.includes('application/claude-file')) return true;
 		if (!e.dataTransfer.types.includes('text/plain')) return false;
 		const textData = e.dataTransfer.getData('text/plain');
-		return textData.startsWith('Desktop/') || textData.startsWith('Inbox/');
+		return textData.startsWith('Desktop/') || textData.startsWith('Inbox/') || isDesktopPath(textData);
 	}, []);
 
 	const handleDragEnter = useCallback((e: React.DragEvent<HTMLElement>) => {
@@ -71,61 +74,64 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 		dragDepthRef.current = 0;
 		setIsDragOver(false);
 
-		// Handle external files
+		// Handle external macOS files (only if no claude-file marker, which means it's a real OS file)
 		const droppedFiles = Array.from(e.dataTransfer.files || []);
-		if (droppedFiles.length > 0) {
+		if (droppedFiles.length > 0 && !e.dataTransfer.types.includes('application/claude-file')) {
 			try {
-				await ensureInboxFolder();
-				let importedCount = 0;
 				for (const file of droppedFiles) {
-					const uploaded = await uploadWithRename(file);
-					const uploadPath = uploaded?.path || `${INBOX_PATH}/${file.name}`;
-					await onAttach(uploadPath, true);
-					importedCount += 1;
-				}
-				if (importedCount > 0) {
-					toast.success(
-						importedCount === 1
-							? 'Imported file to Desktop/Inbox'
-							: `Imported ${importedCount} files to Desktop/Inbox`
-					);
+					const uploaded = await finderUploadTemp(file);
+					await onAttach(uploaded.path, true);
 				}
 			} catch (err) {
-				onError(err instanceof Error ? err.message : 'Failed to upload files');
+				onError(err instanceof Error ? err.message : 'Failed to attach files');
 			}
 			return;
 		}
 
-		// Handle internal file paths
-		const internalPath = e.dataTransfer.getData('text/plain');
-		if (internalPath && (internalPath.startsWith('Desktop/') || internalPath.startsWith('Inbox/'))) {
-			onAttach(internalPath);
+		// Normalize internal paths — ensure Desktop/ prefix for attachment storage
+		const normalizePath = (p: string) => {
+			if (p.startsWith('Desktop/') || p.startsWith('Inbox/')) return p;
+			// Absolute Desktop paths — keep as-is (backend handles both formats)
+			if (isDesktopPath(p) && p.startsWith('/')) return p;
+			return `Desktop/${p}`;
+		};
+
+		// Handle multi-file internal drags (from Desktop icon multi-select)
+		const multiPaths = e.dataTransfer.getData('application/claude-files');
+		if (multiPaths) {
+			try {
+				const paths: string[] = JSON.parse(multiPaths);
+				for (const path of paths) {
+					await onAttach(normalizePath(path));
+				}
+				if (paths.length > 1) {
+					toast.success(`Attached ${paths.length} files`);
+				}
+			} catch {
+				// Fall through to single-path handling
+			}
+			return;
+		}
+
+		// Handle single internal file path (from Finder windows or Desktop icons)
+		const internalPath = e.dataTransfer.getData('application/claude-file') || e.dataTransfer.getData('text/plain');
+		if (internalPath) {
+			onAttach(normalizePath(internalPath));
 		}
 	}, [onAttach, onError]);
 
-	// Handle file picker input
+	// Handle file picker input (paperclip button)
 	const handleFilePick = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = Array.from(e.target.files || []);
 		if (files.length === 0) return;
 
 		try {
-			await ensureInboxFolder();
-			let importedCount = 0;
 			for (const file of files) {
-				const uploaded = await uploadWithRename(file);
-				const uploadPath = uploaded?.path || `${INBOX_PATH}/${file.name}`;
-				await onAttach(uploadPath, true);
-				importedCount += 1;
-			}
-			if (importedCount > 0) {
-				toast.success(
-					importedCount === 1
-						? 'Imported file to Desktop/Inbox'
-						: `Imported ${importedCount} files to Desktop/Inbox`
-				);
+				const uploaded = await finderUploadTemp(file);
+				await onAttach(uploaded.path, true);
 			}
 		} catch (err) {
-			onError(err instanceof Error ? err.message : 'Failed to import files');
+			onError(err instanceof Error ? err.message : 'Failed to attach files');
 		} finally {
 			e.target.value = '';
 		}
@@ -140,4 +146,3 @@ export function useDragDrop({ onAttach, onError }: UseDragDropOptions): UseDragD
 		handleFilePick,
 	};
 }
-

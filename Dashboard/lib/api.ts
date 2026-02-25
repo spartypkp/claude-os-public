@@ -126,7 +126,7 @@ export async function createCalendarEvent(payload: CreateEventPayload): Promise<
 // FILES APIs
 // =========================================
 
-export async function fetchFileTree(): Promise<FileTreeNode[]> {
+export async function fetchFileTree(): Promise<FileTreeResponse> {
 	const res = await fetch(`${API_BASE}/api/files/tree`, { cache: 'no-store' });
 	if (!res.ok) throw new Error('Failed to fetch file tree');
 	return res.json();
@@ -211,16 +211,49 @@ export async function openInMacOS(path: string, reveal?: boolean): Promise<void>
  * Send raw keystrokes to a session (no Dashboard prefix).
  * Used for answering interactive prompts like AskUserQuestion.
  */
-export async function sendKeystroke(sessionId: string, text: string): Promise<void> {
+export async function sendKeystroke(sessionId: string, text: string, submit: boolean = true): Promise<void> {
 	const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/keystroke`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ message: text }),
+		body: JSON.stringify({ message: text, submit }),
 	});
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to send keystroke' }));
 		throw new Error(error.detail || 'Failed to send keystroke');
 	}
+}
+
+/**
+ * Send raw key sequences to a session (arrow keys, Enter, etc.).
+ * Used for TUI menus like plan mode approval that need arrow navigation.
+ */
+export async function sendKeys(sessionId: string, keys: string[]): Promise<void> {
+	const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/send-keys`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ keys }),
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to send keys' }));
+		throw new Error(error.detail || 'Failed to send keys');
+	}
+}
+
+/**
+ * Fetch the most recently modified plan file from ~/.claude/plans/.
+ */
+export async function fetchPlanFile(sessionId: string): Promise<{
+	path: string;
+	name: string;
+	content: string;
+	modified: string;
+}> {
+	const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/plan-file`, { cache: 'no-store' });
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to fetch plan' }));
+		throw new Error(error.detail || 'Failed to fetch plan');
+	}
+	return res.json();
 }
 
 // =========================================
@@ -416,12 +449,12 @@ export async function fetchClaudeActivity(): Promise<ClaudeActivityData> {
 }
 
 // =========================================
-// FINDER APIs (Desktop/ file operations)
+// FINDER APIs (file operations with absolute paths)
 // =========================================
 
 export interface FinderItem {
 	name: string;
-	path: string;
+	path: string;  // Absolute path
 	type: 'file' | 'folder' | 'domain' | 'app';
 	icon: string;
 	size: number | null;
@@ -433,13 +466,13 @@ export interface FinderItem {
 }
 
 export interface FinderListResponse {
-	path: string;
+	path: string;  // Absolute path
 	items: FinderItem[];
 	count: number;
 }
 
 export interface FinderFileContent {
-	path: string;
+	path: string;  // Absolute path
 	content: string;
 	type: 'markdown' | 'text' | 'config' | 'code' | 'unknown';
 	size: number;
@@ -452,21 +485,17 @@ export interface FinderSearchResponse {
 	count: number;
 }
 
-/**
- * Strip "Desktop/" prefix from paths.
- * The file tree API returns repo-relative paths (Desktop/foo.md) but
- * Finder mutation APIs expect Desktop-relative paths (foo.md).
- * Call this on any path before passing to a Finder API.
- */
-function toDesktopRelative(path: string): string {
-	return path.replace(/^Desktop\//, '');
+/** File tree response includes repo root paths for frontend path utilities. */
+export interface FileTreeResponse {
+	repoRoot: string;
+	desktopRoot: string;
+	tree: FileTreeNode[];
 }
 
 /**
- * List contents of a directory in Desktop/.
+ * List contents of a directory. Pass absolute path.
  */
 export async function finderList(path: string = ''): Promise<FinderListResponse> {
-	path = toDesktopRelative(path);
 	const endpoint = path ? `/api/files/list/${encodeURIComponent(path)}` : '/api/files/list';
 	const res = await fetch(`${API_BASE}${endpoint}`, { cache: 'no-store' });
 	if (!res.ok) {
@@ -480,7 +509,6 @@ export async function finderList(path: string = ''): Promise<FinderListResponse>
  * Get detailed info for a file or folder.
  */
 export async function finderInfo(path: string): Promise<FinderItem> {
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/info/${encodeURIComponent(path)}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to get info' }));
@@ -493,7 +521,6 @@ export async function finderInfo(path: string): Promise<FinderItem> {
  * Read file content.
  */
 export async function finderRead(path: string): Promise<FinderFileContent> {
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/read/${encodeURIComponent(path)}`, { cache: 'no-store' });
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({ detail: 'Failed to read file' }));
@@ -503,10 +530,9 @@ export async function finderRead(path: string): Promise<FinderFileContent> {
 }
 
 /**
- * Create a new file in Desktop/.
+ * Create a new file. Path must be within Desktop/.
  */
 export async function finderCreateFile(path: string, content: string = ''): Promise<FinderItem> {
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/file`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -520,10 +546,9 @@ export async function finderCreateFile(path: string, content: string = ''): Prom
 }
 
 /**
- * Create a new folder in Desktop/.
+ * Create a new folder. Path must be within Desktop/.
  */
 export async function finderCreateFolder(path: string): Promise<FinderItem> {
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/folder`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -538,10 +563,8 @@ export async function finderCreateFolder(path: string): Promise<FinderItem> {
 
 /**
  * Upload a file to Desktop/ (supports binary files like images).
- * Uses multipart form data for upload.
  */
 export async function finderUpload(file: File, destPath: string = ''): Promise<FinderItem> {
-	destPath = toDesktopRelative(destPath);
 	const formData = new FormData();
 	formData.append('file', file);
 	formData.append('dest_path', destPath);
@@ -558,15 +581,32 @@ export async function finderUpload(file: File, destPath: string = ''): Promise<F
 }
 
 /**
- * Rename a file or folder.
+ * Upload a file to .engine/data/uploads/ for temporary attachment (not visible on Desktop).
+ * Returns the path relative to project root.
+ */
+export async function finderUploadTemp(file: File): Promise<{ path: string; name: string; size: number }> {
+	const formData = new FormData();
+	formData.append('file', file);
+
+	const res = await fetch(`${API_BASE}/api/files/upload-temp`, {
+		method: 'POST',
+		body: formData,
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ detail: 'Failed to upload file' }));
+		throw new Error(error.detail || 'Failed to upload file');
+	}
+	return res.json();
+}
+
+/**
+ * Rename a file or folder. Path must be within Desktop/.
  */
 export async function finderRename(path: string, newName: string): Promise<FinderItem> {
-	// Protect Claude system files
 	if (isProtectedFile(path)) {
 		throw new Error('Cannot rename Claude system files');
 	}
 
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/rename/${encodeURIComponent(path)}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -580,11 +620,9 @@ export async function finderRename(path: string, newName: string): Promise<Finde
 }
 
 /**
- * Move a file or folder to a new location.
+ * Move a file or folder. Both paths must be within Desktop/.
  */
 export async function finderMove(path: string, destPath: string): Promise<FinderItem> {
-	path = toDesktopRelative(path);
-	destPath = toDesktopRelative(destPath);
 	const res = await fetch(`${API_BASE}/api/files/move/${encodeURIComponent(path)}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -604,10 +642,9 @@ function isProtectedFile(path: string): boolean {
 }
 
 /**
- * Delete a file or folder.
+ * Delete a file or folder. Path must be within Desktop/.
  */
 export async function finderDelete(path: string, recursive: boolean = false): Promise<{ deleted: string; }> {
-	// Protect Claude system files
 	if (isProtectedFile(path)) {
 		throw new Error('Cannot delete Claude system files');
 	}
@@ -677,12 +714,10 @@ export interface RestoreResponse {
  * Move a file or folder to trash.
  */
 export async function moveToTrash(path: string): Promise<TrashResponse> {
-	// Protect Claude system files
 	if (isProtectedFile(path)) {
 		throw new Error('Cannot delete Claude system files');
 	}
 
-	path = toDesktopRelative(path);
 	const res = await fetch(`${API_BASE}/api/files/trash`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

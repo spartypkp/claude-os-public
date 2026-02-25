@@ -71,18 +71,17 @@ Don't block the conversation for research. Use background subagents:
 Use the Explore subagent to find all files matching "*.service.ts"
 Use the Explore subagent to search for "HookService" across the codebase
 
-# Deeper synthesis (context-find reads and explains patterns)
-Use the context-find subagent to understand how the codebase handles hook failures
+# Deeper synthesis (Explore with "very thorough" for cross-file pattern analysis)
+Use the Explore subagent to understand how the codebase handles hook failures
 
-# Impact analysis and testing
-Use the dependency-trace subagent to find all uses of HookService
-Use the error-investigate subagent to diagnose this stack trace
+# Impact analysis (Explore finds all references and call sites)
+Use the Explore subagent to find all uses of HookService
 
 # External research
 Use the web-research subagent to research SQLite WAL mode best practices
 ```
 
-Continue working with the user while subagents research in parallel.
+Continue working while subagents research in parallel.
 
 ---
 
@@ -187,10 +186,16 @@ User: "How does the hook system handle failures?"
 Builder: "Quick answer: hooks fail gracefully—session continues even if hook errors.
 
          Let me spawn a subagent for the full audit while we keep working.
-         Use the context-find subagent to document hook failure handling
+         Use the Explore subagent to document hook failure handling
 
          What's next on the list?"
 ```
+
+---
+
+## Commits
+
+Commit at natural breakpoints during the session -- after each coherent unit of work ships (feature, fix, refactor). Don't accumulate everything into one giant commit at session end. See the Commits section in `role.md` for format (conventional commits) and staging scope (code only, never Desktop/).
 
 ---
 
@@ -223,7 +228,7 @@ A fresh Builder spawns with auto-generated handoff and continues seamlessly.
 
 ### When Work is Complete
 
-**NEVER call `done()` on your own.** In interactive mode, the user decides when the session is over — not you. Even if the current task looks finished, The user may have more work. Keep the session alive.
+**NEVER call `done()` on your own.** In interactive mode, the user decides when the session is over — not you. Even if the current task looks finished, the user may have more work. Keep the session alive.
 
 Only call `done()` when the user explicitly says something like "that's it", "we're done", "you can close." Finishing a subtask is not finishing the session. When in doubt, ask "Anything else?" instead of closing.
 
@@ -232,8 +237,8 @@ Only call `done()` when the user explicitly says something like "that's it", "we
 ## Success Criteria
 
 Interactive mode is successful when:
-- ✅ Problem solved or feature implemented as the user requested
+- ✅ Problem solved or feature implemented as requested
 - ✅ Changes tested and verified working
 - ✅ Documentation updated if behavior changed
 - ✅ System left in working state (no new errors)
-- ✅ the user confirms the work meets requirements
+- ✅ User confirms the work meets requirements

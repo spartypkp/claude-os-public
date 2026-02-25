@@ -14,13 +14,14 @@ import type { HandoffPhase } from '@/hooks/useHandoffState';
 import { ClaudeLogo } from './ClaudeLogo';
 import {
   Check,
+  CircleHelp,
   Loader2,
   Minus,
   Plus,
   RefreshCw,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
@@ -100,23 +101,45 @@ function CloseConfirm({
 
 import { API_BASE } from '@/lib/api';
 
+// Claude Code's exact spinner: 6 phases with reverse mirror (10-stop loop)
+const ACTIVITY_ICONS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+
 // Activity indicator - unified for Chief and Specialists
-function ActivityIndicator({ isActive, handoffPhase }: { isActive: boolean; handoffPhase?: HandoffPhase }) {
+function ActivityIndicator({ isActive, handoffPhase, hasPendingQuestion }: { isActive: boolean; handoffPhase?: HandoffPhase; hasPendingQuestion?: boolean }) {
+  const [iconIndex, setIconIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isActive || handoffPhase || hasPendingQuestion) return;
+
+    const interval = setInterval(() => {
+      setIconIndex(i => (i + 1) % ACTIVITY_ICONS.length);
+    }, 120);
+
+    return () => clearInterval(interval);
+  }, [isActive, handoffPhase, hasPendingQuestion]);
+
   // Handoff in progress — show spinning refresh icon
   if (handoffPhase) {
     return (
       <span className="flex items-center">
-        <RefreshCw className="w-3 h-3 text-[#da7756] animate-spin" />
+        <RefreshCw className="w-3 h-3 text-[var(--color-claude)] animate-spin" />
+      </span>
+    );
+  }
+
+  // Waiting for user to answer a question
+  if (hasPendingQuestion) {
+    return (
+      <span className="flex items-center">
+        <CircleHelp className="w-3.5 h-3.5 text-[var(--color-claude)] animate-pulse" />
       </span>
     );
   }
 
   if (isActive) {
     return (
-      <span className="flex items-center gap-0.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" />
-        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '150ms' }} />
-        <span className="w-1.5 h-1.5 rounded-full bg-[#da7756] animate-pulse" style={{ animationDelay: '300ms' }} />
+      <span className="text-[var(--color-claude)] w-4 text-center text-xs transition-all duration-150">
+        {ACTIVITY_ICONS[iconIndex]}
       </span>
     );
   }
@@ -161,11 +184,13 @@ function ChiefTab({
   isSelected,
   onSelect,
   handoffPhase,
+  hasPendingQuestion,
 }: {
   conversation: ActiveConversation;
   isSelected: boolean;
   onSelect: () => void;
   handoffPhase?: HandoffPhase;
+  hasPendingQuestion?: boolean;
 }) {
   const { openContextMenu } = useWindowStore();
   const isActive = getIsActive(conversation);
@@ -195,14 +220,14 @@ function ChiefTab({
         }
       `}
     >
-      <span className="flex-shrink-0 text-[#da7756]">
+      <span className="flex-shrink-0 text-[var(--color-claude)]">
         <ClaudeLogo className="w-4 h-4" />
       </span>
 
       <span className="font-medium text-sm">Chief</span>
 
       <div className="ml-auto flex-shrink-0">
-        <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
+        <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} hasPendingQuestion={hasPendingQuestion} />
       </div>
     </button>
   );
@@ -211,7 +236,7 @@ function ChiefTab({
 // Phase accent color for autonomous specialist tabs
 const PHASE_ACCENT: Record<string, string> = {
   preparation: '#60a5fa',
-  implementation: '#f59e0b',
+  implementation: 'var(--color-warning)',
   verification: '#34d399',
 };
 
@@ -222,12 +247,14 @@ function SpecialistTab({
   onSelect,
   onClose,
   handoffPhase,
+  hasPendingQuestion,
 }: {
   conversation: ActiveConversation;
   isSelected: boolean;
   onSelect: () => void;
   onClose?: () => void;
   handoffPhase?: HandoffPhase;
+  hasPendingQuestion?: boolean;
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -282,14 +309,14 @@ function SpecialistTab({
           />
         )}
 
-        <span className="flex-shrink-0 text-[#da7756]">
+        <span className="flex-shrink-0 text-[var(--color-claude)]">
           {renderRoleIcon(role, 'w-3.5 h-3.5')}
         </span>
 
         <span className="truncate flex-1 text-left">{roleName}</span>
 
         <div className="flex-shrink-0 flex items-center gap-1.5">
-          <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} />
+          <ActivityIndicator isActive={isActive} handoffPhase={handoffPhase} hasPendingQuestion={hasPendingQuestion} />
 
           {onClose && (isHovered || isSelected) && (
             <div
@@ -332,6 +359,8 @@ interface ConversationListProps {
   sseConnected?: boolean;
   /** Get handoff phase for a conversation */
   getHandoffPhase?: (conversationId: string) => HandoffPhase;
+  /** Selected conversation has a pending AskUserQuestion */
+  hasPendingQuestion?: boolean;
 }
 
 export function ConversationList({
@@ -344,6 +373,7 @@ export function ConversationList({
   onMinimize,
   sseConnected = true,
   getHandoffPhase,
+  hasPendingQuestion,
 }: ConversationListProps) {
   const [showSpawnDropdown, setShowSpawnDropdown] = useState(false);
   const [spawningRole, setSpawningRole] = useState<string | null>(null);
@@ -362,15 +392,18 @@ export function ConversationList({
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 0);
 
-    // Count tabs hidden beyond the right edge
-    const rightEdge = el.scrollLeft + el.clientWidth;
-    const tabs = el.querySelectorAll('[data-conversation-id]');
-    let hidden = 0;
-    tabs.forEach((tab) => {
-      const tabRight = (tab as HTMLElement).offsetLeft + (tab as HTMLElement).offsetWidth;
-      if (tabRight > rightEdge + 4) hidden++;
-    });
-    setHiddenRightCount(hidden);
+    // Count tabs hidden beyond the right edge using scrollWidth vs clientWidth
+    // Avoids forced reflow from reading offsetLeft/offsetWidth on each tab
+    const hasOverflow = el.scrollWidth > el.clientWidth;
+    const scrollRemaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
+    if (!hasOverflow || scrollRemaining < 4) {
+      setHiddenRightCount(0);
+    } else {
+      // Estimate hidden count from remaining scroll distance and average tab width
+      const tabs = el.querySelectorAll('[data-conversation-id]');
+      const avgWidth = tabs.length > 0 ? el.scrollWidth / tabs.length : 120;
+      setHiddenRightCount(Math.max(1, Math.round(scrollRemaining / avgWidth)));
+    }
   }, []);
 
   const scrollRight = useCallback(() => {
@@ -404,11 +437,20 @@ export function ConversationList({
   }, [selectedConversationId]);
 
   // Separate Chief from Specialists (active conversations only)
-  const activeConversations = conversations.filter(c => !c.ended_at);
-  const chiefConversation = activeConversations.find(c => c.role === 'chief');
-  const specialists = activeConversations
-    .filter(c => c.role !== 'chief')
-    .sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+  const { chiefConversation, specialists } = useMemo(() => {
+    const active = conversations.filter(c => !c.ended_at);
+    return {
+      chiefConversation: active.find(c => c.role === 'chief'),
+      specialists: active
+        .filter(c => c.role !== 'chief')
+        .sort((a, b) => {
+          const aInteractive = a.mode === 'interactive' ? 0 : 1;
+          const bInteractive = b.mode === 'interactive' ? 0 : 1;
+          if (aInteractive !== bInteractive) return aInteractive - bInteractive;
+          return new Date(a.started_at).getTime() - new Date(b.started_at).getTime();
+        }),
+    };
+  }, [conversations]);
 
   const handleSpawn = async (role: string) => {
     setSpawningRole(role);
@@ -474,6 +516,11 @@ export function ConversationList({
                 isSelected={selectedConversationId === chiefConversation.conversation_id}
                 onSelect={() => onSelectConversation(chiefConversation.conversation_id, 'chief')}
                 handoffPhase={getHandoffPhase?.(chiefConversation.conversation_id)}
+                hasPendingQuestion={
+                  selectedConversationId === chiefConversation.conversation_id
+                    ? hasPendingQuestion
+                    : chiefConversation.waiting_for_input
+                }
               />
             ) : (
               <button
@@ -481,10 +528,10 @@ export function ConversationList({
                 disabled={spawningChief}
                 className={`
                   flex flex-col gap-0.5 px-4 py-2 min-w-[140px] flex-shrink-0
-                  bg-gradient-to-b from-[#da7756] to-[#C15F3C] text-white
-                  hover:from-[#e08566] hover:to-[#d16f4c]
+                  bg-gradient-to-b from-[var(--color-claude)] to-[var(--color-primary-hover)] text-white
+                  hover:from-[var(--color-claude-accent)] hover:to-[var(--color-claude)]
                   rounded-t-lg transition-colors disabled:opacity-50
-                  border-t border-l border-r border-[#da7756]/30 mb-[-1px] z-10
+                  border-t border-l border-r border-[var(--color-claude)]/30 mb-[-1px] z-10
                 `}
               >
                 <div className="flex items-center gap-2">
@@ -507,6 +554,11 @@ export function ConversationList({
                 onSelect={() => onSelectConversation(conversation.conversation_id, conversation.role)}
                 onClose={() => handleEndConversation(conversation.conversation_id)}
                 handoffPhase={getHandoffPhase?.(conversation.conversation_id)}
+                hasPendingQuestion={
+                  selectedConversationId === conversation.conversation_id
+                    ? hasPendingQuestion
+                    : conversation.waiting_for_input
+                }
               />
             ))}
           </div>
@@ -571,7 +623,7 @@ export function ConversationList({
                         disabled={spawningRole !== null}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-[#2a2a2a] transition-colors disabled:opacity-50"
                       >
-                        <span className="text-[#da7756] flex-shrink-0">
+                        <span className="text-[var(--color-claude)] flex-shrink-0">
                           {spawningRole === role.slug ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
@@ -617,14 +669,21 @@ export function ConversationList({
           <div className="flex items-center gap-3 min-w-0">
             {selectedHandoffPhase ? (
               <>
-                <RefreshCw className="w-3.5 h-3.5 text-[#da7756] animate-spin flex-shrink-0" />
-                <span className="text-[13px] truncate text-[#da7756]">
+                <RefreshCw className="w-3.5 h-3.5 text-[var(--color-claude)] animate-spin flex-shrink-0" />
+                <span className="text-[13px] truncate text-[var(--color-claude)]">
                   {handoffStatusText[selectedHandoffPhase]}
+                </span>
+              </>
+            ) : hasPendingQuestion ? (
+              <>
+                <CircleHelp className="w-3.5 h-3.5 text-[var(--color-claude)] flex-shrink-0" />
+                <span className="text-[13px] truncate text-[var(--color-claude)]">
+                  Waiting for answer
                 </span>
               </>
             ) : (
               <>
-                <div className={`w-0.5 h-4 rounded-full flex-shrink-0 ${isWorking ? 'bg-[#da7756]' : 'bg-gray-200 dark:bg-[#444]'}`} />
+                <div className={`w-0.5 h-4 rounded-full flex-shrink-0 ${isWorking ? 'bg-[var(--color-claude)]' : 'bg-gray-200 dark:bg-[#444]'}`} />
                 <span className={`text-[13px] truncate ${isWorking ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
                   {statusText}
                 </span>
@@ -643,7 +702,7 @@ export function ConversationList({
 
               const phaseColors: Record<string, string> = {
                 preparation: '#60a5fa',
-                implementation: '#f59e0b',
+                implementation: 'var(--color-warning)',
                 verification: '#34d399',
               };
 
@@ -686,7 +745,7 @@ export function ConversationList({
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${isWorking ? 'bg-green-400' : 'bg-[#da7756]/40'}`} />
+                      <div className={`w-1.5 h-1.5 rounded-full ${isWorking ? 'bg-green-400' : 'bg-[var(--color-claude)]/40'}`} />
                       <span className="text-[10px] font-medium text-gray-500 dark:text-[#666]">
                         Interactive
                       </span>

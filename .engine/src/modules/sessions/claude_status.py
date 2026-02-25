@@ -135,6 +135,14 @@ def parse_claude_status(pane_content: str) -> ClaudeStatus:
         status.context_full = True
         status.context_warning = True
         status.context_percent_used = 100
+
+    # 1c. Image bomb - oversized image in context, API rejects all requests
+    # Pattern: "An image in the conversation exceeds the dimension limit"
+    if re.search(r'image in the conversation exceeds the dimension limit', pane_content, re.IGNORECASE):
+        status.context_full = True
+        status.context_warning = True
+        # Don't override context_percent_used — the session may have plenty of context
+        # but it's stuck because every API call fails due to the oversized image
     
     # 2. Active task - the "cute message"
     # Pattern: <icon> TaskName… (<metadata>)

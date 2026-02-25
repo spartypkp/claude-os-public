@@ -195,6 +195,9 @@ export const EXPLANATIONS: Record<string, Explanation> = {
     ],
   },
 
+  // ============================================
+  // CUSTOM APPS (populated dynamically from APP-SPEC.md)
+  // ============================================
 };
 
 /**

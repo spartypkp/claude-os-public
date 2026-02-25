@@ -46,7 +46,7 @@ from telegram.constants import ParseMode
 from modules.sessions import SessionManager
 from modules.sessions.transcript import stream_transcript
 from core.storage import SystemStorage
-from core.tmux import inject_message
+from core.tmux import inject_message_async
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ MAX_MESSAGE_LENGTH = 4096
 # Config from environment
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AUTHORIZED_USER_ID = os.getenv("TELEGRAM_USER_ID")
-GROUP_CHAT_ID = os.getenv("TELEGRAM_GROUP_CHAT_ID")
+GROUP_CHAT_IDS = os.getenv("TELEGRAM_GROUP_CHAT_IDS", os.getenv("TELEGRAM_GROUP_CHAT_ID", ""))
 AUTHORIZED_USERS = os.getenv("TELEGRAM_AUTHORIZED_USERS", "")
 
 
@@ -73,8 +73,13 @@ class TelegramService:
         self._stop_event = asyncio.Event()
         self._transcript_task: Optional[asyncio.Task] = None
 
-        # Group chat support
-        self.group_chat_id = int(GROUP_CHAT_ID) if GROUP_CHAT_ID else None
+        # Group chat support (multiple groups)
+        self.group_chat_ids: set[int] = set()
+        if GROUP_CHAT_IDS:
+            for gid in GROUP_CHAT_IDS.split(","):
+                gid = gid.strip()
+                if gid:
+                    self.group_chat_ids.add(int(gid))
         # Build authorized users set — always includes the owner
         self.authorized_users: set[int] = set()
         if self.authorized_user_id:
@@ -266,7 +271,7 @@ class TelegramService:
             source = f"Telegram @{username} ({group_name})"
 
         # Inject into Chief's tmux pane with Telegram source tag
-        success = inject_message(
+        success = await inject_message_async(
             target=chief_session.tmux_pane,
             message=message_text,
             submit=True,
@@ -346,7 +351,7 @@ class TelegramService:
             source = f"Telegram @{username}"
 
             # Inject into Chief's tmux pane
-            success = inject_message(
+            success = await inject_message_async(
                 target=chief_session.tmux_pane,
                 message=message,
                 submit=True,
@@ -412,7 +417,7 @@ class TelegramService:
             source = f"Telegram @{username}"
 
             # Inject into Chief's tmux pane
-            success = inject_message(
+            success = await inject_message_async(
                 target=chief_session.tmux_pane,
                 message=message,
                 submit=True,
@@ -866,10 +871,10 @@ class TelegramService:
         if chat_type == "private":
             return user_id == self.authorized_user_id
         else:
-            # Group/supergroup — must be the configured group with an authorized user
+            # Group/supergroup — must be a configured group with an authorized user
             return (
-                self.group_chat_id is not None
-                and msg.chat_id == self.group_chat_id
+                len(self.group_chat_ids) > 0
+                and msg.chat_id in self.group_chat_ids
                 and user_id in self.authorized_users
             )
 
