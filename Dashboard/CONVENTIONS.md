@@ -12,7 +12,7 @@ Three approaches coexist. Use each for its strength:
 
 **Rules:**
 - CSS vars for any color that changes with theme (light/dark). Defined in `globals.css`.
-- Tailwind for layout and spacing — never for semantic colors (no `text-gray-400` for themed text).
+- Tailwind for layout and spacing: never for semantic colors (no `text-gray-400` for themed text).
 - Hex only for brand constants (`#DA7756`) or truly static chrome. If you're reaching for a gray hex, use a CSS var instead.
 - No inline `style={{}}` for colors. Use CSS vars or Tailwind classes.
 - `className` over `style` in all cases except dynamic computed values (grid dimensions, absolute positioning).
@@ -21,13 +21,13 @@ Three approaches coexist. Use each for its strength:
 
 - Shared components live in `components/shared/` (e.g., `Section`, `SettingRow`).
 - App-specific components live in `components/desktop/apps/{app}/`.
-- One canonical copy of reusable components — import, don't duplicate. `ClaudeLogo` lives at `components/ClaudePanel/ClaudeLogo.tsx`.
+- One canonical copy of reusable components: import, don't duplicate. `ClaudeLogo` lives at `components/ClaudePanel/ClaudeLogo.tsx`.
 
 ## Data Fetching
 
 - Use React Query for all server state. Hook definitions in `hooks/queries/`.
 - SSE events invalidate query keys via `queryClient.ts` event mappings.
-- No raw `fetch` + `useState` for data that comes from the backend — use the query layer.
+- No raw `fetch` + `useState` for data that comes from the backend: use the query layer.
 
 ## Testing
 

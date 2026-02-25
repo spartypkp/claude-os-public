@@ -6,20 +6,20 @@ Thanks for your interest in contributing! This project is an experiment in using
 
 ## Ways to Contribute
 
-**Bug Reports** — Found something broken? Open a GitHub issue with:
+**Bug Reports**: Found something broken? Open a GitHub issue with:
 - What you expected to happen
 - What actually happened
 - Steps to reproduce
 - Your environment (OS, Node version, Python version)
 
-**Feature Requests** — Have an idea? Open an issue describing:
+**Feature Requests**: Have an idea? Open an issue describing:
 - The problem you're trying to solve
 - Your proposed solution
 - Alternative approaches you considered
 
-**Code Contributions** — Ready to build? See the development setup below.
+**Code Contributions**: Ready to build? See the development setup below.
 
-**Documentation** — Spotted a typo? Unclear instructions? Documentation PRs are always welcome.
+**Documentation**: Spotted a typo? Unclear instructions? Documentation PRs are always welcome.
 
 ---
 
@@ -67,7 +67,7 @@ See `SETUP.md` for detailed installation instructions.
 1. **Fork** the repository
 2. **Create a branch** for your feature: `git checkout -b feature/your-feature`
 3. **Make your changes** following the code guidelines below
-4. **Test locally** — verify the Dashboard loads and backend responds
+4. **Test locally**: verify the Dashboard loads and backend responds
 5. **Commit** with clear messages: `Fix calendar event creation bug`
 6. **Push** to your fork
 7. **Open a PR** with:
@@ -97,10 +97,10 @@ See `SETUP.md` for detailed installation instructions.
 
 ### General
 
-- **No unused imports** — Clean up before committing
-- **Descriptive names** — `fetchCalendarEvents` not `getData`
-- **Comments for why, not what** — Code should be self-documenting
-- **Small, focused PRs** — One feature or fix per PR
+- **No unused imports**: Clean up before committing
+- **Descriptive names**: `fetchCalendarEvents` not `getData`
+- **Comments for why, not what**: Code should be self-documenting
+- **Small, focused PRs**: One feature or fix per PR
 
 ---
 
@@ -118,26 +118,26 @@ Desktop/             → User files (specs, memory, documents)
 For detailed architecture documentation, see `CLAUDE.md`.
 
 **Key concepts:**
-- **Roles** — Different Claude personalities (Chief, Builder, etc.)
-- **Hooks** — Session lifecycle management
-- **MCP Tools** — How Claude interacts with the system
-- **Specs** — Markdown files that define goals and applications
+- **Roles**: Different Claude personalities (Chief, Builder, etc.)
+- **Hooks**: Session lifecycle management
+- **MCP Tools**: How Claude interacts with the system
+- **Specs**: Markdown files that define goals and applications
 
 ---
 
 ## Community Guidelines
 
-- **Be respectful** — We're all here to learn and build
-- **Be patient** — Maintainers review PRs as time allows
-- **Be helpful** — Answer questions when you can
-- **Ask questions** — Use GitHub Discussions for help
+- **Be respectful**: We're all here to learn and build
+- **Be patient**: Maintainers review PRs as time allows
+- **Be helpful**: Answer questions when you can
+- **Ask questions**: Use GitHub Discussions for help
 
 ---
 
 ## Questions?
 
-- **GitHub Issues** — Bug reports and feature requests
-- **GitHub Discussions** — General questions and ideas
-- **CLAUDE.md** — Detailed system documentation
+- **GitHub Issues**: Bug reports and feature requests
+- **GitHub Discussions**: General questions and ideas
+- **CLAUDE.md**: Detailed system documentation
 
 Thanks for contributing!

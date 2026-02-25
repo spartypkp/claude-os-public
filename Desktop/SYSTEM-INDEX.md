@@ -49,7 +49,7 @@ The visual workspace for the life system.
 
 ### Desktop
 `Dashboard/components/desktop/SYSTEM-SPEC.md`
-ClaudeOS desktop environment — macOS-inspired window manager.
+ClaudeOS desktop environment: macOS-inspired window manager.
 
 ### Hooks
 `.claude/hooks/SYSTEM-SPEC.md`

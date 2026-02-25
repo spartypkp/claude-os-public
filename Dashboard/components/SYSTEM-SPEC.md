@@ -26,7 +26,7 @@ components/
 
 ## Folder Purposes
 
-### `/core` — Core Infrastructure
+### `/core`: Core Infrastructure
 
 **Purpose:** App shell, providers, global components.
 
@@ -42,7 +42,7 @@ components/
 | `HudPanel.tsx`, `HudCard.tsx` | HUD display |
 | `toast-provider.tsx` | Toast notifications |
 
-### `/shared` — Reusable UI
+### `/shared`: Reusable UI
 
 **Purpose:** Components used across multiple domains.
 
@@ -58,7 +58,7 @@ components/
 | `BlueprintAccordion.tsx` | Accordion for app lists |
 | `ThemeToggle.tsx` | Dark/light toggle |
 
-### `/desktop` — Desktop OS
+### `/desktop`: Desktop OS
 
 **Purpose:** ClaudeOS desktop environment.
 
@@ -93,19 +93,19 @@ desktop/
     └── widgets-manager/  # Widget configuration
 ```
 
-### `/ClaudePanel` — Claude Panel
+### `/ClaudePanel`: Claude Panel
 
 **Purpose:** Claude chat interface.
 
 See `ClaudePanel/SYSTEM-SPEC.md` for details.
 
-### `/transcript` — Transcript Viewer
+### `/transcript`: Transcript Viewer
 
 **Purpose:** Render Claude conversation turns and tool calls.
 
 See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 
-### `/activity` — Activity Views
+### `/activity`: Activity Views
 
 **Purpose:** Task and session activity displays.
 
@@ -116,7 +116,7 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 | `ActivityWorkerRow.tsx` | Task list row |
 | `ActivityWorkerDetail.tsx` | Task detail view |
 
-### `/system` — System Tab Views
+### `/system`: System Tab Views
 
 **Purpose:** System panel tab content.
 
@@ -127,7 +127,7 @@ See `transcript/tools/SYSTEM-SPEC.md` for tool renderer details.
 | `ConfigTab.tsx` | Configuration |
 | `DocsTab.tsx` | Documentation |
 
-### `/context` — React Contexts
+### `/context`: React Contexts
 
 **Purpose:** Shared state contexts.
 
@@ -161,7 +161,7 @@ app/job-search/
 └── ...
 ```
 
-**NOT** in `components/` — custom app UI stays with the app.
+**NOT** in `components/`: custom app UI stays with the app.
 
 ### New Transcript Tool View
 

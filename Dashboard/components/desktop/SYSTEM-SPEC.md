@@ -1,7 +1,7 @@
 # Desktop System Specification
 
 **Location:** `Dashboard/components/desktop/`  
-**Purpose:** ClaudeOS desktop environment — macOS-inspired window manager  
+**Purpose:** ClaudeOS desktop environment: macOS-inspired window manager  
 **Last Updated:** Feb 2026
 
 ---
@@ -103,7 +103,7 @@ desktop/
 
 ## Shell Components (Root)
 
-### ClaudeOS.tsx — Main Orchestrator
+### ClaudeOS.tsx: Main Orchestrator
 
 The central component that:
 - Manages window state (via `windowStore`)
@@ -126,9 +126,9 @@ Top menu bar with three sections:
 **Left:** Claude logo (orange, opens About dialog) + active app name + Claude status text.
 
 **Center:** Three widget dropdowns with inline indicators:
-- Calendar (red icon) — inline label showing `Now: Event (Xm left)` or `Next: Event — HH:MM AM`
-- Priorities (amber icon) — inline text showing `N left` or green `N/N` when all complete
-- Email (blue icon) — inline badge with unread count (hidden at inbox zero)
+- Calendar (red icon): inline label showing `Now: Event (Xm left)` or `Next: Event: HH:MM AM`
+- Priorities (amber icon): inline text showing `N left` or green `N/N` when all complete
+- Email (blue icon): inline badge with unread count (hidden at inbox zero)
 
 Each icon opens a dropdown with full widget content (CalendarWidgetContent, PrioritiesWidgetContent, EmailWidgetContent).
 
@@ -156,12 +156,12 @@ macOS Quick Look (spacebar preview) for files.
 
 ### Others
 
-- `DesktopIcon.tsx` — File/folder icons on desktop
-- `DesktopWidget.tsx` — Widget container (legacy, see Widget Content section)
-- `DesktopWidgetRnd.tsx` — Resizable widget wrapper (legacy)
-- `GetInfoPanel.tsx` — File info (Cmd+I)
-- `PromptModal.tsx` — Text input dialogs
-- `TrashIcon.tsx` — Trash in dock
+- `DesktopIcon.tsx`: File/folder icons on desktop
+- `DesktopWidget.tsx`: Widget container (legacy, see Widget Content section)
+- `DesktopWidgetRnd.tsx`: Resizable widget wrapper (legacy)
+- `GetInfoPanel.tsx`: File info (Cmd+I)
+- `PromptModal.tsx`: Text input dialogs
+- `TrashIcon.tsx`: Trash in dock
 
 ---
 
@@ -240,13 +240,13 @@ Render file content based on type:
 
 Desktop state lives in `store/windowStore.ts`:
 
-- `windows` — Open window list
-- `windowStack` — Z-order
-- `iconOrder` — Desktop icon ordering (CSS Grid auto-fills positions)
-- `widgets` — Floating widget positions/sizes (legacy)
-- `menubarWidgets` — Set of enabled menubar widgets ('priorities', 'calendar', 'sessions')
-- `selectedIcons` — Multi-select
-- `quickLookPath` — Quick Look target
+- `windows`: Open window list
+- `windowStack`: Z-order
+- `iconOrder`: Desktop icon ordering (CSS Grid auto-fills positions)
+- `widgets`: Floating widget positions/sizes (legacy)
+- `menubarWidgets`: Set of enabled menubar widgets ('priorities', 'calendar', 'sessions')
+- `selectedIcons`: Multi-select
+- `quickLookPath`: Quick Look target
 
 Use selectors (not full store subscription):
 

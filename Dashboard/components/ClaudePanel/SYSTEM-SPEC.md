@@ -185,7 +185,7 @@ MAX_PREVIEW_CHARS = 2000
 INBOX_PATH = 'Inbox'
 
 // API
-API_BASE — re-exported from '@/lib/api' (reads NEXT_PUBLIC_API_URL env var, defaults to http://localhost:5001)
+API_BASE: re-exported from '@/lib/api' (reads NEXT_PUBLIC_API_URL env var, defaults to http://localhost:5001)
 
 // Configs
 BREAK_MESSAGES: BreakMessage[]
@@ -239,9 +239,9 @@ Role configs are defined in `lib/sessionUtils.ts` as the single source of truth 
 - Auto-clears invalid conversation params
 
 ### Keyboard Shortcuts
-- `Enter` — Send message
-- `Shift+Enter` — Newline
-- `Escape` — Interrupt session (when panel focused)
+- `Enter`: Send message
+- `Shift+Enter`: Newline
+- `Escape`: Interrupt session (when panel focused)
 
 ---
 
@@ -270,18 +270,18 @@ Role configs are defined in `lib/sessionUtils.ts` as the single source of truth 
 
 User messages in the transcript may actually be system injections (hook outputs, handoffs, role prompts, etc.). The `isSystemMessage()` function gates which messages get rendered as system pills vs. user bubbles.
 
-**Critical rule:** All pattern matching uses `startsWith` on trimmed content — never `includes`. This prevents false positives when trigger words appear mid-message in normal user text.
+**Critical rule:** All pattern matching uses `startsWith` on trimmed content: never `includes`. This prevents false positives when trigger words appear mid-message in normal user text.
 
 **Patterns detected (must appear at START of message):**
-- `[AUTO-HANDOFF]` — Session handoff injection
-- `<session-role>`, `<session-mode>` — Role/mode prompt injection
-- `<system-reminder>` — System reminder injection
-- `SessionStart:` — Startup hook context
-- `[CLAUDE OS SYS:` — System notifications (specialist complete, context warnings, etc.)
-- `[TEAM →` — Direct team messages between sessions
-- `[TEAM REQUEST:` — Spawn requests from non-Chief specialists
-- `Base directory for this skill:`, `ARGUMENTS:` — Skill invocation
-- `[Request interrupted by user]` — User interrupt
+- `[AUTO-HANDOFF]`: Session handoff injection
+- `<session-role>`, `<session-mode>`: Role/mode prompt injection
+- `<system-reminder>`: System reminder injection
+- `SessionStart:`: Startup hook context
+- `[CLAUDE OS SYS:`: System notifications (specialist complete, context warnings, etc.)
+- `[TEAM →`: Direct team messages between sessions
+- `[TEAM REQUEST:`: Spawn requests from non-Chief specialists
+- `Base directory for this skill:`, `ARGUMENTS:`: Skill invocation
+- `[Request interrupted by user]`: User interrupt
 
 **Downstream routing (in TranscriptViewer):**
 1. `isSpecialistNotification()` → SpecialistReport component (pass/fail card)
@@ -295,15 +295,15 @@ User messages in the transcript may actually be system injections (hook outputs,
 
 ## External Dependencies
 
-- `TranscriptViewer` — Renders conversation events (see inline in `transcript/`)
-- `transcript/tools/` — Tool call rendering (see `tools/SYSTEM-SPEC.md`)
-- `lib/systemMessages.ts` — System message detection and parsing
-- `lib/sessionUtils.ts` — Role configs (single source of truth)
-- `hooks/useHandoffState.ts` — SSE handoff lifecycle tracking per conversation
-- `ChatPanelContext` — Global panel state (sessionId, visibility, openSession)
-- `useClaudeSession` / `useConversation` — SSE connection for transcript events
-- `useClaudeActivity` — Session list from API
-- `useChiefStatus` — Chief spawn/status
+- `TranscriptViewer`: Renders conversation events (see inline in `transcript/`)
+- `transcript/tools/`: Tool call rendering (see `tools/SYSTEM-SPEC.md`)
+- `lib/systemMessages.ts`: System message detection and parsing
+- `lib/sessionUtils.ts`: Role configs (single source of truth)
+- `hooks/useHandoffState.ts`: SSE handoff lifecycle tracking per conversation
+- `ChatPanelContext`: Global panel state (sessionId, visibility, openSession)
+- `useClaudeSession` / `useConversation`: SSE connection for transcript events
+- `useClaudeActivity`: Session list from API
+- `useChiefStatus`: Chief spawn/status
 
 ---
 
@@ -316,7 +316,7 @@ Check: `activeSessions`, `sessionId`, `conversationId` in ClaudePanel.
 Check: `attachedFiles` in useAttachments.
 
 ### System messages showing as user bubbles
-Check `lib/systemMessages.ts` — the pattern must appear at the START of the message content. If a new injection format isn't detected, add its prefix to `SYSTEM_MESSAGE_PATTERNS`.
+Check `lib/systemMessages.ts`: the pattern must appear at the START of the message content. If a new injection format isn't detected, add its prefix to `SYSTEM_MESSAGE_PATTERNS`.
 
 ### Panel not resizing
 - Check localStorage key: `claude-panel-width`

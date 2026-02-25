@@ -10,8 +10,8 @@
 
 This module renders tool calls (file operations, MCP tools, Claude Code meta-tools) in the transcript. Each tool call has two views:
 
-1. **Collapsed (ToolChip)** — Icon + one-liner showing what the tool did
-2. **Expanded** — Full details when user clicks to expand
+1. **Collapsed (ToolChip)**: Icon + one-liner showing what the tool did
+2. **Expanded**: Full details when user clicks to expand
 
 The system is modular: core infrastructure lives at the root, domain-specific expanded views live in folders.
 
@@ -54,7 +54,7 @@ tools/
 |------|---------|-----------|
 | `index.ts` | Re-exports public API | TranscriptViewer, ClaudePanel |
 | `types.ts` | TypeScript interfaces | All files |
-| `registry.ts` | Tool configs — icon, color, one-liner, chipLabel | ToolChip, SystemEventChip |
+| `registry.ts` | Tool configs: icon, color, one-liner, chipLabel | ToolChip, SystemEventChip |
 | `ToolChip.tsx` | Collapsed chip component | TranscriptViewer |
 | `SystemEventChip.tsx` | Full-width system event bars | TranscriptViewer |
 | `ExpandedViews.tsx` | Maps tool names → expanded components | ToolChip |
@@ -89,7 +89,7 @@ TranscriptViewer
 
 ---
 
-## ToolConfig — The Registry
+## ToolConfig: The Registry
 
 Every tool is defined in `registry.ts` with a `ToolConfig`:
 
@@ -119,14 +119,14 @@ When `showToolName` is false:
 
 ### Tool Categories
 
-**`category: 'tool'`** — Standard inline chips. Most tools.
-- File ops: Read, Write, Edit (showToolName: false — verb in one-liner)
-- Search: Grep, Glob (showToolName: false — pattern is clear)
+**`category: 'tool'`**: Standard inline chips. Most tools.
+- File ops: Read, Write, Edit (showToolName: false: verb in one-liner)
+- Search: Grep, Glob (showToolName: false: pattern is clear)
 - Web: WebSearch, WebFetch (showToolName: false)
 - MCP data: contact, calendar, email, opportunity, etc. (showToolName: true)
-- Subagent: Task (special rendering — agent-type pill + badges)
+- Subagent: Task (special rendering: agent-type pill + badges)
 
-**`category: 'system'`** — Full-width system event bars (non-expandable).
+**`category: 'system'`**: Full-width system event bars (non-expandable).
 - Lifecycle: status, day, reset, done
 - Orchestration: team
 - Interactive: AskUserQuestion, EnterPlanMode, ExitPlanMode, Skill
@@ -135,7 +135,7 @@ When `showToolName` is false:
 
 ## Domain Folders
 
-### `/shared` — UI Primitives
+### `/shared`: UI Primitives
 
 Reusable components for building expanded views.
 
@@ -151,7 +151,7 @@ Reusable components for building expanded views.
 | `ErrorBox` | Error message display |
 | `isErrorResult()` | Utility to detect errors in raw result |
 
-### `/core` — Claude Code Native Tools
+### `/core`: Claude Code Native Tools
 
 | Tool | Component |
 |------|-----------|
@@ -161,7 +161,7 @@ Reusable components for building expanded views.
 | Grep, Glob | `SearchExpanded` |
 | WebSearch, WebFetch | `WebExpanded` |
 
-### `/claude-code` — Claude Code Meta Tools
+### `/claude-code`: Claude Code Meta Tools
 
 | Tool | Component |
 |------|-----------|
@@ -170,7 +170,7 @@ Reusable components for building expanded views.
 | TaskCreate, TaskUpdate, TaskGet | `TaskManagementExpanded` |
 | TaskList | `TaskListExpanded` |
 
-### `/mcp-core` — Life System MCP Tools
+### `/mcp-core`: Life System MCP Tools
 
 | Tool | Component |
 |------|-----------|
@@ -184,7 +184,7 @@ Reusable components for building expanded views.
 | turbine | `TurbineExpanded` |
 | Skill | `SkillExpanded` |
 
-### `/misc` — Fallback
+### `/misc`: Fallback
 
 | Tool | Component |
 |------|-----------|
@@ -272,9 +272,9 @@ Category 'system' tools render as full-width muted bars:
 ## Registry Priority
 
 Order in `expandedViewMap` (ExpandedViews.tsx):
-1. `misc` (lowest — fallback)
+1. `misc` (lowest: fallback)
 2. `claude-code` (meta tools)
 3. `mcp-core` (MCP tools)
-4. `core` (highest — Claude native tools)
+4. `core` (highest: Claude native tools)
 
 Later entries override earlier ones for the same tool name.

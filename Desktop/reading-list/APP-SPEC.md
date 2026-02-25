@@ -20,11 +20,11 @@ Track books, articles, and papers. Claude helps you manage your reading queue.
 ## Features
 
 ### MCP Tools
-- reading_list("list") — show all items, filterable by status/type/tag
-- reading_list("add", title="...", author="...", type="book") — add item
-- reading_list("update", id="...", status="reading") — update item
-- reading_list("remove", id="...") — remove item
-- reading_list("stats") — reading statistics (count by status, avg rating, etc.)
+- reading_list("list"): show all items, filterable by status/type/tag
+- reading_list("add", title="...", author="...", type="book"): add item
+- reading_list("update", id="...", status="reading"): update item
+- reading_list("remove", id="..."): remove item
+- reading_list("stats"): reading statistics (count by status, avg rating, etc.)
 
 ### Dashboard UI
 - Grid/list view of reading items

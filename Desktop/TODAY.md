@@ -48,7 +48,7 @@ type: memory
 ---
 
 ## Open Loops
-*Things that need to be closed/processed. Not memory — action queues.*
+*Things that need to be closed/processed. Not memory: action queues.*
 
 ### Life Stuff
 
