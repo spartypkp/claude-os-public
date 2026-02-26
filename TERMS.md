@@ -30,4 +30,8 @@ For support, visit: https://github.com/spartypkp/claude-os-public
 
 Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes. See our [Privacy Policy](PRIVACY.md) for full details.
 
+## Carrier Liability
+
+Carriers are not liable for any delayed or undelivered messages.
+
 *Last updated: February 2026*

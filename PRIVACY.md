@@ -20,4 +20,6 @@ Message and data rates may apply.
 
 Claude OS runs entirely on your local machine. No user data is transmitted to external servers by this project.
 
+All data categories exclude text messaging originator opt-in data and consent; this information will not be shared with any third parties.
+
 *Last updated: February 2026*
